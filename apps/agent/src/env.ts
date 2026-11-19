@@ -72,6 +72,8 @@ const EnvSchema = z.object({
     .transform((v) => v === '1' || v === 'true'),
   /** Inngest cron expression; `TZ=` prefix supported by Inngest (e.g. `TZ=America/Los_Angeles 0 7 * * *`). */
   RESTOCK_CRON: z.string().default('TZ=America/Los_Angeles 0 7 * * *'),
+  /** Context layer: Inngest cron for Distru sync → account profile (default every 30 min; empty disables). */
+  CONTEXT_SYNC_CRON: z.string().default('*/30 * * * *'),
   // --- Composio (connector `composio`: Gmail/Calendar tools + the Gmail new-message trigger) ---
   /** Composio project key. Default: the local emulator's key (`bun run dev:emulators`). Empty disables the connector. */
   COMPOSIO_API_KEY: z.string().default('ak_emulator_goldencoast_local0001'),

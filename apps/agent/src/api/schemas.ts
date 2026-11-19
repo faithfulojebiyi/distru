@@ -185,6 +185,8 @@ export const ProposalSummarySchema = z
     version: z.number().int(),
     status: ProposalStatusSchema,
     title: z.string().nullable(),
+    /** One or two sentences of detail (totals, counts, vendors); null on older proposals. */
+    summary: z.string().nullable(),
     createdBy: PrincipalSchema,
     policyOutcome: PolicyOutcomeSchema,
     totalValue: z.number().nullable(),
@@ -237,6 +239,8 @@ export const ProposalDetailSchema = ProposalSummarySchema.extend({
   execution: ExecutionSchema.nullable(),
   /** Which executed ops can be undone (POST /api/proposals/{id}/undo), and why not. */
   undo: UndoInfoSchema,
+  /** Execution failed and can be resumed by an approver (POST /api/proposals/{id}/resume); undo proposals too. */
+  resumable: z.boolean(),
 }).meta({ id: 'ProposalDetail' });
 
 export const ProposalListSchema = z
@@ -455,6 +459,8 @@ export const WebhookResponseSchema = z
     ok: z.literal(true),
     action: z.enum(['restock_requested', 'ignored']),
     reason: z.string().nullable(),
+    /** PRODUCT / PURCHASE / ORDER / COMPANY changes are also queued for the context sync (re-read by id). */
+    contextSync: z.boolean(),
   })
   .meta({ id: 'WebhookResponse' });
 

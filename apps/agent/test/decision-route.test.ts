@@ -28,6 +28,7 @@ const detail: ProposalDetail = {
   version: 2,
   status: 'approved',
   title: 'Restock',
+  summary: null,
   createdBy: { kind: 'agent', id: 'planner', scopes: ['read', 'propose'] },
   policyOutcome: 'needs_approval',
   totalValue: 50,
@@ -46,6 +47,7 @@ const detail: ProposalDetail = {
   decision: { decision: 'approve', by: approverPrincipal, reason: null, edited: false, at: now },
   execution: null,
   undo: { available: false, reason: 'The proposal has no ops.', ops: [], undoProposalId: null, undoOf: null, until: null },
+  resumable: false,
 };
 
 function setup(outcome: ProposalDetail | Error = detail) {

@@ -12,3 +12,6 @@ export {
   verifyDistruSignature,
   type DistruWebhook,
 } from '@ops/connector-distru';
+
+/** Queued for every verified PRODUCT / PURCHASE / ORDER / COMPANY webhook: the context sync re-reads that record. */
+export const DISTRU_RECORD_CHANGED_EVENT = 'distru/record.changed';

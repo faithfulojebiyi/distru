@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import { z } from 'zod';
 import { AGENTS } from './roster';
-import { UNTRUSTED_DATA_RULES, type AgentFactoryOptions } from './shared';
+import { UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions } from './shared';
 
 export const RevisionInstructionSchema = z
   .object({
@@ -63,7 +63,7 @@ export function createPolicyCritic<TTools extends ToolsInput>({ model, tools }: 
     name: AGENTS.policyCritic.name,
     description:
       'Explains why the deterministic policy engine denied a draft and returns concrete, numeric revision instructions for the Procurement Planner. Never weakens a rule. Read-only.',
-    instructions: POLICY_CRITIC_INSTRUCTIONS,
+    instructions: cachedInstructions(POLICY_CRITIC_INSTRUCTIONS),
     model,
     tools,
   });

@@ -14,7 +14,8 @@ import type { AuditEvent } from '../../src/api/schemas';
 import { requestIdMiddleware } from '../../src/harness/request-context';
 import { OpsMcpServers, type OpsMcpDeps } from '../../src/mastra/mcp/ops-mcp';
 import { createMcpTokenService, InMemoryMcpTokenStore } from '../../src/services/mcp-tokens';
-import { toProposalDetail, toProposalSummary } from '../../src/services/proposals';
+import { afterDecision, afterPropose, executeApprovedProposal, type SendApproved } from '../../src/mastra/proposal-executor';
+import { createDecider, toProposalDetail, toProposalSummary } from '../../src/services/proposals';
 
 export const NOW = '2026-11-19T12:00:00Z';
 export const RULES: PolicyRuleConfig[] = [
@@ -36,6 +37,19 @@ export async function mcpEnv() {
   const harness = createHarness<Ctx>({ registry, store, audit, policyRules: new StaticPolicyRules(RULES) });
   const tokens = createMcpTokenService({ store: new InMemoryMcpTokenStore(), audit });
   const executed: string[] = [];
+  // In-process stand-in for Inngest: `ops/proposal.approved` deduped by event id, then the
+  // `proposal-execute` body (execute ctx: Distru client without its own retries).
+  const executeCtx = createDistruContext({ baseUrl: 'http://mock.test', token: 'mock-token', fetch, maxRetries: 0 });
+  const queue = { sent: [] as string[], delivered: new Set<string>() };
+  const send: SendApproved = async (proposalId) => {
+    queue.sent.push(proposalId);
+    if (queue.delivered.has(proposalId)) return;
+    queue.delivered.add(proposalId);
+    executed.push(proposalId);
+    await executeApprovedProposal(harness, { ...executeCtx }, proposalId);
+  };
+  const noRuns = { resume: async () => false, status: async () => null };
+  const decide = createDecider(harness, () => ({ ...distru }), { onDecided: afterDecision({ runs: noRuns, send }) });
 
   const deps: OpsMcpDeps<Ctx> = {
     registry: () => registry,
@@ -51,8 +65,9 @@ export async function mcpEnv() {
         const p = await store.get(id);
         return p ? toProposalDetail(p, await harness.undoInfo(p)) : null;
       },
+      // The app's decision path: harness.decide → afterDecision (queue execution of run-less approvals).
       decideAs: async (id, principal, input) => {
-        const p = await harness.decide({ ctx: { ...distru }, principal, proposalId: id, decision: input.decision, ...(input.reason ? { reason: input.reason } : {}) });
+        const p = await decide(id, principal, input);
         return toProposalDetail(p, await harness.undoInfo(p));
       },
     },
@@ -79,9 +94,7 @@ export async function mcpEnv() {
       },
     },
     runs: { start: async () => ({ runId: 'run-mcp-1' }), get: async () => null },
-    afterPropose: async (p) => {
-      if (p.status === 'auto_approved') executed.push(p.id);
-    },
+    afterPropose: afterPropose(send),
   };
   const servers = new OpsMcpServers(deps);
   const app = new Hono();
@@ -102,7 +115,7 @@ export async function mcpEnv() {
   };
   const tokenWith = async (name: string, scopes: Scope[]) => (await tokens.create(approverUser, { name, scopes })).token;
 
-  return { mock, distru, registry, store, audit, harness, tokens, servers, app, connect, tokenWith, executed, close: async () => Promise.all(clients.map((c) => c.close())) };
+  return { mock, distru, registry, store, audit, harness, tokens, servers, app, connect, tokenWith, executed, queue, send, decide, close: async () => Promise.all(clients.map((c) => c.close())) };
 }
 
 export type McpEnv = Awaited<ReturnType<typeof mcpEnv>>;

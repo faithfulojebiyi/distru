@@ -1,18 +1,20 @@
 /**
- * Integration: the harness against the real local Postgres (docker compose, 127.0.0.1:5482).
- * Skips when the database is unreachable. Creates its own proposals and deletes them (and their
- * audit events) afterwards; policy rules are read, never modified.
+ * Integration: the harness against Postgres: the TEST database (`TEST_DATABASE_URL`, default `ops_test`
+ * on the docker compose server; created and pushed by test/preload.ts), never the dev database.
+ * Skips when the database is unreachable. Creates its own proposals (principal `agent:it-planner`)
+ * and deletes them (and their audit events) before and after the run, including leftovers of a
+ * crashed run; policy rules are read, never modified.
  */
 import { agentPrincipal, type Proposal } from '@ops/harness';
-import { afterAll, describe, expect, test } from 'bun:test';
-import { inArray } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { eq, inArray } from 'drizzle-orm';
 import postgres from 'postgres';
 import { createApiRoutes } from '../src/api/routes';
 import type { ProposalDetail } from '../src/api/schemas';
 import type { ApiServices } from '../src/api/services';
 import type { SessionUser } from '../src/auth/session';
 import { stubServices } from './fixtures/stub-services';
-import { db, sql } from '../src/db/client';
+import { db } from '../src/db/client';
 import { approval, auditEvent, proposal } from '../src/db/schema';
 import { createAppHarness } from '../src/harness/harness';
 import { DrizzleProposalStore } from '../src/harness/proposal-store';
@@ -20,7 +22,7 @@ import { createAuditService, createProposalService } from '../src/services/propo
 import { FAKE_PURCHASE_ACTION, FakeErp, poInput, testRegistry, type TestCtx } from './fixtures/fake-erp';
 
 async function databaseReachable(): Promise<boolean> {
-  const probe = postgres(process.env.DATABASE_URL ?? 'postgres://ops:ops@127.0.0.1:5482/ops', { max: 1, connect_timeout: 2, onnotice: () => {} });
+  const probe = postgres(process.env.DATABASE_URL!, { max: 1, connect_timeout: 2, onnotice: () => {} });
   try {
     await probe`select 1 from proposal limit 1`;
     // Schema current (latest additions: audit_event.request_id, mcp_token)?
@@ -66,7 +68,7 @@ function env() {
   const propose = async (): Promise<Proposal> => {
     const p = await harness.propose({
       ctx,
-      principal: agentPrincipal('it-planner', 'Procurement Planner'),
+      principal: agentPrincipal(IT_PLANNER, 'Procurement Planner'),
       ops: [{ action: FAKE_PURCHASE_ACTION, input: poInput() }],
       title: 'Restock Blue Dream',
       rationale: 'Below reorder point at 2 locations',
@@ -78,12 +80,25 @@ function env() {
   return { erp, ctx, harness, api, decide, propose };
 }
 
+/** Integration proposals are created by this principal only; anything it left behind is swept. */
+const IT_PLANNER = 'it-planner';
+
+/** Deletes every proposal (+ ops, approvals, audit events) created by the test principal, incl. leftovers of crashed runs. */
+async function sweep(): Promise<void> {
+  const rows = await db.select({ id: proposal.id }).from(proposal).where(eq(proposal.createdById, IT_PLANNER));
+  const ids = [...new Set([...rows.map((r) => r.id), ...created])];
+  if (!ids.length) return;
+  await db.delete(auditEvent).where(inArray(auditEvent.proposalId, ids));
+  await db.delete(proposal).where(inArray(proposal.id, ids)); // cascades proposal_op + approval
+}
+
+beforeAll(async () => {
+  if (reachable) await sweep();
+});
+
 afterAll(async () => {
-  if (reachable && created.length) {
-    await db.delete(auditEvent).where(inArray(auditEvent.proposalId, created));
-    await db.delete(proposal).where(inArray(proposal.id, created)); // cascades proposal_op + approval
-  }
-  await sql.end({ timeout: 5 });
+  if (reachable) await sweep();
+  // The pool is shared with the other Postgres test files in this process; bun closes it on exit.
 });
 
 describe.skipIf(!reachable)('harness + Drizzle ports (Postgres)', () => {

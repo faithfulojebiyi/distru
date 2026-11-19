@@ -26,6 +26,9 @@ import { AWAIT_DECISION_STEP, RESTOCK_WORKFLOW_ID, RestockResumeSchema, RestockT
 import { draftOpFrom, DraftOpSchema, DraftProposal, type DraftOp } from '../tools/run-context';
 import { AgentTraceEntrySchema, sumTrace, type AgentTraceEntry, type Pricing } from '../trace';
 import { callAgent } from './agent-call';
+import { chooseHeadline, restockTemplateTitle, untrustedTextsIn, type HeadlineFacts } from '../../harness/titles';
+import { contextBlock } from './context-block';
+import { DemandCandidateSchema, mergeWithScan, scanDemand } from './demand';
 import {
   assembleProposal,
   CAP_ACTION,
@@ -83,7 +86,13 @@ const LocationRefSchema = z.object({ id: z.string(), name: z.string() });
 const VendorRefSchema = z.object({ id: z.string(), name: z.string(), lead_time_days: z.number().nullable(), purchase_order_email: z.string().nullable().default(null) });
 const TraceList = z.array(AgentTraceEntrySchema);
 
-const AnalyseTaskSchema = z.object({ trigger: RestockTriggerSchema, location: LocationRefSchema, vendors: z.array(VendorRefSchema) });
+const AnalyseTaskSchema = z.object({
+  trigger: RestockTriggerSchema,
+  location: LocationRefSchema,
+  vendors: z.array(VendorRefSchema),
+  /** The deterministic demand scan's candidates for this location (wholesale and/or retail flagged, in code). */
+  candidates: z.array(DemandCandidateSchema).default([]),
+});
 const AnalyseResultSchema = z.object({ location: LocationRefSchema, analysis: InventoryAnalysisSchema, agentTrace: TraceList });
 const VendorTaskSchema = z.object({
   trigger: RestockTriggerSchema,
@@ -124,6 +133,8 @@ const ReviewStateSchema = z.object({
   critiques: z.array(CritiqueRecordSchema),
   analysisSummaries: z.array(z.string()),
   plannerSummaries: z.array(z.object({ vendor: z.string(), summary: z.string() })),
+  /** The latest Planner headline per vendor (validated in code before use as the proposal title). */
+  plannerHeadlines: z.array(z.object({ vendor_id: z.string(), title: z.string().nullable(), summary: z.string() })).default([]),
   complianceSummary: z.string().nullable(),
   done: z.boolean(),
   outcome: z.enum(['pending', 'ready', 'empty', 'exhausted']),
@@ -309,7 +320,13 @@ export function createRestockSteps(deps: RestockDeps) {
       const vendors = VendorsSchema.parse(
         await deps.registry.runReadTool(ctx, analystPrincipal, 'distru.vendors', trigger.vendorIds?.length ? { vendor_ids: trigger.vendorIds } : {}),
       ).vendors.map((v) => ({ id: v.id, name: v.name, lead_time_days: v.lead_time_days, purchase_order_email: v.purchase_order_email }));
-      return locations.map((location) => ({ trigger, location, vendors }));
+      // Deterministic pre-check (no model): wholesale velocity + retail signals for the whole scope. When
+      // nothing is at risk anywhere, no location is analysed and the run ends `nothing_to_order` with zero
+      // LLM calls. The candidates also go to the merge step (SKUs the Analyst misses are added in code).
+      const scan = await scanDemand({ registry: deps.registry, ctx, locations, vendors, scope: { productIds: trigger.productIds, vendorIds: trigger.vendorIds } });
+      const total = Object.values(scan.byLocation).reduce((n, c) => n + c.length, 0);
+      if (total === 0) return [];
+      return locations.map((location) => ({ trigger, location, vendors, candidates: scan.byLocation[location.id] ?? [] }));
     },
   });
 
@@ -328,6 +345,7 @@ export function createRestockSteps(deps: RestockDeps) {
           productIds: inputData.trigger.productIds,
           vendorIds: inputData.trigger.vendorIds,
           scenarioNote: inputData.trigger.scenarioNote,
+          codeFlagged: inputData.candidates.map((c) => ({ sku: c.row.sku, wholesale: c.wholesale, retail: c.retail, recommendation: c.signal?.recommendation ?? null })),
         }),
         schema: InventoryAnalysisSchema,
         step: 'analyse-location',
@@ -349,9 +367,12 @@ export function createRestockSteps(deps: RestockDeps) {
       const tasks = z.array(AnalyseTaskSchema).parse(await getStepResultAsync('prepare'));
       const vendorRefs = new Map(tasks[0]?.vendors.map((v) => [v.id, v]) ?? []);
       const byKey = new Map<string, AtRiskSku>();
+      const vendorName = (id: string, fallback: string) => vendorRefs.get(id)?.name ?? fallback;
       for (const { location, analysis } of inputData) {
-        for (const raw of analysis.at_risk) {
-          const sku: AtRiskSku = { ...raw, location_id: raw.location_id ?? location.id, location_name: raw.location_name ?? location.name };
+        const analysed = analysis.at_risk.map((raw) => ({ ...raw, location_id: raw.location_id ?? location.id, location_name: raw.location_name ?? location.name }));
+        // Code-flagged SKUs the Analyst missed are added; flagged_by comes from the numbers, not the model.
+        const candidates = tasks.find((t) => t.location.id === location.id)?.candidates ?? [];
+        for (const sku of mergeWithScan(analysed, candidates, vendorName)) {
           if (trigger.productIds?.length && !trigger.productIds.includes(sku.product_id)) continue;
           if (trigger.vendorIds?.length && !trigger.vendorIds.includes(sku.vendor_id)) continue;
           const key = `${sku.product_id}|${sku.location_id}`;
@@ -381,10 +402,12 @@ export function createRestockSteps(deps: RestockDeps) {
     outputSchema: PlanResultSchema,
     execute: async ({ inputData, mastra, tracingContext }) => {
       const draft = new DraftProposal();
+      // Bounded account context (actual lead times, price trends, learned approver preferences) for this vendor's SKUs.
+      const context = await contextBlock(deps.registry, deps.contexts().read, plannerPrincipal, { vendorIds: [inputData.vendor.id], productIds: inputData.items.map((i) => i.product_id) });
       const { object, trace } = await callAgent({
         mastra,
         agent: 'procurementPlanner',
-        prompt: plannerPrompt({ vendor: inputData.vendor, items: inputData.items, guard: inputData.guard, scenarioNote: inputData.trigger.scenarioNote }),
+        prompt: plannerPrompt({ vendor: inputData.vendor, items: inputData.items, guard: inputData.guard, scenarioNote: inputData.trigger.scenarioNote, context }),
         schema: PlannerResultSchema,
         step: 'plan-vendor',
         label: `vendor ${inputData.vendor.name}`,
@@ -421,6 +444,7 @@ export function createRestockSteps(deps: RestockDeps) {
         critiques: [],
         analysisSummaries: analyses.map((a) => `${a.location.name}: ${a.analysis.summary}`),
         plannerSummaries: inputData.map((p) => ({ vendor: p.vendor.name, summary: p.result.summary })),
+        plannerHeadlines: inputData.map((p) => ({ vendor_id: p.vendor.id, title: p.result.title, summary: p.result.summary })),
         complianceSummary: null,
         done: vendors.length === 0,
         outcome: vendors.length === 0 ? ('empty' as const) : ('pending' as const),
@@ -549,6 +573,7 @@ export function createRestockSteps(deps: RestockDeps) {
               instruction,
               policyReasons: denyReasons,
               vetoedProductIds: vetoedIds,
+              context: await contextBlock(deps.registry, ctx, plannerPrincipal, { vendorIds: [vendor_id], productIds }),
             }),
             schema: PlannerResultSchema,
             draft,
@@ -570,6 +595,10 @@ export function createRestockSteps(deps: RestockDeps) {
         policy,
         revisions: state.revisions + 1,
         critiques: [...state.critiques, { round, explanation: critique.explanation, revisions: instructions }],
+        plannerHeadlines: [
+          ...state.plannerHeadlines.filter((h) => !revised.some((r) => r.vendor_id === h.vendor_id)),
+          ...revised.map((r) => ({ vendor_id: r.vendor_id, title: r.result.title, summary: r.result.summary })),
+        ],
         plannerSummaries: [
           ...state.plannerSummaries,
           ...revised.map((r) => ({ vendor: state.vendors.find((v) => v.vendor.id === r.vendor_id)?.vendor.name ?? r.vendor_id, summary: `Revision ${state.revisions + 1}: ${r.result.summary}` })),
@@ -587,13 +616,16 @@ export function createRestockSteps(deps: RestockDeps) {
     description: 'Create the one harness proposal for the run (policy evaluated by the harness)',
     inputSchema: ReviewStateSchema,
     outputSchema: ProposeResultSchema,
-    execute: async ({ inputData: state, runId }) => {
+    execute: async ({ inputData: state, runId, getStepResultAsync }) => {
       const outcome = state.outcome === 'pending' ? 'exhausted' : state.outcome;
       if (!state.ops.length) {
         return { proposalId: null, proposalStatus: null, outcome: 'empty' as const, totalValue: null, agentTrace: state.agentTrace };
       }
       const existing = await deps.findProposalByRunId?.(runId);
       if (existing) {
+        // A retried step: the approval request may not have been posted yet. Idempotent (Slack updates
+        // the stored message instead of posting a second one).
+        await deps.notifier?.proposalCreated(existing);
         return { proposalId: existing.id, proposalStatus: existing.status, outcome, totalValue: totalValue(existing.ops), agentTrace: state.agentTrace };
       }
       // Cross-tool assembly (code): per PO → its buyer cap(s) → vendor email → receiving task.
@@ -619,7 +651,39 @@ export function createRestockSteps(deps: RestockDeps) {
         count(EMAIL_ACTION) ? `${count(EMAIL_ACTION)} vendor email${count(EMAIL_ACTION) === 1 ? '' : 's'}` : null,
         count(TASK_ACTION) ? `${count(TASK_ACTION)} receiving task${count(TASK_ACTION) === 1 ? '' : 's'}` : null,
       ].filter(Boolean);
-      const title = `Restock: ${pos.length} PO${pos.length === 1 ? '' : 's'} (${money(total)}) for ${vendorNames.join(', ')}${extras.length ? ` + ${extras.join(', ')}` : ''}`;
+      // Headline: the Planner's title/summary when exactly one vendor is ordered and it passes the code
+      // validator (numbers, dates, vendors, no instructions, no echo of untrusted text); else a template.
+      const longSummary = `${pos.length} PO${pos.length === 1 ? '' : 's'} (${money(total)}) for ${vendorNames.join(', ')}${extras.length ? ` + ${extras.join(', ')}` : ''}.`;
+      const poVendorIds = uniq(pos.map(opVendorId).filter((v): v is string => v !== null));
+      const poLines = linesOf(pos);
+      const locationNames = uniq(poLines.map((l) => state.atRisk.find((a) => a.location_id === l.location_id)?.location_name ?? l.location_id));
+      const allVendors = z.array(AnalyseTaskSchema).safeParse(await getStepResultAsync('prepare'));
+      const headlineFacts: HeadlineFacts = {
+        money: [total ?? 0, ...pos.map((op) => op.value ?? 0), ...pos.flatMap((op) => purchaseInput(op)?.lines.flatMap((l) => [l.unit_price, l.unit_price * l.quantity]) ?? [])],
+        numbers: [
+          ...poLines.map((l) => l.quantity),
+          pos.length,
+          poVendorIds.length,
+          uniq(poLines.map((l) => l.product_id)).length,
+          poLines.length,
+          assembled.ops.length,
+          count(CAP_ACTION),
+          count(EMAIL_ACTION),
+          count(TASK_ACTION),
+          locationNames.length,
+          ...guard.map((g) => g.cap),
+          ...state.vendors.map((v) => v.vendor.lead_time_days ?? 14),
+        ],
+        poNumbers: [],
+        // Receive dates (today + each vendor's lead time), as the hand-off tasks use them.
+        dates: state.vendors.map((v) => new Date((deps.now?.() ?? new Date()).getTime() + (v.vendor.lead_time_days ?? 14) * 86_400_000).toISOString().slice(0, 10)),
+        vendorNames,
+        knownVendorNames: allVendors.success ? (allVendors.data[0]?.vendors.map((v) => v.name) ?? []) : [],
+        untrusted: [...untrustedTextsIn(state.agentTrace), ...state.suspicious.map((s) => s.excerpt)],
+      };
+      const single = poVendorIds.length === 1 ? (state.plannerHeadlines.find((h) => h.vendor_id === poVendorIds[0]) ?? null) : null;
+      const headline = chooseHeadline(single, { title: restockTemplateTitle({ vendors: vendorNames, skuCount: uniq(poLines.map((l) => l.product_id)).length, locations: locationNames }), summary: longSummary }, headlineFacts);
+      const title = headline.title;
       const guardNotes = uniq(state.vendors.map((v) => v.guardNote).filter((n): n is string => Boolean(n)));
       // Each computed cap: proposed by the Planner, backfilled by the workflow, or dropped (its SKU is not on any PO).
       const capped = new Map(assembled.ops.filter((o) => o.action === CAP_ACTION).map((o) => [z.object({ id: z.string() }).parse(o.input).id, o.source]));
@@ -652,8 +716,10 @@ export function createRestockSteps(deps: RestockDeps) {
         principal: plannerPrincipal,
         ops: assembled.ops.map((op) => ({ action: op.action, input: op.input })),
         title,
+        ...(headline.summary ? { summary: headline.summary } : {}),
         rationale,
         meta: {
+          ...headline.meta,
           workflowId: RESTOCK_WORKFLOW_ID,
           workflowRunId: runId,
           trigger: state.trigger,
@@ -737,9 +803,24 @@ export function createRestockSteps(deps: RestockDeps) {
     description: 'Check every op executed and verified; report created purchase orders',
     inputSchema: ExecuteResultSchema,
     outputSchema: RestockResultSchema,
-    execute: async ({ inputData }): Promise<RestockResult> => {
+    execute: async ({ inputData, getStepResultAsync }): Promise<RestockResult> => {
       if (!inputData.proposalId) {
-        return { status: 'nothing_to_order', proposalId: null, proposalStatus: null, purchaseOrderIds: [], emailIds: [], taskIds: [], buyerCapProductIds: [], verified: false, totalValue: null, message: 'No purchase orders needed (nothing at risk, or every line was vetoed).' };
+        const analysed = z.array(z.unknown()).safeParse(await getStepResultAsync('prepare'));
+        const prechecked = analysed.success && analysed.data.length === 0;
+        return {
+          status: 'nothing_to_order',
+          proposalId: null,
+          proposalStatus: null,
+          purchaseOrderIds: [],
+          emailIds: [],
+          taskIds: [],
+          buyerCapProductIds: [],
+          verified: false,
+          totalValue: null,
+          message: prechecked
+            ? 'Pre-check: wholesale velocity and retail signals show nothing at risk in scope; no agent was called.'
+            : 'No purchase orders needed (nothing at risk, or every line was vetoed).',
+        };
       }
       const p = await deps.harness.get(inputData.proposalId);
       const total = totalValue(p.ops);

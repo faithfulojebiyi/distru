@@ -1,6 +1,8 @@
+import { db } from '../db/client';
 import { env } from '../env';
 import { appConnectors } from '../harness/registry';
 import { noopNotifier, SlackApprovals, type ProposalNotifier } from './approvals';
+import { DrizzleSlackMessageStore } from './message-store';
 
 /**
  * The process-wide Slack approvals client (emulator by default: SLACK_API_URL), or null when
@@ -15,7 +17,8 @@ export const appSlack: SlackApprovals | null = env.SLACK_BOT_TOKEN
         notifyChannel: env.SLACK_NOTIFY_CHANNEL,
         webBaseUrl: env.WEB_BASE_URL ?? env.WEB_ORIGIN[0] ?? 'http://localhost:3050',
       },
-      { registry: () => appConnectors.registry },
+      // Posted message ts per proposal in Postgres: a retried step updates instead of posting again.
+      { registry: () => appConnectors.registry, messages: new DrizzleSlackMessageStore(db) },
     )
   : null;
 

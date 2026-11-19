@@ -44,13 +44,16 @@ export const AGENT_TOOLS: Record<AgentKey, readonly string[]> = {
     'distru.compliance_check',
     'headset.retail_trends',
     'headset.top_movers',
+    // AR questions ("Which invoices are overdue? Sum by customer."): present once the Distru connector registers them.
+    'distru.invoices_overdue',
+    'distru.invoices_search',
   ],
   inventoryAnalyst: ['distru.velocity_report', 'distru.inventory', 'distru.open_orders', 'distru.products_get', 'headset.retail_trends', 'headset.demand_signal'],
   // `distru_mcp.mutate_product` (per-buyer menu cap) is only present while the MCP bridge is connected.
-  procurementPlanner: ['distru.vendors', 'distru.vendor_purchase_history', 'distru.products_get', 'distru.purchases.upsert', 'distru_mcp.mutate_product'],
+  procurementPlanner: ['distru.vendors', 'distru.vendor_purchase_history', 'distru.products_get', 'context.context_for', 'distru.purchases.upsert', 'distru_mcp.mutate_product'],
   complianceReviewer: ['distru.compliance_check', 'distru.products_get'],
   policyCritic: ['distru.vendors', 'distru.products_get'],
-  vendorLiaison: ['distru.vendor_purchase_history', 'distru.products_get', 'composio.gmail_fetch_message_by_thread_id', 'composio.gmail_fetch_message_by_message_id'],
+  vendorLiaison: ['distru.vendor_purchase_history', 'distru.products_get', 'context.context_for', 'composio.gmail_fetch_message_by_thread_id', 'composio.gmail_fetch_message_by_message_id'],
 };
 
 /** Per-agent budget for one agent call (tool calls = steps). The run budget caps the sum. */

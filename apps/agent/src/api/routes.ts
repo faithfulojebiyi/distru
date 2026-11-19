@@ -24,10 +24,12 @@ import {
   RunListSchema,
 } from './schemas';
 import { ingestWebhook, triggerSource } from '@ops/harness';
-import { distruOrderCreatedTrigger, DistruOrderCreatedEventSchema, DISTRU_ORDER_TRIGGER_ID } from './distru-webhook';
+import { DISTRU_SYNC_RECORD_TYPES, distruOrderCreatedTrigger, DistruOrderCreatedEventSchema, DistruWebhookSchema, distruWebhookKey, DISTRU_ORDER_TRIGGER_ID } from '@ops/connector-distru';
+import { DISTRU_RECORD_CHANGED_EVENT } from './distru-webhook';
 import { discardAudit } from './webhook-support';
 import { toHttpError } from './harness-errors';
 import type { ApiServices } from './services';
+import { registerInsightRoutes } from './insight-routes';
 import { registerOpsRoutes } from './ops-routes';
 import { z } from 'zod';
 
@@ -316,19 +318,26 @@ export function createApiRoutes(services: ApiServices) {
       audit: services.webhooks.audit ?? discardAudit,
     });
     if (result.status === 'rejected') return c.json({ error: result.reason, message: result.message }, result.httpStatus);
-    if (result.status === 'ignored') return c.json({ ok: true as const, action: 'ignored' as const, reason: 'Only ORDER CREATE (with products) triggers a restock' }, 200);
-    const order = DistruOrderCreatedEventSchema.parse(result.event.data);
-    await services.webhooks.requestRestock({
-      triggeredBy: `webhook:distru (ORDER ${order.orderId})`,
-      productIds: order.productIds,
-      ...(order.locationIds.length ? { locationIds: order.locationIds } : {}),
-      scenarioNote: `New sales order ${order.orderId}: check whether the ordered products need restocking.`,
-    });
-    return c.json({ ok: true as const, action: 'restock_requested' as const, reason: null }, 200);
+    // Signature verified: PRODUCT / PURCHASE / ORDER / COMPANY changes also go to the context sync, which
+    // re-reads the record by id (never trusting `object`). Deduped on (type, id, occurred_datetime).
+    const envelope = DistruWebhookSchema.safeParse(JSON.parse(raw));
+    const syncable = envelope.success && (DISTRU_SYNC_RECORD_TYPES as readonly string[]).includes(envelope.data.type.toUpperCase());
+    if (envelope.success && syncable) {
+      const { type, id, event, occurred_datetime } = envelope.data;
+      await services.webhooks.emit({ name: DISTRU_RECORD_CHANGED_EVENT, id: `distru.record_changed:${distruWebhookKey(envelope.data)}`, data: { type, id, event, occurred_datetime: occurred_datetime ?? null } });
+    }
+    if (result.status === 'ignored') return c.json({ ok: true as const, action: 'ignored' as const, reason: 'Only ORDER CREATE (with products) triggers a restock', contextSync: syncable }, 200);
+    // The trigger's own event (`distru/order.created`, id = `distru.order_created:<type:id:occurred>`): a
+    // redelivery of the same change is a no-op in Inngest. Consumed by `restock-on-distru-order`.
+    await services.webhooks.emit({ name: result.event.name, id: result.event.id, data: DistruOrderCreatedEventSchema.parse(result.event.data) });
+    return c.json({ ok: true as const, action: 'restock_requested' as const, reason: null, contextSync: syncable }, 200);
   });
 
   // MCP tokens, undo, policy rules, locations (src/api/ops-routes.ts).
   registerOpsRoutes(api, services, session);
+
+  // Evals, context profile + memories, onboarding (src/api/insight-routes.ts).
+  registerInsightRoutes(api, services, session);
 
   api.doc31(OPENAPI_PATH, {
     openapi: '3.1.0',

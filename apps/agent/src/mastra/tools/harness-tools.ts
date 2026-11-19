@@ -11,6 +11,7 @@ import {
   type ToolDescriptor,
 } from '@ops/harness';
 import { previewOp } from '../../harness/dry-run';
+import { callerHeadline } from '../../harness/titles';
 import { AGENT_TOOLS, principalFor, type AgentKey } from '../agents/roster';
 import { trimForTrace } from '../trace';
 import { agentRunFor, type AgentRun } from './run-context';
@@ -127,14 +128,18 @@ export function createHarnessTools<TCtx>(deps: HarnessToolDeps<TCtx>, agent: Age
                 note: 'Added to the draft proposal. Nothing was written; policy and a human approver decide.',
               };
             }
+            // Short title (template from the op summary, ≤ 60 chars); the full op summary goes in `summary`.
+            const headline = callerHeadline(preview, {}, d.toolName);
             const proposal = await harness.propose({
               ctx: readCtx(),
               principal,
               ops: [{ action: d.name, input }],
-              ...(preview.summary ? { title: preview.summary } : {}),
-              meta: { source: 'agent-tool', agent: principal.id },
+              title: headline.title,
+              ...(headline.summary ? { summary: headline.summary } : {}),
+              meta: { source: 'agent-tool', agent: principal.id, ...headline.meta },
             });
-            await deps.afterPropose?.(proposal);
+            // Queue execution of an auto-approved run-less proposal; a queueing failure must not hide the proposal.
+            const queued = await (deps.afterPropose?.(proposal).then(() => true, () => false) ?? Promise.resolve(true));
             return {
               ok: true,
               mode: 'proposal' as const,
@@ -143,7 +148,12 @@ export function createHarnessTools<TCtx>(deps: HarnessToolDeps<TCtx>, agent: Age
               policy: proposal.policy,
               summary: preview.summary,
               value: preview.value,
-              note: 'Proposal created for human review. Nothing was written to the ERP.',
+              note:
+                proposal.status === 'auto_approved'
+                  ? queued
+                    ? 'Policy auto-approved this proposal; the executor applies it (idempotent, verified, audited).'
+                    : 'Policy auto-approved this proposal but execution could not be queued yet; it is recorded and the execution sweeper retries it within a minute.'
+                  : 'Proposal created for human review. Nothing was written to the ERP.',
             };
           });
         } catch (err) {

@@ -16,7 +16,9 @@
     "inngest:dev": "npx --yes --ignore-scripts=false inngest-cli@latest dev -u http://localhost:4111/api/inngest --no-discovery",
     "studio": "mastra studio",
     "restock:demo": "bun scripts/restock-demo.ts",
-    "mcp:smoke": "bun scripts/mcp-smoke.ts"
+    "mcp:smoke": "bun scripts/mcp-smoke.ts",
+    "titles:backfill": "bun scripts/backfill-titles.ts",
+    "context:sync": "bun scripts/context-sync.ts"
   },
   "dependencies": {
     "@hono/zod-openapi": "^1.6.3",
@@ -31,6 +33,7 @@
     "@mastra/server": "1.85.0",
     "@modelcontextprotocol/client": "2.4.0",
     "@ops/connector-composio": "workspace:*",
+    "@ops/context": "workspace:*",
     "@ops/connector-distru": "workspace:*",
     "@ops/connector-email": "workspace:*",
     "@ops/connector-headset": "workspace:*",

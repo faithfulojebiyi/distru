@@ -11,6 +11,8 @@ import { vendorLiaisonPrompt, VendorReplyAnalysisSchema, type VendorReplyAnalysi
 import { inngestWorkflowKit } from '../inngest';
 import { AWAIT_DECISION_STEP, RestockResumeSchema, VENDOR_REPLY_WORKFLOW_ID } from '../restock-launcher';
 import { AgentTraceEntrySchema, type Pricing } from '../trace';
+import { chooseHeadline, untrustedTextsIn, vendorReplyTemplateTitle } from '../../harness/titles';
+import { contextBlock } from './context-block';
 import { callAgent } from './agent-call';
 import { activeBuyers, CAP_ACTION, computeCap, hasAction, PURCHASE_ACTION, TASK_ACTION } from './cross-tool';
 
@@ -59,7 +61,7 @@ export interface VendorReplyDeps {
 
 // ── schemas ─────────────────────────────────────────────────────────────────────────────────────
 
-const VendorRefSchema = z.object({ id: z.string(), name: z.string(), email: z.string().nullable() });
+const VendorRefSchema = z.object({ id: z.string(), name: z.string(), email: z.string().nullable(), lead_time_days: z.number().nullable().default(null) });
 const PoLineSchema = z.object({ product_id: z.string(), sku: z.string().nullable(), name: z.string().nullable(), quantity: z.number(), unit_price: z.number() });
 const PurchaseRefSchema = z.object({ id: z.string(), purchase_number: z.string(), status: z.string(), location_id: z.string(), lines: z.array(PoLineSchema) });
 type PurchaseRef = z.infer<typeof PurchaseRefSchema>;
@@ -140,7 +142,7 @@ const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY);
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const domainOf = (email: string) => email.split('@')[1]?.toLowerCase() ?? '';
 
-const VendorsSchema = z.object({ vendors: z.array(z.object({ id: z.string(), name: z.string(), purchase_order_email: z.string().nullable() })) });
+const VendorsSchema = z.object({ vendors: z.array(z.object({ id: z.string(), name: z.string(), purchase_order_email: z.string().nullable(), lead_time_days: z.number().nullable().default(null) })) });
 const ProductSchema = z.object({ id: z.string(), sku: z.string(), name: z.string(), quantity_available: z.number(), units_per_case: z.number().nullable() });
 const VelocityRows = z.object({ rows: z.array(z.object({ product_id: z.string(), on_hand_available: z.number(), avg_daily_demand: z.number() })) });
 const McpProduct = z.object({ product: z.object({ maxMenuBuyerOrderQuantity: z.number().nullable().optional() }).passthrough().nullable() });
@@ -253,7 +255,7 @@ export function createVendorReplySteps(deps: VendorReplyDeps) {
         vendors.find((v) => v.purchase_order_email?.toLowerCase() === from) ??
         vendors.find((v) => v.purchase_order_email && domainOf(v.purchase_order_email) === domainOf(from));
       if (!vendor) return skip('ignored', `Sender ${from} is not a vendor on file`);
-      const vendorRef = { id: vendor.id, name: vendor.name, email: vendor.purchase_order_email };
+      const vendorRef = { id: vendor.id, name: vendor.name, email: vendor.purchase_order_email, lead_time_days: vendor.lead_time_days };
 
       const client = ctx.connectors.distru;
       const text = `${event.data.subject?.untrusted_text ?? ''}\n${event.data.snippet?.untrusted_text ?? ''}`;
@@ -325,6 +327,7 @@ export function createVendorReplySteps(deps: VendorReplyDeps) {
           vendor: state.vendor,
           purchase: { id: state.purchase.id, purchase_number: state.purchase.purchase_number, status: state.purchase.status, lines: state.purchase.lines },
           thread: state.thread,
+          context: await contextBlock(deps.registry, deps.contexts().read, liaison, { vendorIds: [state.vendor.id], productIds: state.purchase.lines.map((l) => l.product_id) }),
         }),
         schema: VendorReplyAnalysisSchema,
         step: 'classify',
@@ -369,7 +372,14 @@ export function createVendorReplySteps(deps: VendorReplyDeps) {
         const daysToEta = Math.round((Date.parse(`${eta}T00:00:00Z`) - Date.parse(`${isoDay(today)}T00:00:00Z`)) / DAY);
         const velocity = VelocityRows.safeParse(
           await deps.registry
-            .runReadTool(ctx, liaison, 'distru.velocity_report', { below_reorder_point: false, location_ids: [po.location_id], product_ids: affected.map((a) => a.product_id), limit: 100 })
+            // 'any': every affected SKU (low ones especially); a lead time so Distru computes reorder points.
+            .runReadTool(ctx, liaison, 'distru.velocity_report', {
+              below_reorder_point: 'any',
+              lead_time_days: vendor.lead_time_days ?? 14,
+              location_ids: [po.location_id],
+              product_ids: affected.map((a) => a.product_id),
+              limit: 100,
+            })
             .catch(() => null),
         );
         for (const a of affected) {
@@ -473,13 +483,42 @@ export function createVendorReplySteps(deps: VendorReplyDeps) {
         return { proposalId: null, proposalStatus: null, carry };
       }
       const existing = await deps.findProposalByRunId?.(runId);
-      if (existing) return { proposalId: existing.id, proposalStatus: existing.status, carry };
+      if (existing) {
+        await deps.notifier?.proposalCreated(existing); // retried step: idempotent Slack post
+        return { proposalId: existing.id, proposalStatus: existing.status, carry };
+      }
       const { vendor, purchase, analysis } = state;
+      // Headline: the Liaison's title/summary when it passes the code validator, else a template.
+      const poNumber = purchase?.purchase_number ?? 'PO';
+      const poTotal = purchase ? purchase.lines.reduce((s, l) => s + l.quantity * l.unit_price, 0) : 0;
+      const headline = chooseHeadline(
+        analysis ? { title: analysis.title, summary: analysis.summary } : null,
+        {
+          title: vendorReplyTemplateTitle(poNumber, analysis?.kind ?? 'other'),
+          summary: `${vendor?.name ?? 'Vendor'} replied about ${poNumber} (${analysis?.kind ?? 'other'}).${state.changes.length ? ` ${state.changes.length} validated change(s) to the PO.` : ''}`,
+        },
+        {
+          money: [poTotal, ...(purchase?.lines.flatMap((l) => [l.unit_price, l.unit_price * l.quantity]) ?? []), ...state.changes.flatMap((c) => [c.from, c.to].filter((n): n is number => typeof n === 'number'))],
+          numbers: [
+            ...(purchase?.lines.map((l) => l.quantity) ?? []),
+            ...state.changes.flatMap((c) => [c.from, c.to].filter((n): n is number => typeof n === 'number')),
+            ...(analysis?.lines.flatMap((l) => [l.shipped_quantity, l.backordered_quantity].filter((n): n is number => typeof n === 'number')) ?? []),
+            purchase?.lines.length ?? 0,
+            state.changes.length,
+            state.ops.length,
+          ],
+          poNumbers: purchase ? [purchase.purchase_number] : [],
+          dates: analysis?.eta ? [analysis.eta] : [],
+          vendorNames: vendor ? [vendor.name] : [],
+          untrusted: [...untrustedTextsIn(state.thread), ...(analysis?.suspicious_text.map((s) => s.excerpt) ?? [])],
+        },
+      );
       const p = await deps.harness.propose({
         ctx: deps.contexts().read,
         principal: liaison,
         ops: state.ops,
-        title: `Vendor reply: ${vendor?.name ?? '?'} on ${purchase?.purchase_number ?? '?'} (${analysis?.kind ?? '?'})`,
+        title: headline.title,
+        ...(headline.summary ? { summary: headline.summary } : {}),
         rationale: [
           analysis?.summary ?? null,
           state.changes.length ? `Validated against the PO: ${state.changes.map((c) => `${c.sku ?? c.product_id} ${c.field} ${c.from} → ${c.to}`).join('; ')}` : null,
@@ -489,6 +528,7 @@ export function createVendorReplySteps(deps: VendorReplyDeps) {
           .filter(Boolean)
           .join('\n'),
         meta: {
+          ...headline.meta,
           workflowId: VENDOR_REPLY_WORKFLOW_ID,
           workflowRunId: runId,
           trigger: { source: 'composio', eventId: state.event.eventId, messageId: state.event.data.messageId, threadId: state.event.data.threadId, fromAddress: state.event.data.fromAddress },

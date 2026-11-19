@@ -38,6 +38,31 @@ export interface ProposalNotifier {
   notice(text: string): Promise<void>;
 }
 
+/** Where a posted Slack message lives. */
+export interface SlackMessageRef {
+  channel: string;
+  ts: string;
+}
+
+/**
+ * Messages already posted per proposal and kind (`approval`, `notice:created`, `notice:executed`, …),
+ * so a retried workflow step updates the existing message instead of posting a duplicate.
+ */
+export interface SlackMessageStore {
+  get(proposalId: string, kind: string): Promise<SlackMessageRef | null>;
+  put(proposalId: string, kind: string, ref: SlackMessageRef): Promise<void>;
+}
+
+export class InMemorySlackMessageStore implements SlackMessageStore {
+  readonly rows = new Map<string, SlackMessageRef>();
+  async get(proposalId: string, kind: string): Promise<SlackMessageRef | null> {
+    return this.rows.get(`${proposalId}|${kind}`) ?? null;
+  }
+  async put(proposalId: string, kind: string, ref: SlackMessageRef): Promise<void> {
+    this.rows.set(`${proposalId}|${kind}`, ref);
+  }
+}
+
 /** No Slack configured. */
 export const noopNotifier: ProposalNotifier = { proposalCreated: async () => {}, proposalFinished: async () => {}, notice: async () => {} };
 
@@ -54,10 +79,15 @@ export class SlackApprovals implements ProposalNotifier {
   readonly #config: SlackConfig;
   readonly #registry: () => Pick<Registry<unknown>, 'connectorOf'>;
   readonly #log: (message: string, err?: unknown) => void;
+  readonly #messages: SlackMessageStore;
 
-  constructor(config: SlackConfig, options: { registry: () => Pick<Registry<unknown>, 'connectorOf'>; client?: WebClient; log?: (message: string, err?: unknown) => void }) {
+  constructor(
+    config: SlackConfig,
+    options: { registry: () => Pick<Registry<unknown>, 'connectorOf'>; client?: WebClient; log?: (message: string, err?: unknown) => void; messages?: SlackMessageStore },
+  ) {
     this.#config = config;
     this.#registry = options.registry;
+    this.#messages = options.messages ?? new InMemorySlackMessageStore();
     this.#log = options.log ?? ((m, e) => console.warn(`[slack] ${m}${e ? `: ${e instanceof Error ? e.message : String(e)}` : ''}`));
     this.client = options.client ?? new WebClient(config.token, { ...(config.apiUrl ? { slackApiUrl: config.apiUrl } : {}), retryConfig: { retries: 1 } });
   }
@@ -135,16 +165,50 @@ export class SlackApprovals implements ProposalNotifier {
 
   // ── posting ───────────────────────────────────────────────────────────────────────────────
 
-  /** Posts the approval request; returns `{ channel, ts }` (null if Slack failed). */
-  async postApprovalRequest(p: Proposal): Promise<{ channel: string; ts: string } | null> {
-    return this.#safe('approval request', async () => {
-      const res = await this.client.chat.postMessage({
-        channel: this.#config.approvalsChannel,
-        text: `Approval needed: ${p.title ?? p.id} (${money(totalValue(p.ops))})`,
-        blocks: this.approvalBlocks(p),
-      });
-      return res.channel && res.ts ? { channel: res.channel, ts: res.ts } : null;
+  /**
+   * Posts a message once per (proposal, kind): when one was already posted (a retried step), it is
+   * updated in place with `chat.update` instead. Returns where it lives (null if Slack failed).
+   */
+  async #postOnce(proposalId: string, kind: string, message: { channel: string; text: string; blocks?: Block[] }): Promise<SlackMessageRef | null> {
+    return this.#safe(`${kind} message`, async () => {
+      const existing = await this.#messages.get(proposalId, kind);
+      if (existing) {
+        await this.client.chat.update({ channel: existing.channel, ts: existing.ts, text: message.text, ...(message.blocks ? { blocks: message.blocks } : {}) });
+        return existing;
+      }
+      const res = await this.client.chat.postMessage({ channel: message.channel, text: message.text, ...(message.blocks ? { blocks: message.blocks } : {}) });
+      if (!res.channel || !res.ts) return null;
+      const ref = { channel: res.channel, ts: res.ts };
+      await this.#messages.put(proposalId, kind, ref);
+      return ref;
     });
+  }
+
+  /** The approval request posted for a proposal, if any. */
+  approvalMessage(proposalId: string): Promise<SlackMessageRef | null> {
+    return this.#safe('approval lookup', () => this.#messages.get(proposalId, 'approval')).then((r) => r ?? null);
+  }
+
+  /**
+   * Posts the approval request; returns `{ channel, ts }` (null if Slack failed). Idempotent per
+   * proposal: a second call (a retried workflow step) updates the stored message instead of posting a
+   * duplicate, and never re-adds buttons once the proposal was decided.
+   */
+  async postApprovalRequest(p: Proposal): Promise<SlackMessageRef | null> {
+    if (p.status !== 'pending_approval') {
+      const existing = await this.approvalMessage(p.id);
+      if (existing) return existing;
+    }
+    return this.#postOnce(p.id, 'approval', {
+      channel: this.#config.approvalsChannel,
+      text: `Approval needed: ${p.title ?? p.id} (${money(totalValue(p.ops))})`,
+      blocks: this.approvalBlocks(p),
+    });
+  }
+
+  /** A run notification about one proposal, posted once per (proposal, kind). */
+  async #proposalNotice(proposalId: string, kind: string, text: string): Promise<void> {
+    await this.#postOnce(proposalId, `notice:${kind}`, { channel: this.#config.notifyChannel, text });
   }
 
   /** Replaces the buttons with the outcome. */
@@ -174,11 +238,11 @@ export class SlackApprovals implements ProposalNotifier {
     const link = `<${this.proposalUrl(p.id)}|${mrkdwnEscape(p.title ?? p.id)}>`;
     if (p.status === 'pending_approval') {
       await this.postApprovalRequest(p);
-      await this.notice(`Proposal created: ${link} (${p.ops.length} ops, ${money(totalValue(p.ops))}). Waiting for approval in ${this.#config.approvalsChannel}.`);
+      await this.#proposalNotice(p.id, 'created', `Proposal created: ${link} (${p.ops.length} ops, ${money(totalValue(p.ops))}). Waiting for approval in ${this.#config.approvalsChannel}.`);
     } else if (p.status === 'auto_approved') {
-      await this.notice(`Proposal auto-approved by policy: ${link} (${p.ops.length} ops, ${money(totalValue(p.ops))}).`);
+      await this.#proposalNotice(p.id, 'created', `Proposal auto-approved by policy: ${link} (${p.ops.length} ops, ${money(totalValue(p.ops))}).`);
     } else if (p.status === 'denied') {
-      await this.notice(`Proposal denied by policy: ${link}. Nothing will be written.`);
+      await this.#proposalNotice(p.id, 'created', `Proposal denied by policy: ${link}. Nothing will be written.`);
     }
   }
 
@@ -186,12 +250,12 @@ export class SlackApprovals implements ProposalNotifier {
     const link = `<${this.proposalUrl(p.id)}|${mrkdwnEscape(p.title ?? p.id)}>`;
     if (p.status === 'executed') {
       const verified = p.ops.every((op) => op.status === 'executed' && (op.result?.mismatches.length ?? 0) === 0);
-      await this.notice(`Executed: ${link}. ${p.ops.length} op(s) written${verified ? ' and verified' : ', with verification mismatches'}.`);
+      await this.#proposalNotice(p.id, 'executed', `Executed: ${link}. ${p.ops.length} op(s) written${verified ? ' and verified' : ', with verification mismatches'}.`);
     } else if (p.status === 'failed') {
       const failed = p.ops.find((op) => op.status === 'failed');
-      await this.notice(`Execution failed: ${link}${failed ? ` at op #${failed.index} (${failed.action})` : ''}: ${p.execution?.error?.message ?? 'see the audit trail'}. Earlier ops are done; resume re-runs only what is left.`);
+      await this.#proposalNotice(p.id, `failed:${p.version}`, `Execution failed: ${link}${failed ? ` at op #${failed.index} (${failed.action})` : ''}: ${p.execution?.error?.message ?? 'see the audit trail'}. Earlier ops are done; resume re-runs only what is left.`);
     } else if (p.status === 'rejected') {
-      await this.notice(`Rejected: ${link} by ${p.decision?.by.label ?? p.decision?.by.id ?? 'an approver'}. Nothing was written.`);
+      await this.#proposalNotice(p.id, 'rejected', `Rejected: ${link} by ${p.decision?.by.label ?? p.decision?.by.id ?? 'an approver'}. Nothing was written.`);
     }
   }
 }

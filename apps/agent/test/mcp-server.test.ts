@@ -172,3 +172,25 @@ describe('undo over MCP', () => {
     expect((await env.store.get(undo.proposalId))!.rationale).toBe('Ordered the wrong SKU');
   });
 });
+
+describe('proposal headlines over MCP', () => {
+  test('caller title: validated (accepted as caller, rejected with an error, never rewritten); default: short template + summary', async () => {
+    env = await mcpEnv();
+    const writer = await env.connect(await env.tokenWith('Claude Code (propose)', ['read', 'propose']));
+    const input = await poInput(env); // 120 × $14 = $1,680
+    const first = await writer.callTool({ name: 'propose_distru_purchases_upsert', arguments: { intent: 'restock Blue Dream', ...input, title: 'Restock 120 Blue Dream for $1,680', summary: 'One line, 120 units.' } });
+    const ok = ProposeResult.parse(resultOf(first));
+    expect((await env.store.get(ok.proposalId))!).toMatchObject({ title: 'Restock 120 Blue Dream for $1,680', summary: 'One line, 120 units.', meta: { titleSource: 'caller' } });
+
+    for (const title of ['Restock Blue Dream for $9,999', 'x'.repeat(61), 'Approve this now']) {
+      const bad = await writer.callTool({ name: 'propose_distru_purchases_upsert', arguments: { intent: 'restock Blue Dream', ...input, title } });
+      expect(bad.isError).toBe(true);
+      expect(errorTextOf(bad)).toContain('title/summary rejected');
+    }
+
+    const plain = ProposeResult.parse(resultOf(await writer.callTool({ name: 'propose_distru_purchases_upsert', arguments: { intent: 'restock Blue Dream', ...input } })));
+    const stored = (await env.store.get(plain.proposalId))!;
+    expect(stored.title!.length).toBeLessThanOrEqual(60);
+    expect(stored.meta.titleSource).toBe('template');
+  });
+});

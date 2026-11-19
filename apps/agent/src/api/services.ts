@@ -14,7 +14,8 @@ import type {
   RunSummary,
   StartRunRequest,
 } from './schemas';
-import type { CreateMcpTokenRequest, LocationList, McpToken, PolicyRule, PolicyRuleInput, PolicyRuleType, UndoRequest } from './schemas-ops';
+import type { ContextMemoriesQuerySchema, ContextMemorySchema, ContextProfile, EvalResult, OnboardingReportSchema } from './schemas-insight';
+import type { CreateMcpTokenRequest, LocationList, McpToken, PolicyRule, PolicyRuleInput, PolicyRuleType, ResumeRequest, UndoRequest } from './schemas-ops';
 
 /** Everything the custom routes depend on. Injected so routes can be tested without a database. */
 export type ApiServices = {
@@ -47,6 +48,13 @@ export type ApiServices = {
   undo: {
     propose: (id: string, user: SessionUser, input: UndoRequest) => Promise<ProposalDetail>;
   };
+  /**
+   * POST /api/proposals/{id}/resume (approver): `harness.requestResume` (approve scope, failed only;
+   * throws NotResumableError / harness errors), then the same durable executor (`proposal-execute`).
+   */
+  resume: {
+    request: (id: string, user: SessionUser, input: ResumeRequest) => Promise<{ proposal: ProposalDetail; queued: boolean }>;
+  };
   /** Per-client MCP tokens (approver only). */
   mcpTokens: {
     create: (user: SessionUser, input: CreateMcpTokenRequest) => Promise<{ token: string; record: McpToken }>;
@@ -65,12 +73,26 @@ export type ApiServices = {
   locations: {
     list: () => Promise<LocationList>;
   };
+  /** `eval_run` (written by @ops/evals `--sink pg`). */
+  evals: {
+    latest: () => Promise<EvalResult[]>;
+    history: (scenario: string, limit: number) => Promise<EvalResult[]>;
+  };
+  /** The context layer (packages/context): account profile, learned memories, onboarding report. */
+  context: {
+    profile: () => Promise<ContextProfile>;
+    memories: (q: z.infer<typeof ContextMemoriesQuerySchema>) => Promise<Array<z.infer<typeof ContextMemorySchema>>>;
+    onboarding: () => Promise<z.input<typeof OnboardingReportSchema>>;
+  };
   webhooks: {
     /** HMAC secret for `x-distru-signature`. */
     distruSecret: string;
     /** Where `trigger.received` / `trigger.rejected` go (optional: route tests run without it). */
     audit?: AuditSink;
-    /** Emits the event that starts a restock run (Inngest `ops/restock.requested`). */
-    requestRestock: (trigger: { triggeredBy: string; productIds?: string[]; locationIds?: string[]; scenarioNote?: string }) => Promise<void>;
+    /**
+     * Queues an event (Inngest `send`; `id` is the dedupe key): the trigger's `distru/order.created`
+     * (→ restock run) and `distru/record.changed` (→ context sync of that record).
+     */
+    emit: (event: { name: string; id: string; data: Record<string, unknown> }) => Promise<void>;
   };
 };

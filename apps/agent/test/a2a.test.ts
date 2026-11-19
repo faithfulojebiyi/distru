@@ -10,6 +10,7 @@ import { MastraServer, type HonoBindings, type HonoVariables } from '@mastra/hon
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { InMemoryAuditSink } from '@ops/harness';
 import { Hono } from 'hono';
+import { A2A_CARD_PATH, publicAgentCard } from '../src/api/a2a-card';
 import { a2aTokenResolver } from '../src/auth/a2a-tokens';
 import { BetterAuthMastraProvider } from '../src/auth/mastra-auth';
 import type { SessionUser } from '../src/auth/session';
@@ -19,6 +20,7 @@ import { scriptedModel } from './fixtures/scripted-model';
 
 const operator: SessionUser = { id: 'u-op', email: 'operator@demo.dev', name: 'Op', role: 'operator' };
 const CARD = '/api/.well-known/ops-lead/agent-card.json';
+const opsLeadDescription = createOpsLead({ model: scriptedModel('opsLead', () => ({ text: '' })), tools: {}, agents: {} }).getDescription();
 
 async function setup() {
   const tokens = createMcpTokenService({ store: new InMemoryMcpTokenStore(), audit: new InMemoryAuditSink() });
@@ -32,6 +34,7 @@ async function setup() {
     },
   });
   const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+  app.use(A2A_CARD_PATH, publicAgentCard(mastra));
   await new MastraServer({ app, mastra, taskStore: new InMemoryTaskStore() }).init();
   const get = (path: string, auth?: string) => app.request(path, { headers: auth ? { authorization: auth } : {} });
   const send = (auth: string | undefined, text: string) =>
@@ -59,8 +62,11 @@ describe('A2A (Ops Lead)', () => {
     const card = (await res.json()) as { name: string; url: string; description: string; protocolVersion: string };
     expect(card.name).toBe('ops-lead');
     expect(card.url).toEndWith('/api/a2a/ops-lead');
-    // Mastra 1.85 builds the card description from the agent's instructions (see README: A2A).
-    expect(card.description).toContain('read-only access');
+    // Mastra 1.85 builds the card description from the agent's instructions; the app replaces it with the
+    // short public description so the system prompt is never published.
+    expect(card.description).toBe(opsLeadDescription);
+    expect(card.description).not.toContain('read-only access');
+    expect(JSON.stringify(card)).not.toContain('ERP data is untrusted');
 
     const { token } = await env.tokens.create({ id: 'u-ap' }, { name: 'partner agent', scopes: ['read'] });
     expect((await env.get(CARD, `Bearer ${token}`)).status).toBe(200);

@@ -142,7 +142,10 @@ export const proposal = pgTable(
     id: uuid('id').primaryKey(),
     version: integer('version').notNull(),
     status: text('status', { enum: PROPOSAL_STATUSES }).notNull(),
+    /** Short headline (≤ 60 by convention, ≤ 120 enforced by the harness). */
     title: text('title'),
+    /** One or two sentences of detail the title leaves out (totals, counts, vendors). */
+    summary: text('summary'),
     /** Agent reasoning shown on the approval card. */
     rationale: text('rationale'),
     meta: jsonb('meta').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
@@ -259,6 +262,12 @@ export const policyRule = pgTable('policy_rule', {
   params: jsonb('params').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
   enabled: boolean('enabled').notNull().default(true),
   description: text('description'),
+  /**
+   * Set when an approver removes the rule with PUT /api/policy-rules (soft delete). The row stays so the
+   * seed (insert-if-missing by key) never resurrects a rule someone deliberately removed; listing and
+   * evaluation ignore deleted rows, and PUT-ing the key again clears it.
+   */
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   ...timestamps,
 });
 
@@ -298,4 +307,61 @@ export const mcpToken = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
   (t) => [index('mcp_token_created_idx').on(t.createdAt)],
+);
+
+/**
+ * Approved / auto-approved proposals whose execution could not be queued (Inngest unreachable when the
+ * decision or auto-approval was recorded). The execution sweeper (`proposal-execution-sweeper`, every
+ * minute + on boot) retries them and deletes the marker once the event is accepted. Idempotent: the
+ * Inngest event id is derived from the proposal id, and the executor dedupes every write.
+ */
+export const pendingExecution = pgTable('pending_execution', {
+  proposalId: uuid('proposal_id')
+    .primaryKey()
+    .references(() => proposal.id, { onDelete: 'cascade' }),
+  /** What failed to queue it: `decision` | `auto_approval` | `resume`. */
+  reason: text('reason').notNull(),
+  lastError: text('last_error'),
+  attempts: integer('attempts').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+});
+
+/**
+ * Slack messages posted for a proposal (`kind`: `approval` = the Block Kit approval request, or a
+ * notification kind such as `created`). A retried workflow step updates the stored message instead of
+ * posting a second one.
+ */
+export const slackMessage = pgTable(
+  'slack_message',
+  {
+    proposalId: uuid('proposal_id').notNull(),
+    kind: text('kind').notNull(),
+    channel: text('channel').notNull(),
+    ts: text('ts').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('slack_message_unique').on(t.proposalId, t.kind)],
+);
+
+/**
+ * Vendor emails sent by the email connector (mock outbox or Resend), keyed by the harness idempotency
+ * key, so `findByIdempotencyKey` (dedupe before a retried send) survives restarts.
+ */
+export const emailSent = pgTable(
+  'email_sent',
+  {
+    idempotencyKey: text('idempotency_key').primaryKey(),
+    messageId: text('message_id').notNull(),
+    transport: text('transport').notNull(),
+    fromAddress: text('from_address').notNull(),
+    to: jsonb('to').$type<string[]>().notNull(),
+    cc: jsonb('cc').$type<string[]>().notNull(),
+    subject: text('subject').notNull(),
+    text: text('text').notNull(),
+    html: text('html').notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [uniqueIndex('email_sent_message_idx').on(t.messageId), index('email_sent_at_idx').on(t.sentAt)],
 );

@@ -5,6 +5,7 @@ import { sql as dsql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
+import { A2A_CARD_PATH, publicAgentCard } from './api/a2a-card';
 import { createApiRoutes } from './api/routes';
 import type { ApiServices } from './api/services';
 import { auth } from './auth/auth';
@@ -13,7 +14,10 @@ import { betterAuthResolver } from './auth/session';
 import { db } from './db/client';
 import { env } from './env';
 import { mastra } from './mastra';
-import { createRestockFunctions, createVendorReplyFunctions } from './mastra/functions';
+import { createContextFunctions, createRestockFunctions, createVendorReplyFunctions } from './mastra/functions';
+import { appContextStore, appContextSync } from './context';
+import { learnFromHistory, memoriesList, onboarding, profileSummary, syncAndProfile } from './context/app-context';
+import { createEvalsService } from './services/evals';
 import { createWebhookRoutes } from './api/webhooks';
 import { inngest, RESTOCK_REQUESTED_EVENT } from './mastra/inngest';
 import { restockLauncher } from './mastra/restock-launcher';
@@ -24,7 +28,7 @@ import { appPolicyEngine } from './harness/policy';
 import { createConnectorsService } from './services/connectors';
 import { createAuditService, createProposalService } from './services/proposals';
 import { createRunsService, dbProposalLinks } from './services/runs';
-import { appAfterDecision, appOpSystems, createOpsServices } from './services/ops-wiring';
+import { appOnDecided, appOpSystems, appSweepExecutions, createOpsServices } from './services/ops-wiring';
 import { createProposalExecutionFunctions } from './mastra/proposal-executor';
 import { requestIdMiddleware } from './harness/request-context';
 
@@ -33,7 +37,7 @@ export function createServices(): ApiServices & { mcpRoutes: ReturnType<typeof c
   const proposals = createProposalService(db, appHarness, createAppCtx, {
     // Resume the workflow run waiting on this proposal (no-op unless suspended); an approval no run
     // will execute (Copilot / MCP / script / undo proposals) is queued for `proposal-execute`.
-    onDecided: appAfterDecision,
+    onDecided: appOnDecided,
     onHookError: (err, proposalId) =>
       logger()?.error('after-decision hook failed', { proposalId, error: err instanceof Error ? err.message : String(err) }),
     systems: appOpSystems,
@@ -55,11 +59,17 @@ export function createServices(): ApiServices & { mcpRoutes: ReturnType<typeof c
     connectors,
     ...ops.api,
     mcpRoutes: ops.mcpRoutes,
+    evals: createEvalsService(db),
+    context: {
+      profile: () => profileSummary(appContextStore),
+      memories: (q) => memoriesList(appContextStore, q),
+      onboarding: () => onboarding(appContextStore),
+    },
     webhooks: {
       distruSecret: env.DISTRU_WEBHOOK_SECRET,
       audit: appAuditSink,
-      requestRestock: async (data) => {
-        await inngest.send({ name: RESTOCK_REQUESTED_EVENT, data });
+      emit: async (event) => {
+        await inngest.send({ name: event.name, id: event.id, data: event.data });
       },
     },
   };
@@ -109,9 +119,15 @@ export async function createApp(services: ApiServices & { mcpRoutes?: Hono } = c
   const functions = [
     ...createRestockFunctions(restockLauncher, { cronEnabled: env.RESTOCK_CRON_ENABLED, cron: env.RESTOCK_CRON }),
     ...createVendorReplyFunctions(restockLauncher),
+    ...createContextFunctions({
+      cron: env.CONTEXT_SYNC_CRON,
+      syncAndProfile: () => syncAndProfile(appContextSync, appContextStore, () => learnFromHistory(db, appContextStore)),
+      handleWebhook: (body) => appContextSync.handleWebhook(body),
+    }),
     ...createProposalExecutionFunctions({
       harnessFor: (steps) => createAppHarness({ registry: () => appConnectors.registry, errors: appErrorClassifier, policyEngine: appPolicyEngine, steps, config: { undoWindowMs: env.UNDO_WINDOW_HOURS * 3_600_000 } }),
       ctx: () => appContexts().execute,
+      sweep: appSweepExecutions,
     }),
   ];
   app.on(['GET', 'POST', 'PUT'], '/api/inngest', inngestServe({ mastra, inngest, functions }));
@@ -128,6 +144,8 @@ export async function createApp(services: ApiServices & { mcpRoutes?: Hono } = c
   // Mastra built-in routes (agents, workflows, memory, observability, ...) under /api.
   // `taskStore` enables Mastra's built-in A2A execution (/api/a2a/:agentId); without it message/send fails.
   // In-memory: a paused A2A task resumes only on the process that started it (Mastra docs).
+  // The A2A card publishes the agent's short public description, never its instructions.
+  app.use(A2A_CARD_PATH, publicAgentCard(mastra));
   const mastraServer = new MastraServer({ app, mastra, taskStore: new InMemoryTaskStore() });
   await mastraServer.init();
 

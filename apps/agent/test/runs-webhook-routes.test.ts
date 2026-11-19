@@ -14,7 +14,14 @@ const SECRET = 'test-secret';
 function setup() {
   const base = stubServices();
   const start = mock(async () => ({ runId: 'run-1', workflowId: 'restock' }));
-  const requestRestock = mock(async (_trigger: Parameters<ApiServices['webhooks']['requestRestock']>[0]) => {});
+  const emitted: Array<Parameters<ApiServices['webhooks']['emit']>[0]> = [];
+  const ids = new Set<string>();
+  // Inngest stand-in: dedupes by event id.
+  const emit = mock(async (event: Parameters<ApiServices['webhooks']['emit']>[0]) => {
+    if (ids.has(event.id)) return;
+    ids.add(event.id);
+    emitted.push(event);
+  });
   const services: ApiServices = {
     resolveSession: async (h) => users[h.get('authorization')?.replace('Bearer ', '') ?? ''] ?? null,
     checkDatabase: async () => true,
@@ -27,9 +34,9 @@ function setup() {
         { id: 'distru', system: 'erp', description: 'Distru', health: { ok: true, detail: '3 locations reachable' }, readTools: 8, actions: 1, tools: [] },
       ],
     },
-    webhooks: { distruSecret: SECRET, requestRestock },
+    webhooks: { distruSecret: SECRET, emit },
   };
-  return { api: createApiRoutes(services), start, requestRestock };
+  return { api: createApiRoutes(services), start, emit, emitted };
 }
 
 const auth = (as: string) => ({ authorization: `Bearer ${as}`, 'content-type': 'application/json' });
@@ -74,31 +81,51 @@ describe('POST /api/webhooks/distru', () => {
     api.request('/api/webhooks/distru', { method: 'POST', body, headers: { 'content-type': 'application/json', ...(signature ? { 'x-distru-signature': signature } : {}) } });
 
   test('401 without or with a wrong signature; nothing emitted', async () => {
-    const { api, requestRestock } = setup();
+    const { api, emit } = setup();
     const raw = JSON.stringify(order);
     expect((await post(api, raw)).status).toBe(401);
     expect((await post(api, raw, signDistruBody(raw, 'other-secret'))).status).toBe(401);
     expect((await post(api, `${raw} `, signDistruBody(raw, SECRET))).status).toBe(401); // body tampered
-    expect(requestRestock).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
   });
 
-  test('ORDER CREATE → restock requested, scoped to the ordered products and location', async () => {
-    const { api, requestRestock } = setup();
+  test("ORDER CREATE → the trigger's event (distru/order.created) + a context sync of the order; redeliveries dedupe", async () => {
+    const { api, emitted } = setup();
     const raw = JSON.stringify(order);
     const res = await post(api, raw, signDistruBody(raw, SECRET));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, action: 'restock_requested', reason: null });
-    expect(requestRestock).toHaveBeenCalledTimes(1);
-    expect(requestRestock.mock.calls[0]).toEqual([expect.objectContaining({ productIds: ['p-1', 'p-2'], locationIds: ['loc-1'], triggeredBy: expect.stringContaining('order-1') })]);
+    expect(await res.json()).toEqual({ ok: true, action: 'restock_requested', reason: null, contextSync: true });
+    expect(emitted).toEqual([
+      { name: 'distru/record.changed', id: 'distru.record_changed:ORDER:order-1:2026-11-19T12:00:00Z', data: { type: 'ORDER', id: 'order-1', event: 'CREATE', occurred_datetime: '2026-11-19T12:00:00Z' } },
+      {
+        name: 'distru/order.created',
+        id: 'distru.order_created:ORDER:order-1:2026-11-19T12:00:00Z',
+        data: { source: 'distru', eventId: expect.any(String), orderId: 'order-1', productIds: ['p-1', 'p-2'], locationIds: ['loc-1'] },
+      },
+    ]);
+    // Distru retries the same change: same ids → nothing new queued.
+    await post(api, raw, signDistruBody(raw, SECRET));
+    expect(emitted.length).toBe(2);
+    // A later change of the same order is a new event.
+    const later = JSON.stringify({ ...order, occurred_datetime: '2026-11-19T12:05:00Z' });
+    await post(api, later, signDistruBody(later, SECRET));
+    expect(emitted.length).toBe(4);
   });
 
-  test('other events are acknowledged and ignored', async () => {
-    const { api, requestRestock } = setup();
-    const raw = JSON.stringify({ ...order, type: 'PURCHASE' });
-    const res = await post(api, raw, signDistruBody(raw, SECRET));
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ action: 'ignored' });
-    expect(requestRestock).not.toHaveBeenCalled();
+  test('PRODUCT / PURCHASE changes go to the context sync only; other types are ignored entirely', async () => {
+    const { api, emitted } = setup();
+    for (const type of ['PURCHASE', 'PRODUCT']) {
+      const raw = JSON.stringify({ ...order, type, event: 'UPDATE' });
+      const res = await post(api, raw, signDistruBody(raw, SECRET));
+      expect(await res.json()).toMatchObject({ action: 'ignored', contextSync: true });
+    }
+    expect(emitted.map((e) => [e.name, (e.data as { type: string }).type])).toEqual([
+      ['distru/record.changed', 'PURCHASE'],
+      ['distru/record.changed', 'PRODUCT'],
+    ]);
+    const raw = JSON.stringify({ ...order, type: 'INVOICE' });
+    expect(await (await post(api, raw, signDistruBody(raw, SECRET))).json()).toMatchObject({ action: 'ignored', contextSync: false });
+    expect(emitted.length).toBe(2);
   });
 });
 

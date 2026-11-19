@@ -253,6 +253,71 @@ bearer_token_env_var = "OPS_MCP_TOKEN"
 
 The server speaks MCP 2026-07-28 and serves 2025-era clients (that open with `initialize`) statelessly.
 
+## Execution reliability (`src/mastra/proposal-executor.ts`, `src/services/pending-executions.ts`)
+
+- Approved / auto-approved proposals that no workflow run will execute (Copilot propose tools, MCP, undo,
+  a run that already finished) go to `proposal-execute` (`ops/proposal.approved`, event id
+  `proposal-approved-<id>`, concurrency 1 per proposal, one durable step per op).
+- If Inngest is unreachable when a decision / auto-approval / resume is recorded, a **pending-execution
+  marker** (`pending_execution`) is written; the decision is never lost.
+- The **execution sweeper** (Inngest cron `proposal-execution-sweeper`, every minute, plus once at boot)
+  retries markers and re-enqueues approved / auto-approved proposals whose execution never started (2-minute
+  grace; time-bucketed event ids at most every 10 minutes). Run-linked proposals follow the decision logic:
+  a suspended run is resumed, a running one left alone, a finished one handed to `proposal-execute`.
+  Idempotent: the executor skips executed ops and dedupes every write by its key.
+- **Resume**: `POST /api/proposals/:id/resume` (approver) records `proposal.resume_requested` and queues the
+  same executor (`resume: true`); only `failed` proposals (undo proposals included) resume, and only what is
+  left re-runs. `ProposalDetail.resumable` drives the button.
+
+## Context layer (`src/context/`, `@ops/context`)
+
+- Store: `DrizzleContextStore` (Postgres schema `context`, in `drizzle.config.ts` → `db:push`).
+- Sync: `createDistruSync` with an observer-wrapped Distru client; Inngest cron `context-sync`
+  (`CONTEXT_SYNC_CRON`, default every 30 min; empty disables): `sync.run()` → `buildProfile()` → learning
+  from any decided proposal not learned yet. Distru PRODUCT / PURCHASE / ORDER / COMPANY webhooks →
+  `distru/record.changed` → `context-record-sync` (`sync.handleWebhook`, deduped on type, id, occurred_datetime).
+  `bun run context:sync` runs one pass by hand and prints the profile and memories.
+- Memories: after every decision `ingestHarnessEvents(signalsFromAudit(...))` (approver edits are compared
+  with `meta.originalOps`, which the harness keeps on edited approvals); `policy.changed` →
+  `policy_rule_changed` signals.
+- Agents: the `context` connector is registered; the Planner and the Vendor Liaison get
+  `context_context_for` and a bounded (~1,600 chars) ACCOUNT CONTEXT block in their prompts.
+- API: `GET /api/context/profile`, `GET /api/context/memories`, `GET /api/onboarding`.
+
+## Restock quality and cost
+
+- **Deterministic demand scan** (`src/mastra/workflows/demand.ts`): Distru velocity per location and vendor
+  lead-time group (wholesale: LATE / ORDER_NOW / ORDER_SOON or days of supply < lead time) plus Headset
+  retail movers (surging / rising / stock-outs rising), with `headset.demand_signal` computed in code for
+  every mover and wholesale candidate at the run's locations.
+- **Pre-check**: when the scan finds nothing at risk in scope, `prepare` returns no locations and the run
+  ends `nothing_to_order` with zero LLM calls.
+- **Merge**: code-flagged SKUs the Analyst missed are added (e.g. PRE-BD-1G), and `flagged_by` (wholesale /
+  retail / both) is computed from the numbers, never taken from the model.
+- **Buyer cap**: a company-wide setting, so its trigger uses company-wide days of supply (velocity report
+  without a location filter, blended with retail) and its share uses company-wide available stock.
+- **Prompt caching**: every agent's instructions are a system message with an Anthropic cache breakpoint
+  (caches the tool definitions too, rendered before the system prompt), and agent calls request automatic
+  caching (a moving breakpoint over the loop). Run totals record `cacheRead` / `cacheWrite`; cost prices
+  them at 0.1× / 1.25× input.
+- **Headlines**: proposals have a short `title` (≤ 60) and a `summary`. The Planner (single-vendor runs)
+  and the Vendor Liaison write them; `src/harness/titles.ts` checks shape, URLs/markdown, instruction-like
+  phrases, every number / amount / date / PO number against the proposal, vendor names, and 8-word overlap
+  with untrusted text; otherwise a template is used. `meta.titleSource` (`agent` | `template` | `caller`) and
+  `meta.titleRejectedReason` are stored and audited on `proposal.created`. MCP propose tools take optional
+  `title` / `summary` (rejected, never rewritten). `bun run titles:backfill` shortened old long titles.
+
+## Other
+
+- Slack approval posts are idempotent per proposal (`slack_message` stores the ts; a retried step updates).
+- Sent vendor emails persist in `email_sent` (mock outbox and Resend), so dedupe survives restarts.
+- Policy rules removed with `PUT /api/policy-rules` are soft-deleted (`deleted_at`), so `db:seed` never
+  resurrects them.
+- The A2A agent card publishes the agent's short `description`, never its instructions (`src/api/a2a-card.ts`).
+- Tests never touch the dev database: `test/preload.ts` points `DATABASE_URL` at `TEST_DATABASE_URL`
+  (default `ops_test` on the same server), creates it and builds the schema from the Drizzle files
+  (rebuilt when they change).
+
 ## Undo
 
 `POST /api/proposals/:id/undo` (or MCP `propose_undo`) → `harness.undo` (packages/harness README,
@@ -335,12 +400,15 @@ apps/agent/
 | `GET /api/runs/:id` | session | status, input/result, step timeline with agent calls (tokens, cost estimate, tool calls with trimmed `args` / `result`; untrusted text stays wrapped), suspend payload, linked proposal |
 | `POST /api/runs` | operator/approver | `{ scenarioNote?, locationIds?, vendorIds?, productIds? }` → 202 `{ runId }` (503 if Inngest is down) |
 | `GET /api/connectors` | session | connector health + tool catalogue |
+| `POST /api/proposals/:id/resume` | **approver** | resume a failed proposal through `proposal-execute` → 202 `{ proposal, queued }`; 409 `not_resumable` |
+| `GET /api/evals` · `GET /api/evals/:scenario/history` | session | latest `eval_run` row per scenario · one scenario over time |
+| `GET /api/context/profile` · `GET /api/context/memories` · `GET /api/onboarding` | session | account profile, learned memories, onboarding report |
 | `GET /api/locations` | session | own Distru locations (ids for `POST /api/runs`), cached 5 min |
 | `GET /api/policy-rules` · `PUT /api/policy-rules` | session · **approver** | rules + rule types (params JSON Schema); PUT replaces the set, validated against the engine's rules (400 `invalid_policy` + issues), audited `policy.changed` |
 | `POST /api/mcp-tokens` · `GET` · `DELETE /api/mcp-tokens/:id` | **approver** | per-client MCP tokens (see "MCP server"): create returns the token once |
 | `/mcp` | MCP token (`Bearer ops_mcp_…`) | our MCP server (Streamable HTTP). Not in OpenAPI |
 | `GET /api/.well-known/ops-lead/agent-card.json`, `POST /api/a2a/ops-lead` | session or MCP token | Mastra built-in A2A (see "A2A") |
-| `POST /api/webhooks/distru` | HMAC (`x-distru-signature`, `DISTRU_WEBHOOK_SECRET`) | trigger `distru.order_created` (`ingestWebhook`, audited); ORDER CREATE → Inngest `ops/restock.requested` → restock run scoped to the ordered products |
+| `POST /api/webhooks/distru` | HMAC (`x-distru-signature`, `DISTRU_WEBHOOK_SECRET`) | trigger `distru.order_created` (`ingestWebhook`, audited); ORDER CREATE → Inngest `distru/order.created` (event id `distru.order_created:<type>:<id>:<occurred_datetime>`, so redeliveries dedupe) → `restock-on-distru-order`; PRODUCT / PURCHASE / ORDER / COMPANY → `distru/record.changed` → context sync |
 | `POST /api/webhooks/composio` | Standard Webhooks signature (`COMPOSIO_WEBHOOK_SECRET`) | trigger `composio.gmail.new_message` → Inngest `composio/gmail.new_message` (deduped by webhook id) → vendor-reply run. Not in OpenAPI (provider-shaped body) |
 | `POST /api/webhooks/slack` | `x-slack-signature` v0 (`SLACK_SIGNING_SECRET`, 300 s window) | trigger `slack.interaction`: Approve / Reject buttons → `harness.decide` as the mapped user. Not in OpenAPI |
 | `GET /api/openapi.json` | public | OpenAPI 3.1 for the routes above (Orval input) |
@@ -379,7 +447,7 @@ bun run dev                                # http://localhost:4111
 # second terminal: Inngest dev server (UI on http://localhost:8288)
 bun run inngest:dev                        # (apps/agent) uses npx, see "Known issues"
 bun run verify:hello                       # suspend → resume through Inngest
-bun test                                   # incl. Postgres integration test (skips if DB is down)
+bun test                                   # Postgres tests use TEST_DATABASE_URL (default ops_test), never the dev DB
 bun run studio                             # Mastra Studio on :3000 (see "Mastra Studio")
 ```
 

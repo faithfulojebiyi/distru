@@ -4,7 +4,7 @@ import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import type { RestockLauncher } from '../restock-launcher';
 import { AGENTS } from './roster';
-import { UNTRUSTED_DATA_RULES } from './shared';
+import { UNTRUSTED_DATA_RULES, cachedInstructions, PROMPT_CACHE_OPTIONS } from './shared';
 import type { MastraModelConfig } from '@mastra/core/llm';
 
 export const OPS_LEAD_INSTRUCTIONS = `
@@ -72,11 +72,12 @@ export function createOpsLead<TTools extends ToolsInput, TAgents extends Record<
     id: AGENTS.opsLead.id,
     name: AGENTS.opsLead.name,
     description: 'Supervisor for Distru operations: answers Copilot questions by delegating to inventory, procurement, compliance and policy specialists; can start a restock run. Read-only.',
-    instructions: OPS_LEAD_INSTRUCTIONS,
+    instructions: cachedInstructions(OPS_LEAD_INSTRUCTIONS),
     model: options.model,
     tools: options.tools,
     agents: options.agents,
     memory: options.memory ?? new Memory({ options: { lastMessages: 20 } }),
-    defaultOptions: { maxSteps: 12 },
+    // Copilot turns cache too (system + tools, and the growing conversation).
+    defaultOptions: { maxSteps: 12, ...PROMPT_CACHE_OPTIONS },
   });
 }

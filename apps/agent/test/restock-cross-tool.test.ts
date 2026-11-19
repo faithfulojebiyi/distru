@@ -98,20 +98,33 @@ describe('cross-tool proposal: PO → buyer cap → vendor email → receiving t
       expect(task.name).toMatch(new RegExp(`^Receive \\{\\{op:${po.index}\\.purchase_number\\}\\} on \\d{4}-\\d{2}-\\d{2}$`));
     }
 
-    // Allocation guard: only VAP-BD-1G stocks out before its PO (5.x adjusted days < 14-day Sierra lead time).
+    // Allocation guard: one cap per SKU that stocks out (company-wide) before its PO arrives, exactly the
+    // computed suggestion, placed right after its PO. VAP-BD-1G (~5 adjusted days < 14-day Sierra lead time) is one.
     const caps = p.ops.filter((op) => op.action === CAP_ACTION);
-    expect(caps).toHaveLength(1);
-    const cap = CapPayload.parse(caps[0]!.payload);
-    expect(cap.id).toBe(ids['VAP-BD-1G']!);
-    // 48 available ÷ 5 active buyers = 9 → rounded down to whole cases of 25 → at least one case.
-    expect(cap.maxMenuBuyerOrderQuantity).toBe(computeCap(48, 5, 25));
-    expect(cap.maxMenuBuyerOrderQuantity).toBe(25);
-    expect(caps[0]!.diff).toEqual([{ path: ['maxMenuBuyerOrderQuantity'], kind: 'changed', before: null, after: 25 }]);
-    expect(caps[0]!.risk).toBe('medium');
-    const capPo = pos.find((po) => z.object({ lines: z.array(z.object({ product_id: z.string() })) }).parse(po.input).lines.some((l) => l.product_id === ids['VAP-BD-1G']))!;
-    expect(caps[0]!.index).toBe(capPo.index + 1);
+    const guard = z.array(z.object({ product_id: z.string(), cap: z.number(), available: z.number(), active_buyers: z.number(), units_per_case: z.number().nullable(), status: z.string() })).parse(p.meta.allocationGuard);
+    const placed = guard.filter((g) => g.status !== 'dropped: not ordered');
+    expect(caps.length).toBe(placed.length);
+    expect(placed.map((g) => g.product_id)).toContain(ids['VAP-BD-1G']!);
+    for (const op of caps) {
+      const cap = CapPayload.parse(op.payload);
+      const g = placed.find((x) => x.product_id === cap.id)!;
+      expect(cap.maxMenuBuyerOrderQuantity).toBe(g.cap);
+      expect(g.cap).toBe(computeCap(g.available, g.active_buyers, g.units_per_case));
+      expect(op.diff).toEqual([{ path: ['maxMenuBuyerOrderQuantity'], kind: 'changed', before: null, after: g.cap }]);
+      expect(op.risk).toBe('medium');
+      const po = pos.filter((x) => x.index < op.index).at(-1)!;
+      expect(z.object({ lines: z.array(z.object({ product_id: z.string() })) }).parse(po.input).lines.some((l) => l.product_id === cap.id)).toBe(true);
+    }
+    // VAP-BD-1G: whole cases of 25, at least one case.
+    expect(CapPayload.parse(caps.find((op) => CapPayload.parse(op.payload).id === ids['VAP-BD-1G'])!.payload).maxMenuBuyerOrderQuantity).toBe(25);
+    // The cap is company-wide, so its trigger and its share are company-wide numbers.
+    expect(p.rationale).toContain('company-wide adjusted days of supply');
+    expect(p.rationale).toMatch(/\d+ available company-wide ÷ \d+ active buyer/);
     expect(p.rationale).toContain('Allocation guard');
-    expect(p.title).toMatch(/3 POs .* \+ 1 buyer cap, 3 vendor emails, 3 receiving tasks/);
+    // Short title (three vendors: the code template), the detail in summary.
+    expect(p.title).toBe('Restock 3 vendors · Oakland Warehouse');
+    expect(p.summary).toMatch(new RegExp(`3 POs .* \\+ ${caps.length} buyer caps?, 3 vendor emails, 3 receiving tasks`));
+    expect(p.meta).toMatchObject({ titleSource: 'template', titleRejectedReason: 'no single agent headline for this proposal' });
 
     // Nothing written while proposing.
     expect(env.net.purchaseWrites + env.net.taskWrites + mcpWrites(env) + env.outbox.deliveries).toBe(0);
@@ -125,7 +138,8 @@ describe('cross-tool proposal: PO → buyer cap → vendor email → receiving t
     expect(result.purchaseOrderIds).toHaveLength(3);
     expect(result.emailIds).toHaveLength(3);
     expect(result.taskIds).toHaveLength(3);
-    expect(result.buyerCapProductIds).toHaveLength(1);
+    expect(result.buyerCapProductIds.length).toBe(p.ops.filter((op) => op.action === CAP_ACTION).length);
+    expect(result.buyerCapProductIds).toContain(`prd_${ids['VAP-BD-1G']!}`); // MCP record ids are prefixed
 
     const done = await env.harness.get(p.id);
     expect(done.status).toBe('executed');
@@ -166,7 +180,7 @@ describe('cross-tool proposal: PO → buyer cap → vendor email → receiving t
 
     // Idempotent: executing again writes nothing anywhere.
     const before = { po: env.net.purchaseWrites, tasks: env.net.taskWrites, mcp: mcpWrites(env), mail: env.outbox.deliveries };
-    expect(before).toEqual({ po: 3, tasks: 3, mcp: 1, mail: 3 });
+    expect(before).toEqual({ po: 3, tasks: 3, mcp: p.ops.filter((op) => op.action === CAP_ACTION).length, mail: 3 });
     await env.harness.execute({ ctx: env.contexts.execute, proposalId: p.id });
     expect({ po: env.net.purchaseWrites, tasks: env.net.taskWrites, mcp: mcpWrites(env), mail: env.outbox.deliveries }).toEqual(before);
   });
@@ -211,12 +225,19 @@ describe('cross-tool proposal: PO → buyer cap → vendor email → receiving t
     const meta = z.object({ revisions: z.number(), critiques: z.array(z.object({ explanation: z.string() })) }).parse(p.meta);
     expect(meta.revisions).toBe(1);
     expect(meta.critiques[0]!.explanation).toContain('cap must be the computed one');
-    expect(CapPayload.parse(p.ops.find((op) => op.action === CAP_ACTION)!.payload).maxMenuBuyerOrderQuantity).toBe(25);
+    // Every cap is back to the computed value after the revision.
+    const wrongGuard = z.array(z.object({ product_id: z.string(), cap: z.number() })).parse(p.meta.allocationGuard);
+    for (const op of p.ops.filter((o) => o.action === CAP_ACTION)) {
+      const cap = CapPayload.parse(op.payload);
+      expect(cap.maxMenuBuyerOrderQuantity).toBe(wrongGuard.find((g) => g.product_id === cap.id)!.cap);
+    }
 
     const lazy = await restockEnv({ planner: { skipCaps: true } });
     const { p: q } = await suspendedProposal(lazy);
     const crossTool = z.array(z.object({ action: z.string(), source: z.string() })).parse(q.meta.crossTool);
-    expect(crossTool.filter((o) => o.action === CAP_ACTION).map((o) => o.source)).toEqual(['guard-backfill']);
+    const backfilled = crossTool.filter((o) => o.action === CAP_ACTION).map((o) => o.source);
+    expect(backfilled.length).toBeGreaterThan(0);
+    expect(new Set(backfilled)).toEqual(new Set(['guard-backfill']));
     expect(q.rationale).toContain('Added by the workflow');
   });
 });
@@ -225,12 +246,12 @@ describe('registry boot: distru_mcp degraded mode', () => {
   test('MCP down at boot: starts without distru_mcp, reports it unhealthy; a refresh connects and rebuilds the registry', async () => {
     const env = await restockEnv({ mcpDown: true });
     expect(env.connectors.mcpStatus).toMatchObject({ state: 'unavailable', registered: false });
-    expect(env.connectors.registry.connectors().map((c) => c.id)).toEqual(['distru', 'headset', 'email']);
+    expect(env.connectors.registry.connectors().map((c) => c.id)).toEqual(['distru', 'headset', 'email', 'context']);
     expect(env.connectors.mcpClient()).toBeInstanceOf(McpBridgeClient);
 
     const service = createConnectorsService(() => env.connectors.registry, () => env.contexts.read, () => env.connectors.mcpStatus);
     const down = await service.list();
-    expect(down.map((c) => [c.id, c.health.ok])).toEqual([['distru', true], ['headset', true], ['email', true], [DISTRU_MCP_ID, false]]);
+    expect(down.map((c) => [c.id, c.health.ok])).toEqual([['distru', true], ['headset', true], ['email', true], ['context', false], [DISTRU_MCP_ID, false]]);
     expect(down.find((c) => c.id === DISTRU_MCP_ID)!.health.detail).toContain('unreachable');
 
     // A run in degraded mode still proposes POs, emails and tasks; no caps, and it says why.
@@ -266,11 +287,11 @@ describe('registry boot: distru_mcp degraded mode', () => {
     const connectors = new AppConnectors({ connectMcp: null });
     await connectors.start();
     expect(connectors.mcpStatus.state).toBe('disabled');
-    expect(buildAppRegistry(null).connectors().map((c) => c.id)).toEqual(['distru', 'headset', 'email']);
+    expect(buildAppRegistry(null).connectors().map((c) => c.id)).toEqual(['distru', 'headset', 'email', 'context']);
     expect(connectors.registry.actions().map((a) => a.name).sort()).toEqual(['distru.purchases.upsert', 'distru.tasks.create', 'email.send_vendor_po']);
     const env = await restockEnv();
     const service = createConnectorsService(() => connectors.registry, () => env.contexts.read, () => connectors.mcpStatus);
-    expect((await service.list()).map((c) => c.id)).toEqual(['distru', 'headset', 'email']);
+    expect((await service.list()).map((c) => c.id)).toEqual(['distru', 'headset', 'email', 'context']);
   });
 
   test('error classification is routed by the op connector', () => {

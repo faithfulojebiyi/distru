@@ -1,4 +1,4 @@
-import { DecisionConflictError, totalValue, UndoOfMetaSchema, userPrincipal, type Harness, type Principal, type Proposal, type Risk, type UndoInfo } from '@ops/harness';
+import { DecisionConflictError, isResumable, totalValue, UndoOfMetaSchema, userPrincipal, type Harness, type Principal, type Proposal, type Risk, type UndoInfo } from '@ops/harness';
 import { and, asc, desc, eq, inArray, type SQL } from 'drizzle-orm';
 import type { ApiServices } from '../api/services';
 import type { AuditEvent, DecisionRequest, ProposalDetail, ProposalSummary } from '../api/schemas';
@@ -50,6 +50,7 @@ function toSummary(row: ProposalRow, ops: OpLite[], systems: OpSystemsLookup): P
     version: row.version,
     status: row.status,
     title: row.title,
+    summary: row.summary,
     createdBy: row.createdBy,
     policyOutcome: row.policyOutcome,
     totalValue: row.totalValue,
@@ -71,6 +72,7 @@ export function toProposalSummary(p: Proposal, systems: OpSystemsLookup = NO_SYS
     version: p.version,
     status: p.status,
     title: p.title,
+    summary: p.summary ?? null,
     createdBy: p.createdBy,
     policyOutcome: p.policy.outcome,
     totalValue: totalValue(p.ops),
@@ -96,6 +98,7 @@ export function toProposalDetail(p: Proposal, undo: UndoInfo, systems: OpSystems
     decision: p.decision,
     execution: p.execution,
     undo,
+    resumable: isResumable(p),
   };
 }
 
@@ -135,18 +138,49 @@ export type ProposalService = ApiServices['proposals'] & {
   detailOf: (p: Proposal) => Promise<ProposalDetail>;
 };
 
-export function createProposalService<TCtx>(db: DB, harness: Harness<TCtx>, ctxFor: () => TCtx, options: ProposalServiceOptions = {}): ProposalService {
-  const systems = options.systems ?? NO_SYSTEMS;
-  const detailOf = async (p: Proposal) => toProposalDetail(p, await harness.undoInfo(p), systems);
+/**
+ * The decision path, without a database: `harness.decide`, then the decision hook (resume the waiting
+ * run / queue execution). On a lost race (DecisionConflictError) the hook still runs with the current
+ * proposal, in case the first hook call was lost; the hook itself must be idempotent.
+ */
+export function createDecider<TCtx>(harness: Harness<TCtx>, ctxFor: () => TCtx, options: Pick<ProposalServiceOptions, 'onDecided' | 'onHookError'>) {
   const nudge = async (p: Proposal) => {
     if (!options.onDecided) return;
     try {
       await options.onDecided(p);
     } catch (err) {
-      // The decision is recorded; a failed resume is retried by the next decision call or an operator.
+      // The decision is recorded; a failed resume/queue is retried by the next decision call or an operator.
       options.onHookError?.(err, p.id);
     }
   };
+  return async function decideAs(id: string, principal: Principal, input: DecisionRequest): Promise<Proposal> {
+    let decided: Proposal;
+    try {
+      decided = await harness.decide({
+        ctx: ctxFor(),
+        principal,
+        proposalId: id,
+        decision: input.decision,
+        ...(input.reason !== undefined ? { reason: input.reason } : {}),
+        ...(input.edits ? { edits: input.edits } : {}),
+      });
+    } catch (err) {
+      if (err instanceof DecisionConflictError) {
+        const current = await harness.get(id).catch(() => null);
+        if (current?.decision) await nudge(current);
+      }
+      throw err;
+    }
+    await nudge(decided);
+    return decided;
+  };
+}
+
+export function createProposalService<TCtx>(db: DB, harness: Harness<TCtx>, ctxFor: () => TCtx, options: ProposalServiceOptions = {}): ProposalService {
+  const systems = options.systems ?? NO_SYSTEMS;
+  const detailOf = async (p: Proposal) => toProposalDetail(p, await harness.undoInfo(p), systems);
+  const decider = createDecider(harness, ctxFor, options);
+  const decideAs = async (id: string, principal: Principal, input: DecisionRequest) => detailOf(await decider(id, principal, input));
 
   return {
     async list({ status, limit, offset }) {
@@ -190,30 +224,8 @@ export function createProposalService<TCtx>(db: DB, harness: Harness<TCtx>, ctxF
 
     // Role → scopes (operator: read+propose, approver: +approve). The harness re-checks the scope.
     decide: (id, user, input) => decideAs(id, userPrincipal(user.id, user.role, user.name), input),
-    decideAs: (id, principal, input) => decideAs(id, principal, input),
+    decideAs,
   };
-
-  async function decideAs(id: string, principal: Principal, input: DecisionRequest): Promise<ProposalDetail> {
-    let decided: Proposal;
-    try {
-      decided = await harness.decide({
-        ctx: ctxFor(),
-        principal,
-        proposalId: id,
-        decision: input.decision,
-        ...(input.reason !== undefined ? { reason: input.reason } : {}),
-        ...(input.edits ? { edits: input.edits } : {}),
-      });
-    } catch (err) {
-      if (err instanceof DecisionConflictError) {
-        const current = await loadProposal(db, id);
-        if (current?.decision) await nudge(current);
-      }
-      throw err;
-    }
-    await nudge(decided);
-    return detailOf(decided);
-  }
 }
 
 export function createAuditService(db: DB): ApiServices['audit'] {

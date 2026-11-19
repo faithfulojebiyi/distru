@@ -67,6 +67,27 @@ export const UndoUnavailableResponseSchema = z
   .object({ error: z.literal('undo_unavailable'), message: z.string(), undo: UndoInfoSchema })
   .meta({ id: 'UndoUnavailableResponse' });
 
+// ── Resume ───────────────────────────────────────────────────────────────────────────────────
+
+export const ResumeRequestSchema = z
+  .object({
+    /** Why it is safe to retry now (recorded in the audit trail as `proposal.resume_requested`). */
+    reason: z.string().trim().min(1).max(2000).optional(),
+  })
+  .meta({ id: 'ResumeRequest' });
+
+export const ResumeResponseSchema = z
+  .object({
+    proposal: ProposalDetailSchema,
+    /** False when the queue was unreachable: a pending-execution marker was recorded and the sweeper retries it. */
+    queued: z.boolean(),
+  })
+  .meta({ id: 'ResumeResponse' });
+
+export const NotResumableResponseSchema = z
+  .object({ error: z.literal('not_resumable'), message: z.string(), status: z.string() })
+  .meta({ id: 'NotResumableResponse' });
+
 // ── Policy rules ─────────────────────────────────────────────────────────────────────────────
 
 export const PolicyRuleSchema = z
@@ -143,6 +164,7 @@ export const LocationListSchema = z
 export type McpToken = z.infer<typeof McpTokenSchema>;
 export type CreateMcpTokenRequest = z.infer<typeof CreateMcpTokenRequestSchema>;
 export type UndoRequest = z.infer<typeof UndoRequestSchema>;
+export type ResumeRequest = z.infer<typeof ResumeRequestSchema>;
 export type PolicyRule = z.infer<typeof PolicyRuleSchema>;
 export type PolicyRuleInput = z.infer<typeof PolicyRuleInputSchema>;
 export type PolicyRuleType = z.infer<typeof PolicyRuleTypeSchema>;

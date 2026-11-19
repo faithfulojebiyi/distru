@@ -14,7 +14,7 @@ const po = {
   ],
 };
 const today = new Date('2026-11-19T12:00:00Z');
-const analysis = (over: Partial<VendorReplyAnalysis>): VendorReplyAnalysis => ({ kind: 'partial', lines: [], eta: null, eta_text: null, summary: '', injection_detected: false, suspicious_text: [], ...over });
+const analysis = (over: Partial<VendorReplyAnalysis>): VendorReplyAnalysis => ({ kind: 'partial', lines: [], eta: null, eta_text: null, title: null, summary: '', injection_detected: false, suspicious_text: [], ...over });
 const line = (over: Partial<VendorReplyAnalysis['lines'][number]>) => ({ sku: null, product_id: null, shipped_quantity: null, backordered_quantity: null, new_unit_price: null, ...over });
 
 describe('validateAgainstPo: code checks every number the Liaison extracted', () => {

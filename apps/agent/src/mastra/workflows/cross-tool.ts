@@ -1,11 +1,13 @@
 /**
  * The cross-tool half of the restock workflow, all deterministic code (no model decides any of it):
  *
- * - **Allocation guard**: for each at-risk SKU whose (retail-adjusted) days of supply are below the
- *   vendor lead time (it will stock out before the PO can arrive), a per-buyer cap on Distru Commerce
- *   menu orders (`maxMenuBuyerOrderQuantity`, via the Distru MCP bridge `distru_mcp.mutate_product`):
- *   remaining available ÷ active buyers in the last 14 days, rounded down to whole cases, at least one
- *   case. Passed to the Planner as a suggestion; checked by the plan guard; backfilled if omitted.
+ * - **Allocation guard**: for each at-risk SKU whose COMPANY-WIDE retail-adjusted days of supply are
+ *   below the vendor lead time (it will stock out before the PO can arrive), a per-buyer cap on Distru
+ *   Commerce menu orders (`maxMenuBuyerOrderQuantity`, via the Distru MCP bridge
+ *   `distru_mcp.mutate_product`): company-wide available ÷ active buyers in the last 14 days, rounded
+ *   down to whole cases, at least one case. The cap is a product-level (company-wide) setting, so both
+ *   inputs are company-wide: available from `products_get`, days of supply from the velocity report
+ *   without a location filter, blended with retail by `headset.demand_signal`. Passed to the Planner as a suggestion; checked by the plan guard; backfilled if omitted.
  * - **Assembly**: the one proposal is ordered per PO as
  *     PO → buyer cap(s) for that PO's SKUs → vendor email → receiving task
  *   The email and the task reference the PO with op references (`{{op:<i>.purchase_number}}`,
@@ -22,6 +24,8 @@ import type { AtRiskSku } from '../agents/inventory-analyst';
 import type { GuardSuggestion } from '../agents/procurement-planner';
 import { principalFor } from '../agents/roster';
 import { draftOpFrom, type DraftOp } from '../tools/run-context';
+import { VelocityRowSchema, type VelocityRow } from '@ops/connector-distru';
+import { demandSignalFor } from './demand';
 
 export const PURCHASE_ACTION = 'distru.purchases.upsert';
 export const CAP_ACTION = 'distru_mcp.mutate_product';
@@ -125,7 +129,6 @@ export function capFindings(ops: readonly DraftOp[], guard: readonly GuardSugges
 
 // ── allocation guard ─────────────────────────────────────────────────────────────────────────
 
-const DemandSignal = z.object({ adjusted_days_of_supply: z.number().nullable() });
 const ProductDetail = z.object({ quantity_available: z.number(), units_per_case: z.number().nullable() });
 const McpProduct = z.object({ product: z.object({ maxMenuBuyerOrderQuantity: z.number().nullable().optional() }).passthrough().nullable() });
 
@@ -135,25 +138,34 @@ export interface GuardContext {
   now: Date;
 }
 
-/** Retail-adjusted days of supply, recomputed by the same code the Analyst used (headset.demand_signal), not copied from model output. */
-async function adjustedDaysOfSupply(g: GuardContext, item: AtRiskSku, leadTime: number): Promise<number | null> {
-  if (hasReadTool(g.registry, 'headset.demand_signal')) {
-    try {
-      const out = DemandSignal.parse(
-        await g.registry.runReadTool(g.ctx, analyst, 'headset.demand_signal', {
-          sku: item.sku,
-          // Oversold rows report negative days of supply; the blend takes 0 (already out).
-          wholesale_days_of_supply: item.days_of_supply === null ? null : Math.max(0, item.days_of_supply),
-          wholesale_avg_daily: item.avg_daily_demand,
-          lead_time_days: leadTime,
-        }),
+const CompanyVelocity = z.object({ rows: z.array(VelocityRowSchema) });
+
+/**
+ * Company-wide, retail-adjusted days of supply. The buyer cap is a company-wide setting (one Distru
+ * Commerce menu, every location's stock), so its trigger uses the company-wide velocity row (no
+ * location filter: all locations combined) blended with retail by the same code the scan uses
+ * (`headset.demand_signal`), never a single location's row or model output. Falls back to the
+ * location row when the company-wide report has no row for the product.
+ */
+export async function companyDaysOfSupply(g: GuardContext, item: AtRiskSku, leadTime: number): Promise<{ adjusted: number | null; wholesale: number | null }> {
+  let row: Pick<VelocityRow, 'sku' | 'days_of_supply' | 'avg_daily_demand'> = { sku: item.sku, days_of_supply: item.days_of_supply, avg_daily_demand: item.avg_daily_demand };
+  try {
+    // `'any'`: the company-wide row whether or not it is below its reorder point.
+    for (const below of ['any' as const]) {
+      const out = CompanyVelocity.parse(
+        await g.registry.runReadTool(g.ctx, analyst, 'distru.velocity_report', { below_reorder_point: below, product_ids: [item.product_id], lead_time_days: leadTime, limit: 5 }),
       );
-      return out.adjusted_days_of_supply ?? item.days_of_supply;
-    } catch {
-      /* retail down: fall back to wholesale */
+      const company = out.rows.find((r) => r.product_id === item.product_id);
+      if (company) {
+        row = company;
+        break;
+      }
     }
+  } catch {
+    /* keep the location row */
   }
-  return item.days_of_supply;
+  const signal = await demandSignalFor(g.registry, g.ctx, row, leadTime);
+  return { adjusted: signal?.adjusted_days_of_supply ?? row.days_of_supply, wholesale: row.days_of_supply };
 }
 
 /** Distinct customers with a (non-cancelled) order containing the product in the last `ACTIVE_BUYER_DAYS` days. */
@@ -184,7 +196,7 @@ export async function computeGuard(
   const leadTime = vendor.lead_time_days ?? 14;
   const worst = new Map<string, { item: AtRiskSku; adjusted: number }>();
   for (const item of items) {
-    const adjusted = await adjustedDaysOfSupply(g, item, leadTime);
+    const { adjusted } = await companyDaysOfSupply(g, item, leadTime);
     if (adjusted === null || adjusted >= leadTime) continue;
     const prev = worst.get(item.product_id);
     if (!prev || adjusted < prev.adjusted) worst.set(item.product_id, { item, adjusted });
@@ -213,7 +225,7 @@ export async function computeGuard(
       units_per_case: unitsPerCase,
       adjusted_days_of_supply: Math.round(adjusted * 10) / 10,
       lead_time_days: leadTime,
-      reason: `${item.sku}: ${Math.round(adjusted * 10) / 10} adjusted days of supply < ${leadTime}-day lead time from ${vendor.name}; ${detail.quantity_available} available ÷ ${buyers} active buyer(s) (last ${ACTIVE_BUYER_DAYS} days) → ${cap} units per buyer order${unitsPerCase ? ` (whole cases of ${unitsPerCase})` : ''}`,
+      reason: `${item.sku}: ${Math.round(adjusted * 10) / 10} company-wide adjusted days of supply < ${leadTime}-day lead time from ${vendor.name}; ${detail.quantity_available} available company-wide ÷ ${buyers} active buyer(s) (last ${ACTIVE_BUYER_DAYS} days) → ${cap} units per buyer order${unitsPerCase ? ` (whole cases of ${unitsPerCase})` : ''}`,
     });
   }
   return { guard, note: null };

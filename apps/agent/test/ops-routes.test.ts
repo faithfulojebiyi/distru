@@ -4,7 +4,7 @@
  * the OpenAPI document (named components for every new schema).
  */
 import { describe, expect, test } from 'bun:test';
-import { InMemoryAuditSink, UndoUnavailableError, type Principal } from '@ops/harness';
+import { InMemoryAuditSink, NotResumableError, UndoUnavailableError, type Principal } from '@ops/harness';
 import { createApiRoutes } from '../src/api/routes';
 import type { ProposalDetail } from '../src/api/schemas';
 import type { ApiServices } from '../src/api/services';
@@ -107,6 +107,31 @@ describe('undo route', () => {
   });
 });
 
+describe('resume route', () => {
+  test('approver only; 202 with queued flag; 409 not_resumable unless failed', async () => {
+    const calls: unknown[] = [];
+    const env = setup({
+      resume: {
+        request: async (id, user, input) => {
+          calls.push({ id, user: user.id, input });
+          if (id !== ID) throw new NotResumableError(id, 'executed');
+          return { proposal: { id: ID, resumable: false } as ProposalDetail, queued: true };
+        },
+      },
+    });
+    expect((await env.call('POST', `/api/proposals/${ID}/resume`, undefined, {})).status).toBe(401);
+    expect((await env.call('POST', `/api/proposals/${ID}/resume`, 'operator', {})).status).toBe(403);
+    const ok = await env.call('POST', `/api/proposals/${ID}/resume`, 'approver', { reason: 'vendor released the hold' });
+    expect(ok.status).toBe(202);
+    expect(await ok.json()).toMatchObject({ queued: true, proposal: { id: ID } });
+    expect(calls).toEqual([{ id: ID, user: 'u-ap', input: { reason: 'vendor released the hold' } }]);
+    const other = '0f1c8a52-3f1e-4c55-9a43-2f4b7a1d9e11';
+    const conflict = await env.call('POST', `/api/proposals/${other}/resume`, 'approver', {});
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toMatchObject({ error: 'not_resumable', status: 'executed' });
+  });
+});
+
 describe('policy rules', () => {
   test('GET for any user (rules + available rule types); PUT approver-only, validated, audited as policy.changed', async () => {
     const { call, audit } = setup();
@@ -154,7 +179,7 @@ describe('OpenAPI', () => {
   test('new routes and named schemas are in /api/openapi.json', async () => {
     const { api } = setup();
     const doc = (await (await api.request('/api/openapi.json')).json()) as { paths: Record<string, Record<string, unknown>>; components: { schemas: Record<string, unknown> } };
-    expect(Object.keys(doc.paths)).toEqual(expect.arrayContaining(['/api/mcp-tokens', '/api/mcp-tokens/{id}', '/api/proposals/{id}/undo', '/api/policy-rules', '/api/locations']));
+    expect(Object.keys(doc.paths)).toEqual(expect.arrayContaining(['/api/mcp-tokens', '/api/mcp-tokens/{id}', '/api/proposals/{id}/undo', '/api/proposals/{id}/resume', '/api/policy-rules', '/api/locations']));
     expect(Object.keys(doc.paths['/api/policy-rules']!)).toEqual(expect.arrayContaining(['get', 'put']));
     expect(Object.keys(doc.components.schemas)).toEqual(
       expect.arrayContaining([

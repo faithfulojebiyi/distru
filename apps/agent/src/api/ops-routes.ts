@@ -3,7 +3,7 @@
  * instance as the other custom routes (so they are in /api/openapi.json) by `createApiRoutes`.
  */
 import { createRoute, type OpenAPIHono } from '@hono/zod-openapi';
-import { userPrincipal, UndoUnavailableError } from '@ops/harness';
+import { NotResumableError, userPrincipal, UndoUnavailableError } from '@ops/harness';
 import type { MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import { requireRole, requireUser, type AuthVariables } from '../auth/session';
@@ -17,6 +17,9 @@ import {
   McpTokenIdParamsSchema,
   McpTokenListSchema,
   McpTokenSchema,
+  NotResumableResponseSchema,
+  ResumeRequestSchema,
+  ResumeResponseSchema,
   PolicyRuleListSchema,
   PolicyValidationErrorSchema,
   UndoRequestSchema,
@@ -90,6 +93,26 @@ const undoRoute = createRoute({
   },
 });
 
+const resumeRoute = createRoute({
+  method: 'post',
+  path: '/api/proposals/{id}/resume',
+  operationId: 'resumeProposal',
+  tags: ['proposals'],
+  summary: 'Resume a failed proposal (approver only), including a failed undo, through the same durable executor',
+  description:
+    'Records `proposal.resume_requested` and queues `proposal-execute` (Inngest, one durable step per op). The executor skips ops that already executed and dedupes every write by its idempotency key, so only the failed op and the ones after it run. 409 `not_resumable` unless the proposal is `failed` (see `resumable` on the detail). When the queue is unreachable the request is kept as a pending-execution marker (`queued: false`) and the sweeper retries it within a minute.',
+  security: authed,
+  middleware: [requireRole('approver')] as const,
+  request: { params: ProposalIdParamsSchema, body: { required: false, content: { 'application/json': { schema: ResumeRequestSchema } } } },
+  responses: {
+    202: json(ResumeResponseSchema, 'Resume queued (or recorded for the sweeper)'),
+    401: e401,
+    403: e403,
+    404: json(ErrorResponseSchema, 'Not found'),
+    409: json(NotResumableResponseSchema, 'Not failed: nothing to resume'),
+  },
+});
+
 const listPolicyRoute = createRoute({
   method: 'get',
   path: '/api/policy-rules',
@@ -139,6 +162,19 @@ export function registerOpsRoutes(api: OpenAPIHono<{ Variables: AuthVariables }>
     const revoked = await services.mcpTokens.revoke(c.get('user')!, c.req.valid('param').id);
     if (!revoked) return c.json({ error: 'not_found', message: 'Token not found' }, 404);
     return c.json(revoked, 200);
+  });
+
+  api.openapi(resumeRoute, async (c) => {
+    try {
+      const out = await services.resume.request(c.req.valid('param').id, c.get('user')!, c.req.valid('json') ?? {});
+      return c.json(out, 202);
+    } catch (err) {
+      if (err instanceof NotResumableError) return c.json({ error: 'not_resumable' as const, message: err.message, status: err.currentStatus }, 409);
+      const mapped = toHttpError(err);
+      if (mapped?.status === 403) return c.json(mapped.body, 403);
+      if (mapped?.status === 404) return c.json(mapped.body, 404);
+      throw err;
+    }
   });
 
   api.openapi(undoRoute, async (c) => {

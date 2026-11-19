@@ -33,6 +33,8 @@ import {
   type ToolDescriptor,
 } from '@ops/harness';
 import { z } from 'zod';
+import { previewOp } from '../../harness/dry-run';
+import { callerHeadline } from '../../harness/titles';
 import {
   DecisionRequestSchema,
   ProposalStatusSchema,
@@ -130,6 +132,33 @@ function withIntent(schema: z.ZodType): { schema: z.ZodType; unwrap: (input: Rec
   return {
     schema: z.object({ intent: IntentSchema, input: schema }),
     unwrap: ({ intent, input }) => ({ intent: String(intent), args: input }),
+  };
+}
+
+const HeadlineInput = {
+  title: z.string().max(120).optional().describe('Optional short headline for the approver (≤ 60 chars, one line, only facts from this change). Validated; rejected rather than rewritten.'),
+  summary: z.string().max(300).optional().describe('Optional one or two sentences of detail.'),
+};
+
+/** Propose tools accept an optional `title` / `summary` next to the action input. */
+function withHeadline(schema: z.ZodType): { schema: z.ZodType; unwrap: (raw: unknown) => { args: unknown; title: string | undefined; summary: string | undefined } } {
+  const parts = z.object({ title: z.string().optional(), summary: z.string().optional() });
+  if (schema instanceof z.ZodObject) {
+    return {
+      schema: schema.safeExtend(HeadlineInput),
+      unwrap: (raw) => {
+        const { title, summary } = parts.parse(raw);
+        const { title: _t, summary: _s, ...args } = z.record(z.string(), z.unknown()).parse(raw);
+        return { args, title, summary };
+      },
+    };
+  }
+  return {
+    schema: z.object({ input: schema, ...HeadlineInput }),
+    unwrap: (raw) => {
+      const r = z.object({ input: z.unknown(), title: z.string().optional(), summary: z.string().optional() }).parse(raw);
+      return { args: r.input, title: r.title, summary: r.summary };
+    },
   };
 }
 
@@ -253,16 +282,25 @@ export function createOpsMcpTools<TCtx>(deps: OpsMcpDeps<TCtx>, registry: Regist
     const desc =
       `${d.description} PROPOSE ONLY (risk: ${d.risk}${d.connector ? `, writes to ${d.connector.id}` : ''}): creates a proposal with the exact request, a field-level diff and the policy outcome. ` +
       'Nothing is written until a human approves (policy may auto-approve small low-risk changes). Returns the proposal id.';
-    tool(d.toolName, desc, registry.action(d.name).input, async (caller, intent, args) => {
+    const { schema, unwrap } = withHeadline(registry.action(d.name).input);
+    tool(d.toolName, desc, schema, async (caller, intent, raw) => {
+      const { args, title, summary } = unwrap(raw);
+      const ctx = deps.ctxFor(intent);
+      // A caller's title/summary must pass the headline validator (rejected with a clear error, never replaced).
+      const preview = await previewOp(deps.registry(), ctx, caller.principal, { action: d.name, input: args });
+      const headline = callerHeadline(preview, { title, summary }, d.toolName);
       const p = await deps.harness.propose({
-        ctx: deps.ctxFor(intent),
+        ctx,
         principal: caller.principal,
         ops: [{ action: d.name, input: args }],
+        title: headline.title,
+        ...(headline.summary ? { summary: headline.summary } : {}),
         rationale: intent,
-        meta: { source: 'mcp', intent, mcpToken: { id: caller.tokenId, name: caller.tokenName } },
+        meta: { source: 'mcp', intent, mcpToken: { id: caller.tokenId, name: caller.tokenName }, ...headline.meta },
       });
-      await deps.afterPropose?.(p);
-      return { result: proposalBrief(p), proposalId: p.id };
+      // A queueing failure (e.g. Inngest down) must not hide the proposal that was created.
+      const queued = await (deps.afterPropose?.(p).then(() => true, () => false) ?? Promise.resolve(true));
+      return { result: { ...proposalBrief(p), ...(queued ? {} : { warning: 'Auto-approved, but execution could not be queued yet; the execution sweeper retries it within a minute.' }) }, proposalId: p.id };
     });
   }
 

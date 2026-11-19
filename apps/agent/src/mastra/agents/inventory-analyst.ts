@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import { z } from 'zod';
 import { AGENTS } from './roster';
-import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions } from './shared';
+import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions } from './shared';
 
 export const AtRiskSkuSchema = z
   .object({
@@ -93,6 +93,8 @@ export interface InventoryTask {
   productIds?: string[] | undefined;
   vendorIds?: string[] | undefined;
   scenarioNote?: string | undefined;
+  /** SKUs the deterministic demand scan flagged at this location (wholesale and/or retail, computed in code). */
+  codeFlagged?: Array<{ sku: string; wholesale: boolean; retail: boolean; recommendation: string | null }> | undefined;
 }
 
 export function inventoryAnalystPrompt(task: InventoryTask): string {
@@ -102,6 +104,9 @@ export function inventoryAnalystPrompt(task: InventoryTask): string {
     task.productIds?.length ? `Scope: only these product ids: ${JSON.stringify(task.productIds)}` : null,
     task.vendorIds?.length ? `Scope: only these vendor ids: ${JSON.stringify(task.vendorIds)}` : null,
     task.scenarioNote ? `Operator note (from the person who started the run): ${task.scenarioNote}` : null,
+    task.codeFlagged?.length
+      ? `Flagged in code by the deterministic scan (wholesale velocity + retail demand_signal); cover each of these, with your reasoning: ${JSON.stringify(task.codeFlagged)}`
+      : null,
     'Return the ranked at-risk SKUs for this location.',
   ]
     .filter(Boolean)
@@ -114,7 +119,7 @@ export function createInventoryAnalyst<TTools extends ToolsInput>({ model, tools
     name: AGENTS.inventoryAnalyst.name,
     description:
       'Blends wholesale velocity (Distru) with retail sell-through (Headset) for one location and returns ranked at-risk SKUs with wholesale and retail-adjusted days of supply and reasons citing both. Read-only.',
-    instructions: INVENTORY_ANALYST_INSTRUCTIONS,
+    instructions: cachedInstructions(INVENTORY_ANALYST_INSTRUCTIONS),
     model,
     tools,
   });

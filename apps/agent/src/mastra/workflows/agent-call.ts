@@ -6,6 +6,7 @@ import type { z } from 'zod';
 import { AGENT_BUDGETS, AGENT_MAX_STEPS, AGENTS, RUN_BUDGET, type AgentKey } from '../agents/roster';
 import { AgentRun, attachAgentRun, type DraftProposal } from '../tools/run-context';
 import { estimateCostUsd, sumTrace, type AgentTraceEntry, type Pricing } from '../trace';
+import { PROMPT_CACHE_OPTIONS } from '../agents/shared';
 
 export interface AgentCallArgs<T> {
   mastra: Mastra;
@@ -36,6 +37,17 @@ function summaryOf(value: unknown): string | null {
 }
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+/**
+ * One model step's usage, including prompt-cache reads / writes. Mastra (AI SDK) reports `inputTokens`
+ * as the total (cache included), `cachedInputTokens` (reads) and `cacheCreationInputTokens` (writes).
+ */
+export function cacheUsageOf(usage: unknown): { input: number; output: number; total: number; cacheRead: number; cacheWrite: number } {
+  const u = typeof usage === 'object' && usage !== null ? (usage as Record<string, unknown>) : {};
+  const input = num(u.inputTokens);
+  const output = num(u.outputTokens);
+  return { input, output, total: num(u.totalTokens) || input + output, cacheRead: num(u.cachedInputTokens), cacheWrite: num(u.cacheCreationInputTokens) };
+}
 
 /** Thrown when an agent call fails; carries the trace entry so the failure shows on the timeline/logs. */
 export class AgentCallError extends Error {
@@ -79,7 +91,7 @@ export async function callAgent<T>(args: AgentCallArgs<T>): Promise<AgentCallRes
         }
       }, limitMs + 10)
     : null;
-  const tokens = { input: 0, output: 0, total: 0 };
+  const tokens = { input: 0, output: 0, total: 0, cacheRead: 0, cacheWrite: 0 };
   const startedAt = new Date();
 
   const entry = (status: 'success' | 'failed', summary: string | null, error: string | null): AgentTraceEntry => ({
@@ -102,18 +114,21 @@ export async function callAgent<T>(args: AgentCallArgs<T>): Promise<AgentCallRes
     const agent = args.mastra.getAgentById(meta.id);
     const result = await agent.generate(args.prompt, {
       structuredOutput: { schema: args.schema },
+      // Prompt caching: system prompt + tools (agent instructions) and the growing loop (request level).
+      ...PROMPT_CACHE_OPTIONS,
       requestContext,
       maxSteps: AGENT_MAX_STEPS[key],
       abortSignal: anySignal(budget.signal, args.abortSignal),
       ...(args.tracingContext ? { tracingContext: args.tracingContext } : {}),
       onStepFinish: (step) => {
-        const input = num(step.usage?.inputTokens);
-        const output = num(step.usage?.outputTokens);
-        tokens.input += input;
-        tokens.output += output;
-        tokens.total += num(step.usage?.totalTokens) || input + output;
+        const usage = cacheUsageOf(step.usage);
+        tokens.input += usage.input;
+        tokens.output += usage.output;
+        tokens.total += usage.total;
+        tokens.cacheRead += usage.cacheRead;
+        tokens.cacheWrite += usage.cacheWrite;
         // Throws BudgetExceededError (and aborts the signal) once a limit is crossed.
-        budget.charge({ tokens: num(step.usage?.totalTokens) || input + output, costUsd: estimateCostUsd({ input, output }, pricing) });
+        budget.charge({ tokens: usage.total, costUsd: estimateCostUsd(usage, pricing) });
       },
     });
     budget.check();

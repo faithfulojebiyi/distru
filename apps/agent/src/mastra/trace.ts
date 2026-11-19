@@ -22,7 +22,16 @@ export const ToolCallTraceSchema = z
 export type ToolCallTrace = z.infer<typeof ToolCallTraceSchema>;
 
 export const TokenUsageSchema = z
-  .object({ input: z.number().int().nonnegative(), output: z.number().int().nonnegative(), total: z.number().int().nonnegative() })
+  .object({
+    /** All input tokens, including those read from / written to the prompt cache. */
+    input: z.number().int().nonnegative(),
+    output: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    /** Input tokens served from Anthropic's prompt cache (billed at ~0.1× input). */
+    cacheRead: z.number().int().nonnegative().default(0),
+    /** Input tokens written to the prompt cache (billed at ~1.25× input, 5-minute TTL). */
+    cacheWrite: z.number().int().nonnegative().default(0),
+  })
   .meta({ id: 'TokenUsage' });
 export type TokenUsage = z.infer<typeof TokenUsageSchema>;
 
@@ -48,20 +57,34 @@ export type AgentTraceEntry = z.infer<typeof AgentTraceEntrySchema>;
 export interface Pricing {
   inputUsdPerMTok: number;
   outputUsdPerMTok: number;
+  /** Cache read price as a multiple of the input price. Default 0.1 (Anthropic). */
+  cacheReadMultiplier?: number;
+  /** Cache write (5-minute TTL) price as a multiple of the input price. Default 1.25 (Anthropic). */
+  cacheWriteMultiplier?: number;
 }
 
-export function estimateCostUsd(tokens: Pick<TokenUsage, 'input' | 'output'>, pricing: Pricing): number {
-  const usd = (tokens.input * pricing.inputUsdPerMTok + tokens.output * pricing.outputUsdPerMTok) / 1_000_000;
+/**
+ * Estimated cost. `input` includes cache reads and writes (that is how the provider reports it), so the
+ * uncached part is `input − cacheRead − cacheWrite`; reads cost ~0.1× and writes ~1.25× the input price.
+ */
+export function estimateCostUsd(tokens: Pick<TokenUsage, 'input' | 'output'> & Partial<Pick<TokenUsage, 'cacheRead' | 'cacheWrite'>>, pricing: Pricing): number {
+  const read = tokens.cacheRead ?? 0;
+  const write = tokens.cacheWrite ?? 0;
+  const uncached = Math.max(0, tokens.input - read - write);
+  const inputUsd = (uncached + read * (pricing.cacheReadMultiplier ?? 0.1) + write * (pricing.cacheWriteMultiplier ?? 1.25)) * pricing.inputUsdPerMTok;
+  const usd = (inputUsd + tokens.output * pricing.outputUsdPerMTok) / 1_000_000;
   return Math.round(usd * 1_000_000) / 1_000_000;
 }
 
 export function sumTrace(entries: readonly AgentTraceEntry[]): { tokens: TokenUsage; costUsd: number } {
-  const tokens = { input: 0, output: 0, total: 0 };
+  const tokens = { input: 0, output: 0, total: 0, cacheRead: 0, cacheWrite: 0 };
   let costUsd = 0;
   for (const e of entries) {
     tokens.input += e.tokens.input;
     tokens.output += e.tokens.output;
     tokens.total += e.tokens.total;
+    tokens.cacheRead += e.tokens.cacheRead ?? 0;
+    tokens.cacheWrite += e.tokens.cacheWrite ?? 0;
     costUsd += e.costUsd;
   }
   return { tokens, costUsd: Math.round(costUsd * 1_000_000) / 1_000_000 };

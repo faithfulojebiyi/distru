@@ -8,7 +8,7 @@
  * rule is removed). Edits apply to the next evaluation (the rule source is read per evaluation).
  */
 import { deepEqual, type AnyPolicyRule, type AuditEventInput, type AuditSink, type Principal } from '@ops/harness';
-import { asc, eq, notInArray } from 'drizzle-orm';
+import { and, asc, eq, isNull, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { PolicyRule, PolicyRuleInput, PolicyRuleType } from '../api/schemas-ops';
 import type { DB } from '../db/client';
@@ -16,7 +16,11 @@ import { policyRule } from '../db/schema';
 
 export interface PolicyRuleRepo {
   list(): Promise<PolicyRule[]>;
-  /** Upsert `rules` and delete every other row, atomically. */
+  /**
+   * Upsert `rules` and remove every other rule, atomically. Removal is a soft delete (`deleted_at`), so
+   * `db:seed` (insert-if-missing by key) never resurrects a rule an approver removed; PUT-ing the key
+   * again restores it.
+   */
   replace(rules: Array<Required<Omit<PolicyRuleInput, 'description'>> & { description: string | null }>): Promise<PolicyRule[]>;
 }
 
@@ -93,17 +97,18 @@ export class DrizzlePolicyRuleRepo implements PolicyRuleRepo {
   constructor(private readonly db: DB) {}
 
   async list(): Promise<PolicyRule[]> {
-    return (await this.db.select().from(policyRule).orderBy(asc(policyRule.createdAt), asc(policyRule.key))).map(toRule);
+    return (await this.db.select().from(policyRule).where(isNull(policyRule.deletedAt)).orderBy(asc(policyRule.createdAt), asc(policyRule.key))).map(toRule);
   }
 
   async replace(rules: Parameters<PolicyRuleRepo['replace']>[0]): Promise<PolicyRule[]> {
     await this.db.transaction(async (tx) => {
       const keys = rules.map((r) => r.key);
-      if (keys.length) await tx.delete(policyRule).where(notInArray(policyRule.key, keys));
-      else await tx.delete(policyRule);
+      const now = new Date();
+      if (keys.length) await tx.update(policyRule).set({ deletedAt: now }).where(and(notInArray(policyRule.key, keys), isNull(policyRule.deletedAt)));
+      else await tx.update(policyRule).set({ deletedAt: now }).where(isNull(policyRule.deletedAt));
       for (const r of rules) {
         const [existing] = await tx.select({ id: policyRule.id }).from(policyRule).where(eq(policyRule.key, r.key));
-        if (existing) await tx.update(policyRule).set({ params: r.params, enabled: r.enabled, description: r.description }).where(eq(policyRule.key, r.key));
+        if (existing) await tx.update(policyRule).set({ params: r.params, enabled: r.enabled, description: r.description, deletedAt: null }).where(eq(policyRule.key, r.key));
         else await tx.insert(policyRule).values({ key: r.key, params: r.params, enabled: r.enabled, description: r.description });
       }
     });

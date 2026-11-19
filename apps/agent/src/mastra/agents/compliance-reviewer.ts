@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import { z } from 'zod';
 import { AGENTS } from './roster';
-import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions } from './shared';
+import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions } from './shared';
 
 export const LineVerdictSchema = z
   .object({
@@ -57,7 +57,7 @@ export function createComplianceReviewer<TTools extends ToolsInput>({ model, too
     name: AGENTS.complianceReviewer.name,
     description:
       'Checks lab results and Metrc packages for products and approves or vetoes each draft PO line with evidence (failed lab tests, held packages). Read-only.',
-    instructions: COMPLIANCE_REVIEWER_INSTRUCTIONS,
+    instructions: cachedInstructions(COMPLIANCE_REVIEWER_INSTRUCTIONS),
     model,
     tools,
   });

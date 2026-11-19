@@ -3,6 +3,7 @@ import { sql } from './db/client';
 import { env } from './env';
 import { appConnectors } from './harness/registry';
 import { mastra } from './mastra';
+import { appSweepExecutions } from './services/ops-wiring';
 
 // Build the registry before serving: connects the Distru MCP bridge from a live tools/list. If the MCP
 // server is down this resolves anyway (degraded: no distru_mcp, reported unhealthy, retried on a timer).
@@ -23,6 +24,9 @@ if (!env.ANTHROPIC_API_KEY) console.warn('ANTHROPIC_API_KEY is not set: agent ca
 
 // Scheduled workflows, event listeners and the recovery loop only run once workers are started.
 await mastra.startWorkers();
+
+// Boot sweep: approvals whose execution could not be queued while we (or Inngest) were down.
+void appSweepExecutions().catch((err: unknown) => console.warn(`[sweeper] boot sweep failed: ${err instanceof Error ? err.message : String(err)}`));
 
 let shuttingDown = false;
 async function shutdown(signal: string) {

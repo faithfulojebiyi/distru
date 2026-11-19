@@ -12,8 +12,12 @@ import {
   type ComposioCtx,
   type ComposioToolsClient,
 } from '@ops/connector-composio';
+import { contextConnector, InMemoryContextStore, type ContextCtx, type ContextService } from '@ops/context';
 import { Registry, routeErrorClassifier, type AnyTrigger, type ConnectorDefinition, type ErrorClassifier } from '@ops/harness';
+import { db } from '../db/client';
 import { env } from '../env';
+import { DrizzleSentEmailRecord } from './email-record';
+import { appContextStore } from '../context';
 import { appTriggers } from './triggers';
 
 /**
@@ -52,7 +56,7 @@ export type DistruMcpCtx = McpCtx<typeof DISTRU_MCP_ID>;
 export const COMPOSIO_ID = 'composio';
 export type AppComposioCtx = ComposioCtx<typeof COMPOSIO_ID>;
 
-export type AppCtx = DistruCtx & HeadsetCtx & EmailCtx & DistruMcpCtx & AppComposioCtx & {
+export type AppCtx = DistruCtx & HeadsetCtx & EmailCtx & DistruMcpCtx & AppComposioCtx & ContextCtx & {
   tenantId: string;
   /** `intent` etc. for MCP servers that require them (Distru); see connector-mcp `runContextOf`. */
   run?: { intent?: string; userSatisfactionEstimate?: number };
@@ -67,7 +71,8 @@ export type AppComposioConnector = ConnectorDefinition<AppComposioCtx>;
  */
 export function buildAppRegistry(mcp: DistruMcpConnector | null, composio: AppComposioConnector | null = null, triggers: readonly AnyTrigger[] = appTriggers()): Registry<AppCtx> {
   return new Registry<AppCtx>({
-    connectors: [distruConnector, headsetConnector, emailConnector, ...(mcp ? [mcp] : []), ...(composio ? [composio] : [])],
+    // `context` (read-only): account profile, learned memories, unified query (packages/context).
+    connectors: [distruConnector, headsetConnector, emailConnector, contextConnector, ...(mcp ? [mcp] : []), ...(composio ? [composio] : [])],
     triggers,
   });
 }
@@ -325,6 +330,8 @@ export interface AppContextConfig {
   mcpClient: () => McpBridgeClient;
   /** The Composio client, resolved on every access (default: an "unavailable" placeholder). */
   composioClient?: () => ComposioToolsClient;
+  /** The context layer (default: an empty in-memory store). */
+  context?: ContextService;
 }
 
 export function buildAppContexts(config: AppContextConfig): AppContexts {
@@ -339,6 +346,7 @@ export function buildAppContexts(config: AppContextConfig): AppContexts {
   const email = config.email ?? createEmailContext().connectors.email;
   const fallbackComposio = unavailableComposioClient(env.COMPOSIO_USER_ID, 'Composio is not configured');
   const composioClient = config.composioClient ?? (() => fallbackComposio);
+  const context: ContextService = config.context ?? { store: new InMemoryContextStore() };
   const ctx = (distru: DistruCtx['connectors']['distru']): AppCtx => ({
     connectors: {
       distru,
@@ -350,6 +358,7 @@ export function buildAppContexts(config: AppContextConfig): AppContexts {
       get [COMPOSIO_ID]() {
         return composioClient();
       },
+      context,
     },
     tenantId,
     run: { intent: 'Ops Agent restock: governed write approved by a human' },
@@ -362,10 +371,13 @@ export function buildAppContexts(config: AppContextConfig): AppContexts {
 
 // ── process-wide singletons ──────────────────────────────────────────────────────────────────
 
-/** Email from env: Resend when RESEND_API_KEY is set, else the in-memory mock outbox. */
+/**
+ * Email from env: Resend when RESEND_API_KEY is set, else the mock outbox. Either way sent messages are
+ * recorded in Postgres (`email_sent`), so the outbox and the executor's dedupe survive restarts.
+ */
 function emailFromEnv(): EmailCtx['connectors']['email'] {
-  if (env.RESEND_API_KEY) return { transport: new ResendTransport({ apiKey: env.RESEND_API_KEY }), from: env.EMAIL_FROM! };
-  return { transport: new OutboxTransport(), from: env.EMAIL_FROM ?? 'Golden Coast Purchasing <purchasing@goldencoastdistro.com>' };
+  if (env.RESEND_API_KEY) return { transport: new ResendTransport({ apiKey: env.RESEND_API_KEY, record: new DrizzleSentEmailRecord(db, 'resend') }), from: env.EMAIL_FROM! };
+  return { transport: new OutboxTransport({ record: new DrizzleSentEmailRecord(db, 'outbox') }), from: env.EMAIL_FROM ?? 'Golden Coast Purchasing <purchasing@goldencoastdistro.com>' };
 }
 
 export const appConnectors = new AppConnectors({
@@ -393,6 +405,7 @@ export function appContexts(): AppContexts {
     email: emailFromEnv(),
     mcpClient: () => appConnectors.mcpClient(),
     composioClient: () => appConnectors.composioClient(),
+    context: { store: appContextStore },
   });
   return contexts;
 }
