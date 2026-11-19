@@ -1,0 +1,52 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { listConnectors } from '../../api/generated/connectors/connectors';
+import type { ConnectorSummary } from '../../api/generated/opsAgentAPI.schemas';
+import { getQueryScope } from '../../lib/query';
+
+/** Every connector query key, built here so invalidation always matches by prefix. */
+export const connectorKeys = {
+  all: (scope: string) => ['connectors', scope] as const,
+  list: (scope: string) => ['connectors', scope, 'list'] as const,
+};
+
+/** Connected systems with live health and their tool catalogue; health is re-checked every 30s. */
+export const useConnectors = () => {
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: connectorKeys.list(getQueryScope(client)),
+    queryFn: ({ signal }) => listConnectors({ signal }),
+    select: (data) => data.items,
+    meta: { suppressErrorToast: true },
+    refetchInterval: 30_000,
+  });
+};
+
+/** The kind of system a connector reaches, as a short badge. */
+export const SYSTEM_LABELS: Record<string, string> = {
+  erp: 'ERP',
+  commerce: 'Commerce',
+  email: 'Email',
+  analytics: 'Analytics',
+  crm: 'CRM',
+  mcp: 'MCP',
+};
+
+/** A connector's mark: an integration icon when one exists, else a base icon for its kind of system. */
+export const connectorIcon = (connector: Pick<ConnectorSummary, 'id' | 'system'>) => {
+  if (connector.id === 'email') return 'gmail';
+  switch (connector.system) {
+    case 'erp':
+      return 'database';
+    case 'analytics':
+      return 'chartBars';
+    case 'commerce':
+      return 'tag';
+    case 'email':
+      return 'sms';
+    case 'mcp':
+      return 'tools';
+    default:
+      return 'integrations';
+  }
+};

@@ -1,18 +1,14 @@
-import { Link } from '@tanstack/react-router';
-import { useMemo } from 'react';
+// Adapted from carbonme modules/layout/components/workspace-home.tsx (header bar, date eyebrow, two-line greeting,
+// the large composer, then tabbed collections with TabButton) and workspace-home-data.ts (homeDate); the figures use
+// carbonme apps/admin/src/ui/stat-card.tsx. The composer hands its question to the Copilot.
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { Box, Flex, Grid, HStack, styled } from '@ops/ui/jsx';
 
-import { Icons } from '@ops/ui/icons/base';
-import { Button } from '@ops/ui/primitives/button';
-import { Skeleton } from '@ops/ui/primitives/skeleton';
-import { Heading, Span } from '@ops/ui/primitives/text';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@ops/ui/primitives/tooltip';
 import type { ProposalSummary } from '../../api/generated/opsAgentAPI.schemas';
+import { Skeleton } from '@ops/ui/primitives/skeleton';
 import { AuditRow } from '../audit/components/audit-log';
+import { CopilotComposer } from '../copilot/copilot-composer';
 import { ProposalListSkeleton, ProposalRow } from '../proposals/components/proposal-inbox';
 import {
   formatAge,
@@ -21,9 +17,20 @@ import {
   isToday,
 } from '../proposals/proposal-values';
 import { useAuditEvents, useProposals } from '../proposals/proposals-api';
+import { RunStatusBadge } from '../runs/run-badges';
+import { triggerOf } from '../runs/run-activity';
+import { useRuns } from '../runs/runs-api';
+import { StartRunButton } from '../runs/start-run-dialog';
 import { useMe } from '../session/session-api';
-import { EmptyState, ErrorState, Panel, StatCard } from '../system/components/states';
+import { EmptyState, ErrorState } from '../system/components/states';
+import { StatCard } from '../system/components/stat-card';
 import { useNow } from '../system/use-now';
+
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'] as const;
+
+/** `28 SEP 2026`: the viewer's local date, with three-letter months in every locale. */
+const homeDate = (now = new Date()) =>
+  `${String(now.getDate()).padStart(2, '0')} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
 
 const APPROVED: ReadonlySet<ProposalSummary['status']> = new Set([
   'approved',
@@ -31,13 +38,6 @@ const APPROVED: ReadonlySet<ProposalSummary['status']> = new Set([
   'executing',
   'executed',
 ]);
-
-const greeting = (now: number) => {
-  const hour = new Date(now).getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-};
 
 /** The figures on the stat cards, computed from the proposal list until the server has a stats route. */
 const statsOf = (proposals: readonly ProposalSummary[], now: number) => {
@@ -50,221 +50,276 @@ const statsOf = (proposals: readonly ProposalSummary[], now: number) => {
     pending: pending.length,
     pendingValue: sum(pending),
     oldestPending: oldest ? formatAge(oldest.createdAt, now) : null,
-    autoToday: proposals.filter(
-      (p) => p.policyOutcome === 'allow' && isToday(p.createdAt, now),
-    ).length,
-    executedToday: proposals.filter(
-      (p) => p.status === 'executed' && isToday(p.updatedAt, now),
-    ).length,
-    failedToday: proposals.filter(
-      (p) => p.status === 'failed' && isToday(p.updatedAt, now),
-    ).length,
+    autoToday: proposals.filter((p) => p.policyOutcome === 'allow' && isToday(p.createdAt, now)).length,
+    executedToday: proposals.filter((p) => p.status === 'executed' && isToday(p.updatedAt, now)).length,
+    failedToday: proposals.filter((p) => p.status === 'failed' && isToday(p.updatedAt, now)).length,
     proposedWeek: sum(week),
     approvedWeek: sum(week.filter((p) => APPROVED.has(p.status))),
     proposedWeekCount: week.length,
   };
 };
 
-/** Starting a run from the UI needs POST /api/runs on the agent server, which is not there yet. */
-const StartRunButton = () => (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <Box tabIndex={0} data-start-run="disabled">
-        <Button size="sm" disabled pointerEvents="none" opacity="0.5">
-          <Icons.play size={12} />
-          Start restock run
-        </Button>
-      </Box>
-    </TooltipTrigger>
-    <TooltipContent>
-      Coming soon. Until then, start a run from the CLI or ask Claude Code over MCP.
-    </TooltipContent>
-  </Tooltip>
+type HomeTab = 'decide' | 'runs' | 'activity';
+
+/** A tab label with its small muted count. */
+const TabButton = ({
+  label,
+  count,
+  active,
+  select,
+}: {
+  label: string;
+  count: string | undefined;
+  active: boolean;
+  select: () => void;
+}) => (
+  <styled.button
+    type="button"
+    role="tab"
+    aria-selected={active}
+    onClick={select}
+    display="flex"
+    alignItems="start"
+    gap="1"
+    px="2"
+    py="1"
+    rounded="md"
+    fontSize="2"
+    fontWeight={active ? '500' : '400'}
+    color={active ? 'text.app' : 'text.muted'}
+    cursor="pointer"
+    _hover={{ color: 'text.app' }}
+  >
+    {label}
+    {count !== undefined && (
+      <styled.span fontSize="0.625rem" color="text.muted" lineHeight="1">
+        {count}
+      </styled.span>
+    )}
+  </styled.button>
 );
 
-const StatSkeleton = () => (
-  <Flex direction="column" gap="2.5" p="4" rounded="xl" bg="brand.panel.2">
-    <Skeleton h="3" w="50%" rounded="md" />
-    <Skeleton h="7" w="40%" rounded="md" />
-    <Skeleton h="2.5" w="70%" rounded="md" />
+const ListSkeleton = () => (
+  <Flex direction="column" gap="2" aria-hidden>
+    {[0, 1, 2].map((row) => (
+      <Skeleton key={row} h="12" rounded="lg" />
+    ))}
   </Flex>
 );
 
-export const OverviewPage = () => {
-  const me = useMe();
+/** Recent runs as carbonme's ChatList rows: icon, title, status, time. */
+const RunList = ({ now }: { now: number }) => {
+  const runs = useRuns();
+  if (runs.isPending) return <ListSkeleton />;
+  if (runs.isError) return <ErrorState title="Could not load runs" retry={() => void runs.refetch()} />;
+  if (!runs.data.length)
+    return (
+      <styled.p color="text.muted" fontSize="2" py="10" textAlign="center">
+        Start a restock run to see the agents work.
+      </styled.p>
+    );
+  return (
+    <styled.ul display="flex" flexDirection="column" data-testid="home-runs">
+      {runs.data.slice(0, 6).map((run) => (
+        <li key={run.runId}>
+          <Link to="/runs/$runId" params={{ runId: run.runId }}>
+            <HStack
+              gap="3"
+              px="3"
+              py="3"
+              rounded="lg"
+              borderBottomWidth="1px"
+              borderColor="border.subtle"
+              _hover={{ bg: 'background.muted' }}
+            >
+              <styled.span flex="1" minW="0" truncate fontSize="2">
+                Restock run
+                <styled.span color="text.muted" fontSize="1" ml="2">
+                  {triggerOf(run.triggeredBy).label}
+                </styled.span>
+              </styled.span>
+              <RunStatusBadge status={run.status} />
+              <styled.span fontSize="1" color="text.muted" flexShrink="0" w="5rem" textAlign="right">
+                {formatAge(run.createdAt, now)}
+              </styled.span>
+            </HStack>
+          </Link>
+        </li>
+      ))}
+    </styled.ul>
+  );
+};
+
+const HomeCollections = ({ now }: { now: number }) => {
+  const [tab, setTab] = useState<HomeTab>('decide');
   const proposals = useProposals();
   const activity = useAuditEvents({ order: 'desc', limit: 10 });
-  const now = useNow(60_000);
+  const runs = useRuns();
   const nowDate = useMemo(() => new Date(now), [now]);
-
-  const stats = useMemo(
-    () => (proposals.data ? statsOf(proposals.data, now) : null),
-    [proposals.data, now],
-  );
   const titles = useMemo(
     () => new Map((proposals.data ?? []).map((p) => [p.id, p.title])),
     [proposals.data],
   );
-  const needsDecision = (proposals.data ?? [])
-    .filter((p) => p.status === 'pending_approval')
-    .slice(0, 5);
+  const pending = (proposals.data ?? []).filter((p) => p.status === 'pending_approval');
 
+  return (
+    <Flex direction="column" gap="5">
+      <Flex justify="space-between" align="center" gap="3">
+        <HStack gap="2" role="tablist" aria-label="Overview sections">
+          <TabButton
+            label="Needs your decision"
+            count={proposals.data ? String(pending.length) : undefined}
+            active={tab === 'decide'}
+            select={() => setTab('decide')}
+          />
+          <TabButton
+            label="Runs"
+            count={runs.data ? String(runs.data.length) : undefined}
+            active={tab === 'runs'}
+            select={() => setTab('runs')}
+          />
+          <TabButton label="Activity" count={undefined} active={tab === 'activity'} select={() => setTab('activity')} />
+        </HStack>
+        <Link to={tab === 'decide' ? '/approvals' : tab === 'runs' ? '/runs' : '/audit'}>
+          <styled.span fontSize="1.5" color="text.muted" _hover={{ color: 'text.app' }}>
+            View all
+          </styled.span>
+        </Link>
+      </Flex>
+      {tab === 'decide' ? (
+        proposals.isPending ? (
+          <ProposalListSkeleton rows={3} />
+        ) : proposals.isError ? (
+          <ErrorState title="Could not load proposals" retry={() => void proposals.refetch()} />
+        ) : pending.length === 0 ? (
+          <EmptyState compact illustration="notification" title="You are all caught up" hint="New proposals that need a human land here." />
+        ) : (
+          <Flex direction="column" gap="1" data-testid="needs-decision">
+            {pending.slice(0, 6).map((proposal) => (
+              <ProposalRow key={proposal.id} proposal={proposal} now={now} compact />
+            ))}
+          </Flex>
+        )
+      ) : tab === 'runs' ? (
+        <RunList now={now} />
+      ) : activity.isPending ? (
+        <ListSkeleton />
+      ) : activity.isError ? (
+        <styled.p color="text.muted">Could not load recent activity.</styled.p>
+      ) : activity.data.length === 0 ? (
+        <EmptyState compact illustration="reports" title="No activity yet" hint="Proposals, decisions and writes show here as they happen." />
+      ) : (
+        <Flex direction="column" gap="1" data-testid="recent-activity">
+          {activity.data.map((event) => (
+            <AuditRow
+              key={event.id}
+              event={event}
+              now={nowDate}
+              title={event.proposalId ? (titles.get(event.proposalId) ?? null) : null}
+            />
+          ))}
+        </Flex>
+      )}
+    </Flex>
+  );
+};
+
+/** Overview: today's date, a greeting, the Copilot composer, the day's figures, then decisions, runs and activity. */
+export const OverviewPage = () => {
+  const me = useMe();
+  const proposals = useProposals();
+  const now = useNow(60_000);
+  const navigate = useNavigate();
+  const stats = useMemo(() => (proposals.data ? statsOf(proposals.data, now) : null), [proposals.data, now]);
   const firstName = me.data?.name.split(' ')[0];
 
   return (
-    <Flex direction="column" gap="6" maxW="80rem" mx="auto" w="full">
-      <Flex
-        direction={{ base: 'column', md: 'row' }}
+    <Flex direction="column" h="full" minH="0" bg="background.app">
+      <HStack
+        h="2.75rem"
+        flexShrink="0"
+        borderBottomWidth="1px"
+        borderColor="border.subtle"
+        pl={{ base: '12', md: '5' }}
+        pr="5"
         justify="space-between"
-        align={{ base: 'flex-start', md: 'flex-end' }}
-        gap="4"
       >
-        <Flex direction="column" gap="1">
-          <Heading as="h2" fontSize="5" fontWeight="600" letterSpacing="-0.015em">
-            {greeting(now)}
-            {firstName ? `, ${firstName}` : ''}
-          </Heading>
-          <Span color="text.muted" fontSize="1.5">
-            {stats === null
-              ? 'Loading what the agents did…'
-              : stats.pending > 0
-                ? `${stats.pending} proposal${stats.pending === 1 ? '' : 's'} worth ${formatMoneyShort(stats.pendingValue)} ${stats.pending === 1 ? 'is' : 'are'} waiting for a decision.`
-                : 'Nothing is waiting for a decision. The agents will propose changes as stock runs low.'}
-          </Span>
-        </Flex>
-        <StartRunButton />
-      </Flex>
-
-      <Grid gridTemplateColumns={{ base: '1fr 1fr', lg: 'repeat(4, minmax(0, 1fr))' }} gap="3">
-        {stats === null ? (
-          proposals.isError ? null : (
-            Array.from({ length: 4 }, (_, index) => <StatSkeleton key={index} />)
-          )
-        ) : (
-          <>
-            <Link to="/approvals" search={{ status: 'pending' }}>
-              <StatCard
-                icon={Icons.checkCircle}
-                label="Pending approvals"
-                value={stats.pending}
-                tone={stats.pending === 0 ? 'muted' : undefined}
-                accent={stats.pending > 0 ? 'palette.amber.9' : undefined}
-                note={
-                  stats.oldestPending
-                    ? `Oldest proposed ${stats.oldestPending}`
-                    : 'Inbox is clear'
-                }
-              />
-            </Link>
-            <StatCard
-              icon={Icons.zap}
-              label="Auto-approved today"
-              value={stats.autoToday}
-              tone={stats.autoToday === 0 ? 'muted' : undefined}
-              note="Under the threshold, no high-risk ops"
-            />
-            <StatCard
-              icon={Icons.database}
-              label="Executed today"
-              value={stats.executedToday}
-              tone={stats.executedToday === 0 ? 'muted' : undefined}
-              note={
-                stats.failedToday > 0
-                  ? `${stats.failedToday} failed today`
-                  : 'Written and verified in Distru'
-              }
-            />
-            <StatCard
-              icon={Icons.dollar}
-              label="Proposed this week"
-              value={formatMoneyShort(stats.proposedWeek)}
-              tone={stats.proposedWeek === 0 ? 'muted' : undefined}
-              note={`${formatMoneyShort(stats.approvedWeek)} approved across ${stats.proposedWeekCount} proposal${stats.proposedWeekCount === 1 ? '' : 's'}`}
-            />
-          </>
-        )}
-      </Grid>
-
-      {proposals.isError ? (
-        <ErrorState title="Could not load proposals" retry={() => void proposals.refetch()} />
-      ) : null}
-
-      <Grid gridTemplateColumns={{ base: '1fr', xl: 'minmax(0, 1.25fr) minmax(0, 1fr)' }} gap="4" alignItems="start">
-        <Panel
-          title={
-            <HStack gap="2">
-              Needs your decision
-              {stats && stats.pending > 0 ? (
-                <styled.span
-                  fontSize="1"
-                  px="1.5"
-                  rounded="full"
-                  bg="palette.amber.9"
-                  color="white"
-                  fontVariantNumeric="tabular-nums"
-                >
-                  {stats.pending}
+        <styled.h1 fontSize="2" fontWeight="500">
+          Overview
+        </styled.h1>
+        <StartRunButton size="xs" />
+      </HStack>
+      <Flex direction="column" flex="1" overflowY="auto" px={{ base: '4', md: '10' }} pb="12">
+        <Flex direction="column" maxW="48rem" mx="auto" w="full" gap="10">
+          <Flex direction="column" gap="8" pt={{ base: '10', md: '14' }}>
+            <Box>
+              <HStack
+                gap="1.5"
+                color="palette.orange.9"
+                fontSize="1"
+                fontWeight="500"
+                letterSpacing="0.04em"
+                mb="4"
+                data-testid="home-date"
+              >
+                <styled.span w="1.5" h="1.5" rounded="full" bg="palette.orange.9" />
+                {homeDate(new Date(now))}
+              </HStack>
+              <styled.h2
+                fontSize={{ base: '5', md: '6' }}
+                fontWeight="500"
+                letterSpacing="-0.02em"
+                lineHeight="1.3"
+              >
+                <styled.span display="block" color="text.muted">
+                  Hey there{firstName ? `, ${firstName}` : ''}!
                 </styled.span>
-              ) : null}
-            </HStack>
-          }
-          action={
-            <Link to="/approvals" search={{ status: 'pending' }}>
-              <Span _hover={{ color: 'text.app' }}>View all</Span>
-            </Link>
-          }
-          data-testid="needs-decision"
-        >
-          {proposals.isPending ? (
-            <ProposalListSkeleton rows={3} />
-          ) : needsDecision.length === 0 ? (
-            <EmptyState
-              compact
-              illustration="notification"
-              title="You are all caught up"
-              hint="New proposals that need a human land here."
+                <styled.span display="block" color="text.app" fontWeight="600">
+                  {stats && stats.pending > 0
+                    ? `${stats.pending} proposal${stats.pending === 1 ? '' : 's'} worth ${formatMoneyShort(stats.pendingValue)} need${stats.pending === 1 ? 's' : ''} a decision.`
+                    : 'What should the agents look into?'}
+                </styled.span>
+              </styled.h2>
+            </Box>
+            <CopilotComposer
+              busy={false}
+              stop={null}
+              send={(question) => void navigate({ to: '/copilot', search: { q: question } })}
+              placeholder="Ask the Ops Lead about stock, vendors and orders"
             />
-          ) : (
-            <Flex direction="column" gap="1">
-              {needsDecision.map((proposal) => (
-                <ProposalRow key={proposal.id} proposal={proposal} now={now} compact />
-              ))}
-            </Flex>
-          )}
-        </Panel>
-        <Panel
-          title="Recent activity"
-          action={
-            <Link to="/audit">
-              <Span _hover={{ color: 'text.app' }}>Audit log</Span>
-            </Link>
-          }
-          data-testid="recent-activity"
-        >
-          {activity.isPending ? (
-            <Flex direction="column" gap="1">
-              {Array.from({ length: 5 }, (_, index) => (
-                <Skeleton key={index} h="12" rounded="lg" />
-              ))}
-            </Flex>
-          ) : activity.isError ? (
-            <Span color="text.muted">Could not load recent activity.</Span>
-          ) : activity.data.length === 0 ? (
-            <EmptyState compact illustration="reports" title="No activity yet" hint="Proposals, decisions and writes show here as they happen." />
-          ) : (
-            <Flex direction="column" gap="1">
-              {activity.data.map((event) => (
-                <AuditRow
-                  key={event.id}
-                  event={event}
-                  now={nowDate}
-                  title={event.proposalId ? (titles.get(event.proposalId) ?? null) : null}
+          </Flex>
+          <Grid gridTemplateColumns={{ base: '1fr 1fr', md: 'repeat(4, minmax(0, 1fr))' }} gap="3">
+            {stats === null ? (
+              proposals.isError ? null : (
+                [0, 1, 2, 3].map((key) => <Skeleton key={key} h="5.5rem" rounded="xl" />)
+              )
+            ) : (
+              <>
+                <Link to="/approvals" search={{ status: 'pending' }} data-stat-card="Pending approvals">
+                  <StatCard
+                    label="Pending approvals"
+                    value={stats.pending}
+                    note={stats.oldestPending ? `Oldest proposed ${stats.oldestPending}` : 'Inbox is clear'}
+                  />
+                </Link>
+                <StatCard label="Auto-approved today" value={stats.autoToday} note="Under the threshold" />
+                <StatCard
+                  label="Executed today"
+                  value={stats.executedToday}
+                  tone={stats.failedToday > 0 ? 'bad' : undefined}
+                  note={stats.failedToday > 0 ? `${stats.failedToday} failed today` : 'Written and verified'}
                 />
-              ))}
-            </Flex>
-          )}
-        </Panel>
-      </Grid>
+                <StatCard
+                  label="Proposed this week"
+                  value={formatMoneyShort(stats.proposedWeek)}
+                  note={`${formatMoneyShort(stats.approvedWeek)} approved`}
+                />
+              </>
+            )}
+          </Grid>
+          <HomeCollections now={now} />
+        </Flex>
+      </Flex>
     </Flex>
   );
 };

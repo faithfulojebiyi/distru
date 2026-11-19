@@ -26,6 +26,8 @@ import {
 } from '../proposal-values';
 import { useAuditEvents, useProposal } from '../proposals-api';
 import { Pill, RiskBadge, StatusBadge, TONES } from './badges';
+import { connectorTitle } from '../../settings/connectors-page';
+import { SYSTEM_LABELS, useConnectors } from '../../settings/settings-api';
 import { DecisionPanel } from './decision-panel';
 import { DiffCounts, DiffView } from './diff-view';
 import { CreatedBy } from './proposal-inbox';
@@ -133,6 +135,22 @@ const OpResult = ({ op }: { op: ProposalOp }) => {
 };
 
 /** One ERP write: what it is, its risk and value, and the field-level diff it will apply. */
+/** The system an op writes to, from the connector whose catalogue lists its action (ERP, Email, …). */
+const SystemBadge = ({ action }: { action: string }) => {
+  const connectors = useConnectors();
+  const connector = connectors.data?.find((item) =>
+    item.tools.some((tool) => tool.kind === 'action' && tool.name === action),
+  );
+  if (!connector) return null;
+  return (
+    <Pill
+      tone={TONES.info}
+      label={`${SYSTEM_LABELS[connector.system] ?? connector.system} · ${connectorTitle(connector.id)}`}
+      data-op-system={connector.system}
+    />
+  );
+};
+
 const OpCard = ({ op, total }: { op: ProposalOp; total: number }) => {
   const status = OP_STATUS[op.status];
   return (
@@ -169,6 +187,7 @@ const OpCard = ({ op, total }: { op: ProposalOp; total: number }) => {
             )}
           </HStack>
           <HStack gap="2" flexWrap="wrap">
+            <SystemBadge action={op.action} />
             <RiskBadge risk={op.risk} />
             <Pill tone={status.tone} label={status.label} data-op-status={op.status} />
           </HStack>
@@ -330,9 +349,11 @@ const Header = ({ proposal }: { proposal: ProposalDetail }) => (
       </Fact>
       {proposal.workflowRunId ? (
         <Fact label="Run">
-          <styled.code fontFamily="mono" fontSize="1">
-            {proposal.workflowRunId.slice(0, 8)}
-          </styled.code>
+          <Link to="/runs/$runId" params={{ runId: proposal.workflowRunId }} data-run-link="">
+            <styled.code fontFamily="mono" fontSize="1" textDecoration="underline" textUnderlineOffset="2px">
+              {proposal.workflowRunId.slice(0, 8)}
+            </styled.code>
+          </Link>
         </Fact>
       ) : null}
       {proposal.execution?.finishedAt ? (

@@ -366,18 +366,225 @@ export const RunStatus = {
   canceled: 'canceled',
   pending: 'pending',
   waiting: 'waiting',
+  tripwire: 'tripwire',
+  bailed: 'bailed',
+  paused: 'paused',
+  skipped: 'skipped',
 } as const;
+
+/**
+ * @nullable
+ */
+export type RunProposalLink = {
+  id: string;
+  status: ProposalStatus;
+  /** @nullable */
+  title: string | null;
+  /** @nullable */
+  totalValue: number | null;
+} | null;
 
 export interface RunSummary {
   runId: string;
   workflowId: string;
   status: RunStatus;
+  /** @nullable */
+  triggeredBy: string | null;
   createdAt: string;
   updatedAt: string;
+  proposal: RunProposalLink | null;
 }
 
 export interface RunList {
   items: RunSummary[];
+}
+
+/**
+ * @nullable
+ */
+export type RunDetailInput = {[key: string]: unknown} | null;
+
+/**
+ * @nullable
+ */
+export type RunDetailResult = {[key: string]: unknown} | null;
+
+export interface RunTokenUsage {
+  input: number;
+  output: number;
+  total: number;
+}
+
+export type RunDetailTotals = {
+  tokens: RunTokenUsage;
+  costUsd: number;
+  agentCalls: number;
+  toolCalls: number;
+};
+
+/**
+ * @nullable
+ */
+export type RunDetailSuspendPayload = {[key: string]: unknown} | null;
+
+export type RunAgentCallStatus = typeof RunAgentCallStatus[keyof typeof RunAgentCallStatus];
+
+
+export const RunAgentCallStatus = {
+  success: 'success',
+  failed: 'failed',
+} as const;
+
+export interface RunToolCall {
+  tool: string;
+  startedAt: string;
+  durationMs: number;
+  ok: boolean;
+  /** @nullable */
+  error: string | null;
+}
+
+export interface RunAgentCall {
+  agent: string;
+  agentName: string;
+  step: string;
+  label: string;
+  /** @nullable */
+  round: number | null;
+  status: RunAgentCallStatus;
+  startedAt: string;
+  endedAt: string;
+  tokens: RunTokenUsage;
+  costUsd: number;
+  toolCalls: RunToolCall[];
+  /** @nullable */
+  summary: string | null;
+  /** @nullable */
+  error: string | null;
+}
+
+export interface RunStep {
+  stepId: string;
+  status: string;
+  /** @nullable */
+  startedAt: string | null;
+  /** @nullable */
+  endedAt: string | null;
+  /** @nullable */
+  suspendedAt: string | null;
+  /** @nullable */
+  resumedAt: string | null;
+  /** @nullable */
+  iterations: number | null;
+  agents: RunAgentCall[];
+  /** @nullable */
+  error: string | null;
+}
+
+export interface RunDetail {
+  runId: string;
+  workflowId: string;
+  status: RunStatus;
+  /** @nullable */
+  triggeredBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  proposal: RunProposalLink | null;
+  /** @nullable */
+  input: RunDetailInput;
+  /** @nullable */
+  result: RunDetailResult;
+  /** @nullable */
+  error: string | null;
+  steps: RunStep[];
+  totals: RunDetailTotals;
+  /** @nullable */
+  suspendPayload: RunDetailSuspendPayload;
+}
+
+export type StartRunResponseStatus = typeof StartRunResponseStatus[keyof typeof StartRunResponseStatus];
+
+
+export const StartRunResponseStatus = {
+  started: 'started',
+} as const;
+
+export interface StartRunResponse {
+  runId: string;
+  workflowId: string;
+  status: StartRunResponseStatus;
+}
+
+export interface StartRunRequest {
+  /** @maxLength 1000 */
+  scenarioNote?: string;
+  /**
+     * @maxItems 20
+     * @items.minLength 1
+     */
+  locationIds?: string[];
+  /**
+     * @maxItems 50
+     * @items.minLength 1
+     */
+  vendorIds?: string[];
+  /**
+     * @maxItems 100
+     * @items.minLength 1
+     */
+  productIds?: string[];
+}
+
+export type ConnectorToolKind = typeof ConnectorToolKind[keyof typeof ConnectorToolKind];
+
+
+export const ConnectorToolKind = {
+  read: 'read',
+  action: 'action',
+} as const;
+
+export interface ConnectorTool {
+  toolName: string;
+  name: string;
+  kind: ConnectorToolKind;
+  requiredScope: Scope;
+  risk: Risk & (string | null);
+  description: string;
+}
+
+export type ConnectorSummaryHealth = {
+  ok: boolean;
+  /** @nullable */
+  detail: string | null;
+};
+
+export interface ConnectorSummary {
+  id: string;
+  system: string;
+  description: string;
+  health: ConnectorSummaryHealth;
+  readTools: number;
+  actions: number;
+  tools: ConnectorTool[];
+}
+
+export interface ConnectorList {
+  items: ConnectorSummary[];
+}
+
+export type WebhookResponseAction = typeof WebhookResponseAction[keyof typeof WebhookResponseAction];
+
+
+export const WebhookResponseAction = {
+  restock_requested: 'restock_requested',
+  ignored: 'ignored',
+} as const;
+
+export interface WebhookResponse {
+  ok: true;
+  action: WebhookResponseAction;
+  /** @nullable */
+  reason: string | null;
 }
 
 export type ListProposalsParams = {
@@ -409,7 +616,6 @@ export const ListAuditEventsOrder = {
 } as const;
 
 export type ListRunsParams = {
-  workflowId?: string;
   /**
    * @minimum 1
    * @maximum 200

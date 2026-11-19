@@ -7,10 +7,33 @@
  */
 import type {
   ListRunsParams,
-  RunList
+  RunDetail,
+  RunList,
+  StartRunRequest,
+  StartRunResponse
 } from '../opsAgentAPI.schemas';
 
 import { apiFetch } from '../../client';
+
+const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
+  const seen = new Set<string>();
+  const layers: [string, string | readonly string[]][][] = [];
+  for (const source of sources.reverse()) {
+    if (!source) continue;
+    const entries = source instanceof Headers
+      ? source.entries()
+      : Symbol.iterator in source
+        ? Array.from(source as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string])
+        : Object.entries<string | readonly string[] | undefined>(source);
+    const layer: [string, string | readonly string[]][] = [];
+    for (const [name, value] of entries) {
+      if (value !== undefined && !seen.has(name.toLowerCase())) layer.push([name, value]);
+    }
+    for (const [name] of layer) seen.add(name.toLowerCase());
+    layers.push(layer);
+  }
+  return Object.fromEntries(layers.reverse().flat()) as Extract<RequestInit['headers'], Record<string, unknown>>;
+};
 
 export const getListRunsUrl = (params?: ListRunsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -28,11 +51,58 @@ export const getListRunsUrl = (params?: ListRunsParams,) => {
 }
 
 /**
- * @summary Workflow runs (placeholder until the run timeline lands)
+ * @summary Restock workflow runs (newest first), each linked to the proposal it created
  */
 export const listRuns = async (params?: ListRunsParams, options?: Parameters<typeof apiFetch>[1]): Promise<RunList> => {
 
   return apiFetch<RunList>(getListRunsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+export const getStartRunUrl = () => {
+
+
+
+
+  return `/api/runs`
+}
+
+/**
+ * Queues the durable restock workflow (Inngest). The run suspends with a proposal waiting for a decision unless policy auto-approves it. Poll GET /api/runs/{id}.
+ * @summary Start a restock run (operator or approver). Returns the run id immediately
+ */
+export const startRun = async (startRunRequest?: StartRunRequest, options?: Parameters<typeof apiFetch>[1]): Promise<StartRunResponse> => {
+
+  return apiFetch<StartRunResponse>(getStartRunUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(startRunRequest)
+  }
+);}
+
+
+export const getGetRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/runs/${id}`
+}
+
+/**
+ * @summary Run detail: status, input/result, step timeline with agent calls (tokens, cost, tool calls), linked proposal
+ */
+export const getRun = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<RunDetail> => {
+
+  return apiFetch<RunDetail>(getGetRunUrl(id),
   {
     ...options,
     method: 'GET'

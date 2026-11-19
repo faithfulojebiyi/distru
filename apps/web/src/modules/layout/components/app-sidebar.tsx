@@ -16,6 +16,7 @@ import {
   SidebarTrigger,
 } from '@ops/ui/primitives/sidebar';
 import { Text } from '@ops/ui/primitives/text';
+import { SettingsNav } from '../../settings/settings-nav';
 import { UserMenu } from './user-menu';
 
 type NavItem = {
@@ -105,9 +106,16 @@ export const AppSidebar = () => {
         </HStack>
       </SidebarHeader>
       <SidebarContent>
-        <NavGroup items={WORK} pathname={pathname} />
-        <NavGroup label="Observe" items={OBSERVE} pathname={pathname} />
-        <NavGroup items={SYSTEM} pathname={pathname} />
+        {/* On a Settings page the sidebar lists its sections instead (carbonme). */}
+        {pathname.startsWith('/settings') ? (
+          <SettingsNav pathname={pathname} />
+        ) : (
+          <>
+            <NavGroup items={WORK} pathname={pathname} />
+            <NavGroup label="Observe" items={OBSERVE} pathname={pathname} />
+            <NavGroup items={SYSTEM} pathname={pathname} />
+          </>
+        )}
       </SidebarContent>
       <SidebarFooter>
         <Box
