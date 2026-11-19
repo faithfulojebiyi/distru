@@ -10,7 +10,7 @@ import { Button } from '@ops/ui/primitives/button';
 import { Input } from '@ops/ui/primitives/input';
 import { Skeleton } from '@ops/ui/primitives/skeleton';
 import { IntegrationEmptyState } from './integration-empty-state';
-import { SYSTEM_LABELS, connectorIcon, useConnectors } from './settings-api';
+import { SYSTEM_LABELS, connectorIcon, connectorName, useConnectors } from './settings-api';
 import { SettingsPage } from './settings-page';
 import { StatusDot } from './status-dot';
 
@@ -24,11 +24,12 @@ export const AppLogo = ({
   icon: string;
   /** For the initial when there is no mark. */
   name?: string;
-  size?: 'sm' | 'md' | 'lg';
+  /** xs: carbonme chat-connector-menu.tsx MenuMark, an 18px tile for single-line menu rows. */
+  size?: 'xs' | 'sm' | 'md' | 'lg';
 }) => {
   // Literal sizes: Panda only generates classes it can see, so a size picked at runtime collapsed the tile.
-  const box = { sm: '1.75rem', md: '2rem', lg: '3rem' }[size];
-  const pixels = { sm: 16, md: 18, lg: 26 }[size];
+  const box = { xs: '18px', sm: '1.75rem', md: '2rem', lg: '3rem' }[size];
+  const pixels = { xs: 14, sm: 16, md: 18, lg: 26 }[size];
   const image = icon.startsWith('img:') ? icon.slice(4) : null;
   const Integration =
     icon in IntegrationIcons
@@ -43,13 +44,14 @@ export const AppLogo = ({
       flexShrink="0"
       overflow="hidden"
       style={{ width: box, height: box, minWidth: box }}
-      rounded={size === 'lg' ? 'xl' : 'lg'}
+      rounded={size === 'lg' ? 'xl' : size === 'xs' ? 'sm' : 'lg'}
       color="text.label"
       bg={
-        size === 'md'
+        size === 'md' || size === 'xs'
           ? { base: 'background.app', _dark: 'brand.panel.10' }
           : 'brand.panel.4'
       }
+      shadow={size === 'xs' ? 'chatChip' : undefined}
     >
       {image ? (
         <styled.img src={image} alt="" style={{ width: pixels, height: pixels }} rounded="sm" objectFit="contain" />
@@ -70,11 +72,8 @@ export const AppLogo = ({
   );
 };
 
-export const connectorTitle = (id: string) =>
-  id
-    .split(/[_-]/)
-    .map((word) => (word === 'mcp' ? 'MCP' : `${word.charAt(0).toUpperCase()}${word.slice(1)}`))
-    .join(' ');
+/** Kept for existing imports: the display name from settings-api's connectorName. */
+export const connectorTitle = (id: string) => connectorName(id);
 
 const titleOf = (connector: ConnectorSummary) => connectorTitle(connector.id);
 

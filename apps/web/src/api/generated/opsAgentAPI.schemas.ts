@@ -168,6 +168,10 @@ export type SerializedError = {
   code?: string;
 } | null;
 
+export type OpResultOutputs = {[key: string]: string | number | boolean | null};
+
+export type OpResultResolved = {[key: string]: string | number | boolean | null};
+
 /**
  * @nullable
  */
@@ -179,6 +183,8 @@ export type OpResult = {
   mismatches: Mismatch[];
   error: SerializedError | null;
   finishedAt: string;
+  outputs?: OpResultOutputs;
+  resolved?: OpResultResolved;
 } | null;
 
 export interface ProposalOp {

@@ -1,7 +1,7 @@
 // The log page: filter pills (carbonme activity-settings FilterButton) over carbonme admin audit-table.tsx (audit-table.tsx
 // here) and admin ui/pager.tsx. AuditRow stays the compact row the Overview's Activity tab uses.
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Flex, HStack, styled } from '@ops/ui/jsx';
 
 import { Icons } from '@ops/ui/icons/base';
@@ -30,6 +30,7 @@ import {
   type DateRange,
 } from '../../system/components/filter-chip';
 import { Pager } from '../../system/components/pager';
+import { AuditDrawer } from './audit-drawer';
 import { AuditTable, outcomeOf, type AuditOutcome } from './audit-table';
 
 export type AuditSearch = {
@@ -38,6 +39,8 @@ export type AuditSearch = {
   proposalId?: string;
   outcome?: AuditOutcome;
   range?: DateRange;
+  /** The event open in the drawer, so a link to it is shareable. */
+  event?: string;
 };
 
 const AUDIT_LIMIT = 500;
@@ -137,7 +140,7 @@ const ACTORS = (Object.keys(ACTOR_KIND_LABELS) as ActorKind[]).map((kind) => ({
 const EVENT_TYPES = Object.entries(AUDIT_TYPES).map(([value, type]) => ({ value, label: type.label }));
 
 /** Every write and decision the harness recorded, newest first, as admin-app-mockup 10: filter pills over a table
- * whose rows open to the values before and after. */
+ * whose rows open the event's drawer (?event=<id>) with the values before and after. */
 export const AuditLog = ({ search }: { search: AuditSearch }) => {
   const navigate = useNavigate();
   const events = useAuditEvents({
@@ -167,7 +170,31 @@ export const AuditLog = ({ search }: { search: AuditSearch }) => {
 
   const setSearch = (next: AuditSearch) => {
     setCursor(undefined);
-    void navigate({ to: '/audit', search: next });
+    const { event: _open, ...filters } = next;
+    void navigate({ to: '/audit', search: filters });
+  };
+
+  // The drawer: ?event=<id> opens it; ↑/↓ step through the filtered list, turning the page when needed.
+  const openIndex = search.event ? visible.findIndex((event) => event.id === search.event) : -1;
+  const openEvent =
+    openIndex >= 0 ? visible[openIndex] : search.event ? (events.data ?? []).find((event) => event.id === search.event) ?? null : null;
+  const openEventId = (id: string | undefined, replace = false) =>
+    void navigate({ to: '/audit', search: { ...search, event: id }, replace, resetScroll: false });
+  // A shared link to an event on a later page opens on that page, so its row is highlighted behind the drawer.
+  useEffect(() => {
+    if (openIndex < 0) return;
+    const pageOffset = Math.floor(openIndex / PAGE_SIZE) * PAGE_SIZE;
+    if (pageOffset < offset || pageOffset >= offset + PAGE_SIZE) setCursor(pageOffset ? String(pageOffset) : undefined);
+    // Only when the open event changes, not on every page turn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search.event, openIndex >= 0]);
+  const step = (direction: -1 | 1) => {
+    const next = visible[openIndex + direction];
+    if (!next) return;
+    const nextIndex = openIndex + direction;
+    const nextOffset = Math.floor(nextIndex / PAGE_SIZE) * PAGE_SIZE;
+    if (nextOffset !== offset) setCursor(nextOffset ? String(nextOffset) : undefined);
+    openEventId(next.id, true);
   };
 
   const filtered = Boolean(search.type || search.actor || search.proposalId || search.outcome || search.range);
@@ -241,7 +268,12 @@ export const AuditLog = ({ search }: { search: AuditSearch }) => {
         />
       ) : (
         <>
-          <AuditTable key={`${offset}:${page[0]?.id ?? ''}`} events={page} titles={titles} />
+          <AuditTable
+            events={page}
+            titles={titles}
+            selected={openEvent?.id ?? null}
+            onOpen={(event) => openEventId(event.id)}
+          />
           {visible.length > PAGE_SIZE && (
             <Pager
               cursor={cursor}
@@ -251,6 +283,13 @@ export const AuditLog = ({ search }: { search: AuditSearch }) => {
           )}
         </>
       )}
+      <AuditDrawer
+        event={openEvent ?? null}
+        title={openEvent?.proposalId ? (titles.get(openEvent.proposalId) ?? null) : null}
+        onClose={() => openEventId(undefined, true)}
+        onStep={openIndex >= 0 ? step : null}
+        position={openIndex >= 0 ? { index: openIndex, total: visible.length } : null}
+      />
       {events.data && events.data.length >= AUDIT_LIMIT ? (
         <Box textAlign="center">
           <Span color="text.muted" fontSize="1">

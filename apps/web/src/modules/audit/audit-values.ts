@@ -2,7 +2,7 @@ import type {
   AuditEvent,
   PolicyOutcome,
 } from '../../api/generated/opsAgentAPI.schemas';
-import { formatMoney, formatPath } from '../proposals/proposal-values';
+import { actorName, formatMoney, formatPath } from '../proposals/proposal-values';
 import { TONES, type Tone } from '../proposals/components/badges';
 import type { Icons } from '@ops/ui/icons/base';
 
@@ -144,4 +144,16 @@ export const auditTime = (iso: string, now: Date): string => {
   if (minutes < 12 * 60 && auditDay(iso, now) === 'Today')
     return `${Math.floor(minutes / 60)} h ago`;
   return at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+};
+
+/** The row's sentence as plain text, for the drawer title: "Executor wrote op 11 of the proposal". */
+export const auditSentence = (event: AuditEvent, title: string | null): string => {
+  const who = actorName(event.actor).split(' ')[0] ?? actorName(event.actor);
+  const target =
+    event.opIndex !== null
+      ? ` op ${event.opIndex + 1} of the proposal`
+      : title && event.type === 'proposal.created'
+        ? ` ${title}`
+        : '';
+  return `${who} ${auditVerb(event)}${target}`;
 };

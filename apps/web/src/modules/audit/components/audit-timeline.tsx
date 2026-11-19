@@ -9,9 +9,18 @@ import { auditDetail, auditTypeOf, auditVerb } from '../audit-values';
 
 /**
  * A proposal's audit trail, oldest first, as a vertical timeline: a tinted marker per event on a
- * rail, the actor and verb, and one line of detail from the event's data.
+ * rail, the actor and verb, and one line of detail from the event's data. With `onOpen`, each event
+ * opens the audit drawer (./audit-drawer.tsx), as rows of the audit log do.
  */
-export const AuditTimeline = ({ events }: { events: readonly AuditEvent[] }) => (
+export const AuditTimeline = ({
+  events,
+  selected = null,
+  onOpen,
+}: {
+  events: readonly AuditEvent[];
+  selected?: string | null;
+  onOpen?: (event: AuditEvent) => void;
+}) => (
   <styled.ol listStyle="none" m="0" p="0" position="relative" data-testid="audit-timeline">
     {events.map((event, index) => {
       const type = auditTypeOf(event.type);
@@ -27,6 +36,7 @@ export const AuditTimeline = ({ events }: { events: readonly AuditEvent[] }) => 
           position="relative"
           pb={last ? '0' : '4'}
           data-audit-event={event.type}
+          data-audit-event-id={event.id}
         >
           {!last && (
             <Box
@@ -49,7 +59,34 @@ export const AuditTimeline = ({ events }: { events: readonly AuditEvent[] }) => 
           >
             <Icon size={12} />
           </Flex>
-          <Flex direction="column" gap="0.5" minW="0" pt="0.5">
+          <Flex
+            direction="column"
+            gap="0.5"
+            minW="0"
+            pt="0.5"
+            px="1.5"
+            mx="-1.5"
+            pb="1"
+            mb="-1"
+            rounded="md"
+            cursor={onOpen ? 'pointer' : undefined}
+            bg={selected === event.id ? { base: 'brand.panel.4', _dark: 'brand.panel.5' } : undefined}
+            _hover={onOpen ? { bg: { base: 'brand.panel.4', _dark: 'brand.panel.5' } } : undefined}
+            role={onOpen ? 'button' : undefined}
+            tabIndex={onOpen ? 0 : undefined}
+            aria-label={onOpen ? `View details: ${actorName(event.actor)} ${auditVerb(event)}` : undefined}
+            onClick={onOpen ? () => onOpen(event) : undefined}
+            onKeyDown={
+              onOpen
+                ? (key) => {
+                    if (key.key === 'Enter' || key.key === ' ') {
+                      key.preventDefault();
+                      onOpen(event);
+                    }
+                  }
+                : undefined
+            }
+          >
             <HStack gap="2" justify="space-between" alignItems="baseline" minW="0">
               <Span fontSize="1.5" minW="0">
                 <Span fontWeight="500">{actorName(event.actor)}</Span> {auditVerb(event)}

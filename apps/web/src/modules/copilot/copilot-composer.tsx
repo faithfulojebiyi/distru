@@ -1,5 +1,7 @@
 // Adapted from carbonme modules/chats/chat-composer.tsx (ComposerForm, ComposerQuestion, ComposerToolbar, send and stop
 // buttons, ComposerBand), the agent chip of steward-picker.tsx and the Tools chip of chat-connector-menu.tsx (2h).
+// The Tools menu copies chat-connector-menu.tsx ConnectorMenuContent (search, MenuHeading sections, single-line rows
+// with MenuMark-sized marks, "Manage in …" footer opening a new tab).
 // Files, Hubs, skills, models and workflows are stripped: the Copilot has one agent and the harness's connectors.
 import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
@@ -18,7 +20,9 @@ import {
   DropdownMenuTrigger,
 } from '@ops/ui/primitives/dropdown-menu';
 import { AppLogo } from '../settings/connectors-page';
-import { connectorIcon, useConnectors } from '../settings/settings-api';
+import { connectorIcon, connectorName, useConnectors } from '../settings/settings-api';
+import type { ConnectorSummary } from '../../api/generated/opsAgentAPI.schemas';
+import { Input } from '@ops/ui/primitives/input';
 import { StatusDot } from '../settings/status-dot';
 
 /** Toolbar labels hide once the composer becomes too narrow (carbonme chat-composer-styles.ts). */
@@ -49,12 +53,82 @@ const AgentChip = () => (
   </Button>
 );
 
-/** The connectors the Ops Lead's tools reach, with their health (carbonme's Tools chip, 2h). */
+/** The heading over a section of the Tools menu (carbonme chat-connector-menu.tsx MenuHeading). */
+const MenuHeading = ({ shown, children }: { shown: boolean; children: React.ReactNode }) => {
+  if (!shown) return null;
+
+  return (
+    <DropdownMenuLabel px="2" pt="2" pb="3px" fontSize="0.719" fontWeight="500" color="text.muted">
+      {children}
+    </DropdownMenuLabel>
+  );
+};
+
+/** "12 read · 3 write": what the Ops Lead can do with a connector; a zero side is left out. */
+const toolCounts = (connector: ConnectorSummary) =>
+  [
+    connector.readTools ? `${connector.readTools} read` : null,
+    connector.actions ? `${connector.actions} write` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+/** One connector on one line: its mark, its name, and its health or tool counts at the end
+ * (carbonme ConnectionOption / ReconnectOption; the Copilot has no per-chat switches, so a row opens the connector). */
+const ConnectorOption = ({ connector }: { connector: ConnectorSummary }) => {
+  const name = connectorName(connector.id);
+  const ok = connector.health.ok;
+  const counts = toolCounts(connector);
+  return (
+    <DropdownMenuItem asChild gap="2" minH="8">
+      <Link
+        to="/settings/connectors/$connectorId"
+        params={{ connectorId: connector.id }}
+        title={ok ? `${name}: ${counts || 'no tools'}` : (connector.health.detail ?? `${name} is not reachable`)}
+        aria-label={ok ? name : `${name}, not reachable`}
+        data-connector={connector.id}
+      >
+        <AppLogo icon={connectorIcon(connector)} name={name} size="xs" />
+        <styled.span truncate flex="1" minW="0" fontSize="1.5">
+          {name}
+        </styled.span>
+        {ok ? (
+          <HStack gap="1.5" flexShrink="0">
+            {counts ? (
+              <styled.span fontSize="1" color="text.muted" whiteSpace="nowrap" fontVariantNumeric="tabular-nums">
+                {counts}
+              </styled.span>
+            ) : null}
+            <StatusDot tone="green" />
+          </HStack>
+        ) : (
+          <styled.span flexShrink="0" fontSize="1" fontWeight="500" color="palette.amber.11" data-connector-unhealthy="">
+            Check
+          </styled.span>
+        )}
+      </Link>
+    </DropdownMenuItem>
+  );
+};
+
+/** The connectors the Ops Lead's tools reach, with their health: carbonme's composer Tools menu (2h,
+ * chat-connector-menu.tsx ConnectorMenuContent): a search field, single-line rows by section, then Manage in Settings. */
 const ToolsMenu = () => {
   const connectors = useConnectors();
-  const items = connectors.data ?? [];
+  const [query, setQuery] = useState('');
+  const needle = query.trim().toLowerCase();
+  const shown = (connectors.data ?? []).filter(
+    (connector) => !needle || connectorName(connector.id).toLowerCase().includes(needle) || connector.id.includes(needle),
+  );
+  const healthy = shown.filter((connector) => connector.health.ok);
+  const unreachable = shown.filter((connector) => !connector.health.ok);
+  const total = connectors.data?.length ?? 0;
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (!open) setQuery('');
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
@@ -73,37 +147,52 @@ const ToolsMenu = () => {
           <Icons.caretDown size={10} />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" w="18rem">
-        <DropdownMenuLabel>Connected systems</DropdownMenuLabel>
-        {connectors.isPending && (
-          <DropdownMenuItem disabled>
-            <Icons.loading size={12} /> Loading…
-          </DropdownMenuItem>
-        )}
-        {items.map((connector) => (
-          <DropdownMenuItem key={connector.id} asChild>
-            <Link to="/settings/connectors/$connectorId" params={{ connectorId: connector.id }}>
-              <AppLogo icon={connectorIcon(connector)} name={connector.id} size="sm" />
-              <Box flex="1" minW="0">
-                <HStack gap="1.5">
-                  <styled.span fontWeight="500" textTransform="capitalize">
-                    {connector.id}
-                  </styled.span>
-                  <StatusDot tone={connector.health.ok ? 'green' : 'amber'} />
-                </HStack>
-                <styled.span fontSize="1" color="text.muted">
-                  {connector.readTools} read tools · {connector.actions} propose-only
-                </styled.span>
-              </Box>
-            </Link>
-          </DropdownMenuItem>
+      <DropdownMenuContent
+        align="start"
+        w="18.25rem"
+        maxW="calc(100vw - 3rem)"
+        maxH="26rem"
+        overflowY="auto"
+        rounded="xl"
+        shadow="chatPop"
+        p="1"
+        aria-label="Tools"
+        data-tools-menu=""
+      >
+        <Input
+          aria-label="Search connectors"
+          placeholder="Search tools"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => event.stopPropagation()}
+          size="xs"
+          bg="transparent"
+          mb="1"
+          data-connector-search=""
+        />
+        {connectors.isPending && <DropdownMenuItem disabled>Loading connectors…</DropdownMenuItem>}
+        {connectors.isError && <DropdownMenuItem disabled>Could not load connectors</DropdownMenuItem>}
+        {connectors.isSuccess && total === 0 && <DropdownMenuItem disabled>No connectors yet</DropdownMenuItem>}
+        {connectors.isSuccess && total > 0 && shown.length === 0 && <DropdownMenuItem disabled>No matches</DropdownMenuItem>}
+        <MenuHeading shown={healthy.length > 0}>Connected</MenuHeading>
+        {healthy.map((connector) => (
+          <ConnectorOption key={connector.id} connector={connector} />
+        ))}
+        <MenuHeading shown={unreachable.length > 0}>Not reachable</MenuHeading>
+        {unreachable.map((connector) => (
+          <ConnectorOption key={connector.id} connector={connector} />
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link to="/settings/connectors">
-            <Icons.setting size={13} />
-            Manage connectors
-          </Link>
+        <DropdownMenuItem
+          gap="2"
+          onSelect={() => window.open('/settings/connectors', '_blank', 'noopener')}
+          data-connector-manage=""
+        >
+          <Icons.gears size={14} />
+          <styled.span flex="1" fontSize="1.5">
+            Manage in Settings
+          </styled.span>
+          <Icons.exportSquare size={12} color="text.muted" />
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

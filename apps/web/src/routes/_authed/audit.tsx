@@ -19,6 +19,7 @@ export const Route = createFileRoute('/_authed/audit')({
     proposalId: str(search.proposalId),
     outcome: search.outcome === 'succeeded' || search.outcome === 'refused' || search.outcome === 'failed' ? search.outcome : undefined,
     range: isDateRange(search.range) ? search.range : undefined,
+    event: str(search.event),
   }),
   component: Audit,
 });
