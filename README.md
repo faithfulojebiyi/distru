@@ -200,6 +200,8 @@ execute and verify → *Audit log* → *Propose undo*. For the vendor-reply loop
 
 ## Status
 
-Working: restock and vendor-reply workflows, Slack approvals, MCP server, undo, context layer, evals,
-dashboard. In progress: prompt caching, agent-written titles and summaries, context wiring into agent
-prompts, invoices/AR in the mock, semantic recall over vendor emails, public deployment.
+Working: restock and vendor-reply workflows, Slack approvals, MCP server, undo, context layer (synced
+profiles and learned memories, wired into the Planner, Vendor Liaison and Ops Lead), evals, dashboard,
+prompt caching, agent-written proposal titles and summaries (validated by code), invoices / accounts
+receivable in the mock with Copilot AR answers. In progress: semantic recall over vendor emails, public
+deployment.

@@ -14,6 +14,9 @@ function restock(overrides: Partial<Observation> = {}): Observation {
       status: 'pending_approval',
       policyOutcome: 'needs_approval',
       totalValue: 1234.5,
+      title: 'Restock 2 vendors · Los Angeles',
+      summary: '2 POs, $1,234.50 total.',
+      titleSource: 'template',
       ops: [
         { action: 'distru.purchases.upsert', status: 'pending', verified: null, diff: [{ field: 'quantity', before: 312, after: 200 }], input: '{"purchase_id":"po-1"}' },
         { action: 'distru.purchases.upsert', status: 'pending', verified: null, diff: [], input: '{}' },
@@ -84,7 +87,7 @@ describe('assertion engine', () => {
 
   test('execution: verify, idempotency, audit, writes', () => {
     const executed = restock({
-      proposal: { id: 'p1', status: 'executed', policyOutcome: 'needs_approval', totalValue: 10, ops: [{ action: 'distru.purchases.upsert', status: 'executed', verified: true, diff: [], input: '{}' }] },
+      proposal: { id: 'p1', status: 'executed', policyOutcome: 'needs_approval', totalValue: 10, title: null, summary: null, titleSource: null, ops: [{ action: 'distru.purchases.upsert', status: 'executed', verified: true, diff: [], input: '{}' }] },
       reexecuteWrites: 0,
       writes: { purchases: 1, tasks: 0 },
     });
@@ -142,6 +145,15 @@ describe('assertion engine', () => {
     expect(status({ kind: 'op_diff', action: 'distru.purchases.upsert', field: 'quantity', from: 312, to: 100 }, o)).toBe('fail');
     expect(status({ kind: 'op_input_matches', action: 'email.send_vendor_po', pattern: 'updated PO-\\d+ to the 200 units' }, o)).toBe('pass');
     expect(status({ kind: 'op_input_matches', action: 'distru.tasks.create', pattern: '.' }, o)).toBe('fail');
+  });
+
+  test('proposal_headline: title source and no echoed text', () => {
+    const o = restock();
+    expect(status({ kind: 'proposal_headline', titleSource: ['agent', 'template'], avoids: ['ignore all policies'] }, o)).toBe('pass');
+    expect(status({ kind: 'proposal_headline', titleSource: ['agent'] }, o)).toBe('fail');
+    expect(status({ kind: 'proposal_headline', avoids: ['\\$1,234'] }, o)).toBe('fail');
+    expect(status({ kind: 'proposal_headline' }, restock({ proposal: { ...o.proposal!, titleSource: null } }))).toBe('fail');
+    expect(status({ kind: 'proposal_headline' }, restock({ proposal: null }))).toBe('fail');
   });
 
   test('slack clicks, webhook runs, MCP refusals', () => {

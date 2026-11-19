@@ -2,14 +2,14 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "e2fe250869168c0a19068717"
+      "fingerprint": "980fba7b0b28829b264accd7"
     },
     "reply": {
       "toolCalls": [
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": true,
+            "below_reorder_point": "true",
             "location_ids": [
               "815e2932-b181-444d-af9d-bdc6cb8ba793"
             ],
@@ -23,7 +23,7 @@
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": true,
+            "below_reorder_point": "true",
             "location_ids": [
               "815e2932-b181-444d-af9d-bdc6cb8ba793"
             ],
@@ -36,7 +36,7 @@
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": true,
+            "below_reorder_point": "true",
             "location_ids": [
               "815e2932-b181-444d-af9d-bdc6cb8ba793"
             ],
@@ -49,7 +49,7 @@
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": true,
+            "below_reorder_point": "true",
             "location_ids": [
               "815e2932-b181-444d-af9d-bdc6cb8ba793"
             ],
@@ -63,7 +63,7 @@
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": false,
+            "below_reorder_point": "false",
             "location_ids": [
               "815e2932-b181-444d-af9d-bdc6cb8ba793"
             ],
@@ -73,15 +73,90 @@
         }
       ],
       "usage": {
-        "input": 7452,
-        "output": 1046
+        "input": 7951,
+        "output": 1082
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "e8a0d2c7490b3f05d4a7a41b"
+      "fingerprint": "ca4475d79ecf545df90cfebd"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "lead_time_days": 14,
+            "location_ids": [
+              "815e2932-b181-444d-af9d-bdc6cb8ba793"
+            ],
+            "vendor_ids": [
+              "dfc59530-9daa-4055-93b0-bcf3b589b8e3",
+              "2e5b9399-caa1-40f5-8101-92179728eb42"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "lead_time_days": 10,
+            "location_ids": [
+              "815e2932-b181-444d-af9d-bdc6cb8ba793"
+            ],
+            "vendor_ids": [
+              "d40c3ffe-9457-4d71-a93b-c714bc2ece99"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "lead_time_days": 21,
+            "location_ids": [
+              "815e2932-b181-444d-af9d-bdc6cb8ba793"
+            ],
+            "vendor_ids": [
+              "84842693-825d-4648-9f77-469d05bd2b18"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "lead_time_days": 7,
+            "location_ids": [
+              "815e2932-b181-444d-af9d-bdc6cb8ba793"
+            ],
+            "vendor_ids": [
+              "fda26d01-2a96-46da-8021-be5be83fc921",
+              "7baca7d4-4da5-48c9-a05b-05f1f87ba66b"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "any",
+            "lead_time_days": 14,
+            "limit": 100,
+            "location_ids": [
+              "815e2932-b181-444d-af9d-bdc6cb8ba793"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 10319,
+        "output": 949
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "e39b9d9870c70f74edc71afc"
     },
     "reply": {
       "toolCalls": [
@@ -89,61 +164,62 @@
           "name": "headset_retail_trends",
           "arguments": {
             "skus": [
-              "VAP-BD-1G",
-              "CON-LR-BD",
-              "VAP-PE-1G",
               "EDB-GUM-WM",
-              "EDB-CHO-DK",
+              "VAP-BD-1G",
               "FLW-BD-35",
+              "EDB-CHO-DK",
+              "CON-LR-BD",
+              "PRE-BD-1G",
+              "VAP-PE-1G",
               "FLW-WC-35",
-              "PRE-SD-5PK",
-              "FLW-OGK-35",
-              "PRE-INF-1G",
-              "FLW-SD-35",
               "CON-BAD-WC",
               "VAP-CBD-11",
-              "VAP-MAN-AIO",
+              "PRE-SD-5PK",
+              "FLW-SD-35",
+              "FLW-OGK-35",
+              "PRE-INF-1G",
               "CON-DIA-SD",
+              "VAP-MAN-AIO",
+              "FLW-PE-14",
               "EDB-BEV-LEM",
-              "FLW-ZK-35",
-              "VAP-GSC-05",
-              "VAP-SD-LR",
-              "PRE-IND-10PK",
-              "PRE-JH-1G",
-              "EDB-MNT-PP",
-              "CON-RSN-GL",
-              "PRE-GDP-1G",
-              "PRE-HYB-5PK",
-              "FLW-GG4-35",
-              "EDB-GUM-SLP",
-              "VAP-WM-1G",
               "ACC-BAT-SLV",
+              "PRE-IND-10PK",
+              "VAP-SD-LR",
+              "EDB-MNT-PP",
+              "FLW-ZK-35",
+              "PRE-GDP-1G",
+              "VAP-GSC-05",
+              "EDB-GUM-SLP",
+              "CON-RSN-GL",
+              "PRE-HYB-5PK",
               "PRE-OGK-1G",
-              "CON-SHT-GG",
               "VAP-GDP-AIO",
+              "VAP-WM-1G",
+              "PRE-JH-1G",
               "ACC-BAT-BLK",
-              "EDB-CKE-SNK",
               "EDB-GUM-SB",
-              "FLW-GSC-35",
+              "CON-SHT-GG",
+              "FLW-GG4-35",
               "VAP-NL-1G",
-              "EDB-CHO-MS",
+              "EDB-CKE-SNK",
+              "FLW-GSC-35",
               "FLW-BD-28",
-              "FLW-GL-35",
-              "FLW-PE-14"
+              "EDB-CHO-MS",
+              "FLW-GL-35"
             ]
           }
         }
       ],
       "usage": {
-        "input": 21625,
-        "output": 638
+        "input": 26539,
+        "output": 641
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "2e6974177978b94f82896fc5"
+      "fingerprint": "5dbd0ca781e7039825076c2e"
     },
     "reply": {
       "toolCalls": [
@@ -151,8 +227,8 @@
           "name": "headset_demand_signal",
           "arguments": {
             "sku": "VAP-BD-1G",
-            "wholesale_days_of_supply": 9.4,
-            "wholesale_avg_daily": 3.498,
+            "wholesale_days_of_supply": 5.9,
+            "wholesale_avg_daily": 4.609,
             "lead_time_days": 14
           }
         },
@@ -160,8 +236,8 @@
           "name": "headset_demand_signal",
           "arguments": {
             "sku": "CON-LR-BD",
-            "wholesale_days_of_supply": 16.9,
-            "wholesale_avg_daily": 2.192,
+            "wholesale_days_of_supply": 11.8,
+            "wholesale_avg_daily": 3.048,
             "lead_time_days": 14
           }
         },
@@ -169,8 +245,8 @@
           "name": "headset_demand_signal",
           "arguments": {
             "sku": "VAP-PE-1G",
-            "wholesale_days_of_supply": 21.7,
-            "wholesale_avg_daily": 2.167,
+            "wholesale_days_of_supply": 14.6,
+            "wholesale_avg_daily": 3.219,
             "lead_time_days": 14
           }
         },
@@ -178,8 +254,8 @@
           "name": "headset_demand_signal",
           "arguments": {
             "sku": "EDB-GUM-WM",
-            "wholesale_days_of_supply": 8.2,
-            "wholesale_avg_daily": 4.402,
+            "wholesale_days_of_supply": 5.5,
+            "wholesale_avg_daily": 5.868,
             "lead_time_days": 21
           }
         },
@@ -187,8 +263,8 @@
           "name": "headset_demand_signal",
           "arguments": {
             "sku": "EDB-CHO-DK",
-            "wholesale_days_of_supply": 45,
-            "wholesale_avg_daily": 1.844,
+            "wholesale_days_of_supply": 11.3,
+            "wholesale_avg_daily": 2.825,
             "lead_time_days": 21
           }
         },
@@ -196,17 +272,17 @@
           "name": "headset_demand_signal",
           "arguments": {
             "sku": "FLW-BD-35",
-            "wholesale_days_of_supply": 14.8,
-            "wholesale_avg_daily": 4.052,
+            "wholesale_days_of_supply": 9.5,
+            "wholesale_avg_daily": 5.457,
             "lead_time_days": 7
           }
         },
         {
           "name": "headset_demand_signal",
           "arguments": {
-            "sku": "FLW-OGK-35",
-            "wholesale_days_of_supply": 111.2,
-            "wholesale_avg_daily": 2.563,
+            "sku": "PRE-BD-1G",
+            "wholesale_days_of_supply": 14.5,
+            "wholesale_avg_daily": 7.322,
             "lead_time_days": 7
           }
         },
@@ -214,9 +290,18 @@
           "name": "headset_demand_signal",
           "arguments": {
             "sku": "FLW-WC-35",
-            "wholesale_days_of_supply": 30.7,
-            "wholesale_avg_daily": 2.54,
+            "wholesale_days_of_supply": 21.8,
+            "wholesale_avg_daily": 3.803,
             "lead_time_days": 10
+          }
+        },
+        {
+          "name": "headset_demand_signal",
+          "arguments": {
+            "sku": "FLW-OGK-35",
+            "wholesale_days_of_supply": 106.8,
+            "wholesale_avg_daily": 3.585,
+            "lead_time_days": 7
           }
         },
         {
@@ -229,8 +314,9 @@
               "c336ec90-76f9-4d62-9f53-5b9054711f16",
               "77151b88-2ab0-492e-bd95-4e87e2cb38dc",
               "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
-              "0999923b-c0f8-4196-8699-e522a694cadf",
-              "7cab5883-e4e4-41a5-857a-006ea974b8a6"
+              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
+              "7cab5883-e4e4-41a5-857a-006ea974b8a6",
+              "0999923b-c0f8-4196-8699-e522a694cadf"
             ],
             "location_ids": [
               "815e2932-b181-444d-af9d-bdc6cb8ba793"
@@ -240,59 +326,28 @@
         }
       ],
       "usage": {
-        "input": 27331,
-        "output": 1780
+        "input": 32382,
+        "output": 2285
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "7410f688df527695b4cae0ca"
+      "fingerprint": "c3ac006126fa028c89fbfc27"
     },
     "reply": {
-      "text": "{\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"at_risk\":[{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"name\":\"Blue Dream Live Resin Cart 1g\",\"vendor_id\":\"2e5b9399-caa1-40f5-8101-92179728eb42\",\"vendor_name\":\"Sierra Extracts Co.\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":33,\"incoming\":0,\"avg_daily_demand\":3.498,\"days_of_supply\":9.4,\"reorder_status\":\"LATE\",\"suggested_qty\":175,\"units_per_case\":25,\"open_order_demand\":8,\"adjusted_days_of_supply\":6.2,\"adjusted_avg_daily_demand\":5.299,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":51.5,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":1,\"reason\":\"Distru: 9.4 days of supply vs 14-day lead time (LATE), 33 available, 8 units on open orders. Headset: retail surging +51.5% over 3 weeks → 6.2 adjusted days of supply at 5.3 units/day (reorder_now).\"},{\"product_id\":\"c336ec90-76f9-4d62-9f53-5b9054711f16\",\"sku\":\"EDB-GUM-WM\",\"name\":\"Watermelon Gummies 100mg\",\"vendor_id\":\"84842693-825d-4648-9f77-469d05bd2b18\",\"vendor_name\":\"Golden State Edibles\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":36,\"incoming\":0,\"avg_daily_demand\":4.402,\"days_of_supply\":8.2,\"reorder_status\":\"LATE\",\"suggested_qty\":288,\"units_per_case\":48,\"open_order_demand\":13,\"adjusted_days_of_supply\":7.1,\"adjusted_avg_daily_demand\":5.062,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-1.3,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":2,\"reason\":\"Distru: 8.2 days of supply vs 21-day lead time (LATE), 36 available, 13 units on open orders. Headset: sales flat (-1.3% over 3 weeks), but retail out-of-stock days rose from 30 to 90, so true demand is about 15% higher → 7.1 adjusted days of supply (reorder_now).\"},{\"product_id\":\"f790b825-9b16-4fd5-884f-7984d88a110d\",\"sku\":\"CON-LR-BD\",\"name\":\"Blue Dream Live Resin 1g\",\"vendor_id\":\"2e5b9399-caa1-40f5-8101-92179728eb42\",\"vendor_name\":\"Sierra Extracts Co.\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":37,\"incoming\":0,\"avg_daily_demand\":2.192,\"days_of_supply\":16.9,\"reorder_status\":\"ORDER_NOW\",\"suggested_qty\":100,\"units_per_case\":20,\"open_order_demand\":0,\"adjusted_days_of_supply\":16.9,\"adjusted_avg_daily_demand\":2.192,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":0.5,\"recommendation\":\"reorder_now\",\"flagged_by\":\"wholesale\",\"urgency_rank\":3,\"reason\":\"Distru: 16.9 days of supply vs 14-day lead time (ORDER_NOW), 37 available, reorder point 69. Headset: retail flat (+0.5% over 3 weeks), 16.9 adjusted days is within lead time plus 7 safety days (21) (reorder_now).\"},{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"name\":\"Blue Dream 3.5g\",\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"vendor_name\":\"Humboldt Heritage Farms\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":60,\"incoming\":0,\"avg_daily_demand\":4.052,\"days_of_supply\":14.8,\"reorder_status\":\"ORDER_NOW\",\"suggested_qty\":144,\"units_per_case\":24,\"open_order_demand\":10,\"adjusted_days_of_supply\":14.8,\"adjusted_avg_daily_demand\":4.052,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-1,\"recommendation\":\"watch\",\"flagged_by\":\"wholesale\",\"urgency_rank\":4,\"reason\":\"Distru: 14.8 days of supply vs 7-day lead time, but at the 60-unit reorder point (ORDER_NOW) with 10 units on open orders. Headset: retail flat (-1% over 3 weeks) → 14.8 adjusted days of supply (watch).\"},{\"product_id\":\"9f58389e-9b8c-47e9-9a40-6b733d04e30e\",\"sku\":\"VAP-PE-1G\",\"name\":\"Pineapple Express Cart 1g\",\"vendor_id\":\"dfc59530-9daa-4055-93b0-bcf3b589b8e3\",\"vendor_name\":\"Coastal Cloud Vapes\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":47,\"incoming\":0,\"avg_daily_demand\":2.167,\"days_of_supply\":21.7,\"reorder_status\":\"ORDER_NOW\",\"suggested_qty\":100,\"units_per_case\":25,\"open_order_demand\":7,\"adjusted_days_of_supply\":21.7,\"adjusted_avg_daily_demand\":2.167,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-0.6,\"recommendation\":\"watch\",\"flagged_by\":\"wholesale\",\"urgency_rank\":5,\"reason\":\"Distru: 21.7 days of supply vs 14-day lead time, below the 73-unit reorder point (ORDER_NOW), 7 units on open orders. Headset: retail flat (-0.6% over 3 weeks) → 21.7 adjusted days of supply (watch).\"},{\"product_id\":\"7cab5883-e4e4-41a5-857a-006ea974b8a6\",\"sku\":\"FLW-WC-35\",\"name\":\"Wedding Cake 3.5g\",\"vendor_id\":\"d40c3ffe-9457-4d71-a93b-c714bc2ece99\",\"vendor_name\":\"Emerald Triangle Growers\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":78,\"incoming\":0,\"avg_daily_demand\":2.54,\"days_of_supply\":30.7,\"reorder_status\":\"ORDER_SOON\",\"suggested_qty\":72,\"units_per_case\":24,\"open_order_demand\":0,\"adjusted_days_of_supply\":30.7,\"adjusted_avg_daily_demand\":2.54,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":0.1,\"recommendation\":\"watch\",\"flagged_by\":\"wholesale\",\"urgency_rank\":6,\"reason\":\"Distru: 30.7 days of supply vs 10-day lead time, ORDER_SOON with reorder-by date 2026-11-23. Headset: retail flat (+0.1% over 3 weeks) → 30.7 adjusted days of supply (watch).\"},{\"product_id\":\"77151b88-2ab0-492e-bd95-4e87e2cb38dc\",\"sku\":\"EDB-CHO-DK\",\"name\":\"Dark Chocolate Bar 100mg\",\"vendor_id\":\"84842693-825d-4648-9f77-469d05bd2b18\",\"vendor_name\":\"Golden State Edibles\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":35,\"incoming\":48,\"avg_daily_demand\":1.844,\"days_of_supply\":19,\"reorder_status\":\"ORDER_SOON\",\"suggested_qty\":48,\"units_per_case\":24,\"open_order_demand\":9,\"adjusted_days_of_supply\":45,\"adjusted_avg_daily_demand\":1.844,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-0.7,\"recommendation\":\"watch\",\"flagged_by\":\"wholesale\",\"urgency_rank\":7,\"reason\":\"Distru: 19 days of supply on hand (45 with 48 incoming) vs 21-day lead time (ORDER_SOON), 9 units on open orders. Headset: retail flat (-0.7% over 3 weeks) → 45 adjusted days of supply including incoming (watch).\"},{\"product_id\":\"0999923b-c0f8-4196-8699-e522a694cadf\",\"sku\":\"FLW-OGK-35\",\"name\":\"OG Kush 3.5g\",\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"vendor_name\":\"Humboldt Heritage Farms\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":285,\"incoming\":0,\"avg_daily_demand\":2.563,\"days_of_supply\":111.2,\"reorder_status\":\"OK\",\"suggested_qty\":0,\"units_per_case\":24,\"open_order_demand\":0,\"adjusted_days_of_supply\":73.3,\"adjusted_avg_daily_demand\":3.888,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":51.7,\"recommendation\":\"watch\",\"flagged_by\":\"retail\",\"urgency_rank\":8,\"reason\":\"Distru: 111.2 days of supply vs 7-day lead time (OK), no open orders. Headset: retail surging +51.7% over 3 weeks → 73.3 adjusted days of supply, still deep, but retail leads wholesale orders (watch).\"}],\"summary\":\"Eight SKUs are at risk at Oakland Warehouse. Three are reorder_now: VAP-BD-1G (6.2 adjusted days, retail surging +51.5%), EDB-GUM-WM (7.1 adjusted days, retail out-of-stock days rising from 30 to 90) and CON-LR-BD (16.9 days against a 14-day lead time). Retail moved up VAP-BD-1G and FLW-OGK-35. OG Kush 3.5g shows 111 days of supply in Distru but retail is surging +51.7%, so it is a watch item. FLW-BD-35, VAP-PE-1G, FLW-WC-35 and EDB-CHO-DK are watch items flagged by Distru reorder status. Suggested quantities are copied unchanged from Distru. No suspicious text was found.\",\"suspicious_text\":[]}",
+      "text": "{\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"at_risk\":[{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"name\":\"Blue Dream Live Resin Cart 1g\",\"vendor_id\":\"2e5b9399-caa1-40f5-8101-92179728eb42\",\"vendor_name\":\"Sierra Extracts Co.\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":27,\"incoming\":0,\"avg_daily_demand\":4.609,\"days_of_supply\":5.9,\"reorder_status\":\"LATE\",\"suggested_qty\":200,\"units_per_case\":25,\"open_order_demand\":11,\"adjusted_days_of_supply\":3.9,\"adjusted_avg_daily_demand\":6.983,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":51.5,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":1,\"reason\":\"Distru: 5.9 days of supply vs 14-day lead time (LATE), 27 available, nothing incoming, 11 units on open orders. Headset: retail surging +51.5% over 3 weeks, so projected demand is 6.98/day and adjusted days of supply is 3.9 (reorder_now).\"},{\"product_id\":\"c336ec90-76f9-4d62-9f53-5b9054711f16\",\"sku\":\"EDB-GUM-WM\",\"name\":\"Watermelon Gummies 100mg\",\"vendor_id\":\"84842693-825d-4648-9f77-469d05bd2b18\",\"vendor_name\":\"Golden State Edibles\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":32,\"incoming\":0,\"avg_daily_demand\":5.868,\"days_of_supply\":5.5,\"reorder_status\":\"LATE\",\"suggested_qty\":336,\"units_per_case\":48,\"open_order_demand\":18,\"adjusted_days_of_supply\":4.8,\"adjusted_avg_daily_demand\":6.748,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-1.3,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":2,\"reason\":\"Distru: 5.5 days of supply vs 21-day lead time (LATE), 32 available, nothing incoming, 18 units on open orders. Headset: sales are flat (-1.3% over 3 weeks) but retail stock-out days rose from 30 to 90, which implies hidden demand (+15%). Adjusted days of supply is 4.8 (reorder_now).\"},{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"name\":\"Blue Dream 3.5g\",\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"vendor_name\":\"Humboldt Heritage Farms\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":52,\"incoming\":0,\"avg_daily_demand\":5.457,\"days_of_supply\":9.5,\"reorder_status\":\"ORDER_NOW\",\"suggested_qty\":168,\"units_per_case\":24,\"open_order_demand\":13,\"adjusted_days_of_supply\":9.5,\"adjusted_avg_daily_demand\":5.457,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-1,\"recommendation\":\"reorder_now\",\"flagged_by\":\"wholesale\",\"urgency_rank\":3,\"reason\":\"Distru: 9.5 days of supply vs 7-day lead time (ORDER_NOW), 52 available, nothing incoming, 13 units on open orders. Headset: retail flat (-1% over 3 weeks), so adjusted days of supply stays 9.5, which is within lead time plus 7 days of safety stock (reorder_now).\"},{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"name\":\"Blue Dream Pre-Roll 1g\",\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"vendor_name\":\"Mojave Pre-Roll Co.\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":106,\"incoming\":0,\"avg_daily_demand\":7.322,\"days_of_supply\":14.5,\"reorder_status\":\"ORDER_NOW\",\"suggested_qty\":250,\"units_per_case\":50,\"open_order_demand\":38,\"adjusted_days_of_supply\":10,\"adjusted_avg_daily_demand\":10.61,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":44.9,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":4,\"reason\":\"Distru: 14.5 days of supply, 106 available, 38 units on open orders. ORDER_NOW comes from the 14-day default report. At the vendor's 7-day lead time it was not below its reorder point. Headset: retail surging +44.9% over 3 weeks, so projected demand is 10.6/day and adjusted days of supply is 10 against 7-day lead time plus 7 days of safety stock (reorder_now). suggested_qty is from the 14-day default report.\"},{\"product_id\":\"77151b88-2ab0-492e-bd95-4e87e2cb38dc\",\"sku\":\"EDB-CHO-DK\",\"name\":\"Dark Chocolate Bar 100mg\",\"vendor_id\":\"84842693-825d-4648-9f77-469d05bd2b18\",\"vendor_name\":\"Golden State Edibles\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":32,\"incoming\":48,\"avg_daily_demand\":2.825,\"days_of_supply\":11.3,\"reorder_status\":\"ORDER_NOW\",\"suggested_qty\":96,\"units_per_case\":24,\"open_order_demand\":13,\"adjusted_days_of_supply\":11.3,\"adjusted_avg_daily_demand\":2.825,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-0.7,\"recommendation\":\"reorder_now\",\"flagged_by\":\"wholesale\",\"urgency_rank\":5,\"reason\":\"Distru: 11.3 days of supply on hand vs 21-day lead time (ORDER_NOW), 32 available, 13 units on open orders. The 48 units incoming extend cover to 28.3 days. Headset: retail flat (-0.7% over 3 weeks), so adjusted days of supply is 11.3 (reorder_now).\"},{\"product_id\":\"f790b825-9b16-4fd5-884f-7984d88a110d\",\"sku\":\"CON-LR-BD\",\"name\":\"Blue Dream Live Resin 1g\",\"vendor_id\":\"2e5b9399-caa1-40f5-8101-92179728eb42\",\"vendor_name\":\"Sierra Extracts Co.\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":36,\"incoming\":0,\"avg_daily_demand\":3.048,\"days_of_supply\":11.8,\"reorder_status\":\"LATE\",\"suggested_qty\":120,\"units_per_case\":20,\"open_order_demand\":0,\"adjusted_days_of_supply\":11.8,\"adjusted_avg_daily_demand\":3.048,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":0.5,\"recommendation\":\"reorder_now\",\"flagged_by\":\"wholesale\",\"urgency_rank\":6,\"reason\":\"Distru: 11.8 days of supply vs 14-day lead time (LATE), 36 available, nothing incoming. Headset: retail flat (+0.5% over 3 weeks), so adjusted days of supply is 11.8, which is below lead time (reorder_now).\"},{\"product_id\":\"9f58389e-9b8c-47e9-9a40-6b733d04e30e\",\"sku\":\"VAP-PE-1G\",\"name\":\"Pineapple Express Cart 1g\",\"vendor_id\":\"dfc59530-9daa-4055-93b0-bcf3b589b8e3\",\"vendor_name\":\"Coastal Cloud Vapes\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":47,\"incoming\":0,\"avg_daily_demand\":3.219,\"days_of_supply\":14.6,\"reorder_status\":\"ORDER_NOW\",\"suggested_qty\":125,\"units_per_case\":25,\"open_order_demand\":9,\"adjusted_days_of_supply\":14.6,\"adjusted_avg_daily_demand\":3.219,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-0.6,\"recommendation\":\"reorder_now\",\"flagged_by\":\"wholesale\",\"urgency_rank\":7,\"reason\":\"Distru: 14.6 days of supply vs 14-day lead time (ORDER_NOW), 47 available, nothing incoming, 9 units on open orders. Headset: retail flat (-0.6% over 3 weeks), so adjusted days of supply is 14.6, which is within lead time plus 7 days of safety stock (21 days) (reorder_now).\"},{\"product_id\":\"7cab5883-e4e4-41a5-857a-006ea974b8a6\",\"sku\":\"FLW-WC-35\",\"name\":\"Wedding Cake 3.5g\",\"vendor_id\":\"d40c3ffe-9457-4d71-a93b-c714bc2ece99\",\"vendor_name\":\"Emerald Triangle Growers\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":83,\"incoming\":0,\"avg_daily_demand\":3.803,\"days_of_supply\":21.8,\"reorder_status\":\"OK\",\"suggested_qty\":120,\"units_per_case\":24,\"open_order_demand\":0,\"adjusted_days_of_supply\":21.8,\"adjusted_avg_daily_demand\":3.803,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":0.1,\"recommendation\":\"watch\",\"flagged_by\":\"retail\",\"urgency_rank\":8,\"reason\":\"Distru: 21.8 days of supply vs 10-day lead time. It was not below its reorder point at the vendor's lead time, but showed ORDER_NOW in the 14-day default report, which is where suggested_qty comes from. 83 available, nothing incoming. Headset: retail flat (+0.1% over 3 weeks), so adjusted days of supply is 21.8, within 2x cover of 34 days (watch).\"},{\"product_id\":\"0999923b-c0f8-4196-8699-e522a694cadf\",\"sku\":\"FLW-OGK-35\",\"name\":\"OG Kush 3.5g\",\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"vendor_name\":\"Humboldt Heritage Farms\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":383,\"incoming\":0,\"avg_daily_demand\":3.585,\"days_of_supply\":106.8,\"reorder_status\":\"OK\",\"suggested_qty\":0,\"units_per_case\":24,\"open_order_demand\":0,\"adjusted_days_of_supply\":70.4,\"adjusted_avg_daily_demand\":5.438,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":51.7,\"recommendation\":\"watch\",\"flagged_by\":\"retail\",\"urgency_rank\":9,\"reason\":\"Distru: 106.8 days of supply, 383 available, status OK, so it is not at risk on wholesale. Headset: retail surging +51.7% over 3 weeks, so projected demand is 5.44/day and adjusted days of supply is 70.4. That is still deep, but retail leads wholesale orders (watch only).\"}],\"summary\":\"Nine SKUs at Oakland Warehouse are at risk. Retail moved up VAP-BD-1G (surging +51.5%), PRE-BD-1G (surging +44.9%) and FLW-OGK-35 (surging +51.7%). VAP-BD-1G is the most urgent, at 3.9 adjusted days of supply against a 14-day lead time. PRE-BD-1G only reads reorder_now once retail growth is applied. FLW-OGK-35 has 70 adjusted days of supply, so watch only. EDB-GUM-WM has flat sales but rising retail stock-outs, so its adjusted days of supply is 4.8 against a 21-day lead time. FLW-BD-35, EDB-CHO-DK, CON-LR-BD and VAP-PE-1G are low on wholesale cover with flat retail. FLW-WC-35 is a watch item. No open-order demand exceeds available stock. No suspicious text was found.\",\"suspicious_text\":[]}",
       "usage": {
-        "input": 32866,
-        "output": 4303
+        "input": 38907,
+        "output": 5499
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "1e7999ed651bcaef98c5bec6"
-    },
-    "reply": {
-      "toolCalls": [
-        {
-          "name": "distru_vendors",
-          "arguments": {
-            "vendor_ids": [
-              "dfc59530-9daa-4055-93b0-bcf3b589b8e3"
-            ]
-          }
-        },
-        {
-          "name": "distru_vendor_purchase_history",
-          "arguments": {
-            "vendor_id": "dfc59530-9daa-4055-93b0-bcf3b589b8e3",
-            "product_ids": [
-              "9f58389e-9b8c-47e9-9a40-6b733d04e30e"
-            ]
-          }
-        }
-      ],
-      "usage": {
-        "input": 9066,
-        "output": 220
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "a66e4afd42081991355f7533"
+      "fingerprint": "cde5429f49b46d198f6189ba"
     },
     "reply": {
       "toolCalls": [
@@ -312,18 +367,71 @@
               "7cab5883-e4e4-41a5-857a-006ea974b8a6"
             ]
           }
+        },
+        {
+          "name": "context_context_for",
+          "arguments": {
+            "vendor_ids": [
+              "d40c3ffe-9457-4d71-a93b-c714bc2ece99"
+            ],
+            "product_ids": [
+              "7cab5883-e4e4-41a5-857a-006ea974b8a6"
+            ]
+          }
         }
       ],
       "usage": {
-        "input": 9053,
-        "output": 219
+        "input": 10223,
+        "output": 351
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "a5804779b59eb1105db615e6"
+      "fingerprint": "0f0557bb21ca8de4de82ee58"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_vendors",
+          "arguments": {
+            "vendor_ids": [
+              "dfc59530-9daa-4055-93b0-bcf3b589b8e3"
+            ]
+          }
+        },
+        {
+          "name": "distru_vendor_purchase_history",
+          "arguments": {
+            "vendor_id": "dfc59530-9daa-4055-93b0-bcf3b589b8e3",
+            "product_ids": [
+              "9f58389e-9b8c-47e9-9a40-6b733d04e30e"
+            ]
+          }
+        },
+        {
+          "name": "context_context_for",
+          "arguments": {
+            "vendor_ids": [
+              "dfc59530-9daa-4055-93b0-bcf3b589b8e3"
+            ],
+            "product_ids": [
+              "9f58389e-9b8c-47e9-9a40-6b733d04e30e"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 10222,
+        "output": 353
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "90728f53070ed46f191a56fa"
     },
     "reply": {
       "toolCalls": [
@@ -344,18 +452,30 @@
               "0999923b-c0f8-4196-8699-e522a694cadf"
             ]
           }
+        },
+        {
+          "name": "context_context_for",
+          "arguments": {
+            "vendor_ids": [
+              "fda26d01-2a96-46da-8021-be5be83fc921"
+            ],
+            "product_ids": [
+              "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
+              "0999923b-c0f8-4196-8699-e522a694cadf"
+            ]
+          }
         }
       ],
       "usage": {
-        "input": 9474,
-        "output": 236
+        "input": 10643,
+        "output": 389
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "2b51b03a4aec8646ee8777af"
+      "fingerprint": "dd4985583cfc483af2557a21"
     },
     "reply": {
       "toolCalls": [
@@ -376,18 +496,30 @@
               "77151b88-2ab0-492e-bd95-4e87e2cb38dc"
             ]
           }
+        },
+        {
+          "name": "context_context_for",
+          "arguments": {
+            "vendor_ids": [
+              "84842693-825d-4648-9f77-469d05bd2b18"
+            ],
+            "product_ids": [
+              "c336ec90-76f9-4d62-9f53-5b9054711f16",
+              "77151b88-2ab0-492e-bd95-4e87e2cb38dc"
+            ]
+          }
         }
       ],
       "usage": {
-        "input": 9874,
-        "output": 236
+        "input": 10827,
+        "output": 390
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "0523abf59a21ce3444bf47ac"
+      "fingerprint": "384f614345f4900f7b227cb3"
     },
     "reply": {
       "toolCalls": [
@@ -399,75 +531,24 @@
             "lines": [
               {
                 "product_id": "9f58389e-9b8c-47e9-9a40-6b733d04e30e",
-                "quantity": 100,
-                "unit_price": 14.61
+                "quantity": 125,
+                "unit_price": 16.41
               }
             ],
-            "notes": "Morning restock check, Oakland Warehouse. VAP-PE-1G: 100 units (4 cases) per suggested qty; ORDER_NOW, 21.7 days supply vs 14-day lead time."
+            "notes": "Morning restock for Oakland Warehouse: VAP-PE-1G, 125 units (5 cases) at last paid price 16.41."
           }
         }
       ],
       "usage": {
-        "input": 10705,
-        "output": 408
+        "input": 14047,
+        "output": 310
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "1dc816bab67160471dcf1459"
-    },
-    "reply": {
-      "toolCalls": [
-        {
-          "name": "propose_distru_purchases_upsert",
-          "arguments": {
-            "vendor_id": "84842693-825d-4648-9f77-469d05bd2b18",
-            "location_id": "815e2932-b181-444d-af9d-bdc6cb8ba793",
-            "lines": [
-              {
-                "product_id": "c336ec90-76f9-4d62-9f53-5b9054711f16",
-                "quantity": 288,
-                "unit_price": 6.97
-              }
-            ],
-            "notes": "Morning restock for Oakland Warehouse: Watermelon Gummies 288 units (6 cases) at last paid price $6.97."
-          }
-        },
-        {
-          "name": "propose_distru_mcp_mutate_product",
-          "arguments": {
-            "action": "UPDATE",
-            "id": "c336ec90-76f9-4d62-9f53-5b9054711f16",
-            "maxMenuBuyerOrderQuantity": 48,
-            "intent": "Restock Golden State Edibles SKUs and share remaining stock fairly until the PO arrives"
-          }
-        }
-      ],
-      "usage": {
-        "input": 12347,
-        "output": 659
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "c0331f98daa5ea8b82f7a74c"
-    },
-    "reply": {
-      "text": "{\"vendor_id\":\"d40c3ffe-9457-4d71-a93b-c714bc2ece99\",\"summary\":\"No PO proposed for Emerald Triangle Growers. The only at-risk SKU, FLW-WC-35 at Oakland Warehouse, is covered: watch only. Stock of 78 units lasts about 30.7 days at 2.54 units/day, and retail demand is flat (+0.1% over 3 weeks). The lead time is 10 days, so the 24-day horizon (10 + 14) needs about 61 units. The formula quantity is 60.96 + 0 open orders − 78 on hand − 0 incoming, which is negative. The analyst's suggested_qty of 72 conflicts with that formula. I followed the watch rule and skipped, so someone may want to review it. The last price paid was $15.97 if it is reordered later.\",\"lines\":[{\"product_id\":\"7cab5883-e4e4-41a5-857a-006ea974b8a6\",\"sku\":\"FLW-WC-35\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"skipped\",\"quantity\":0,\"unit_price\":null,\"reason\":\"Covered: watch only. 78 on hand covers the 24-day horizon (needs about 61 units at 2.54/day), so the formula quantity is negative. Retail signal is flat. The suggested_qty of 72 was overridden by the watch rule.\"}],\"suspicious_text\":[]}",
-      "usage": {
-        "input": 10681,
-        "output": 769
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "61f1c691f09bba8a7180b96f"
+      "fingerprint": "44b2b36e45c686b8ae9d368f"
     },
     "reply": {
       "toolCalls": [
@@ -479,37 +560,213 @@
             "lines": [
               {
                 "product_id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
-                "quantity": 144,
-                "unit_price": 13.53
+                "quantity": 168,
+                "unit_price": 14.13
               }
             ],
-            "notes": "Morning restock check, Oakland Warehouse. Blue Dream 3.5g: 144 units (6 cases) at last paid price."
+            "notes": "Morning restock for Oakland Warehouse: Blue Dream 3.5g, 7 cases of 24."
           }
         }
       ],
       "usage": {
-        "input": 11596,
-        "output": 431
+        "input": 16093,
+        "output": 316
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "4d98991adcc5e20c0c5ead2e"
+      "fingerprint": "93bebb18be80d21c70d8a4ae"
     },
     "reply": {
-      "text": "{\"vendor_id\":\"dfc59530-9daa-4055-93b0-bcf3b589b8e3\",\"summary\":\"Proposed one PO for Oakland Warehouse with Coastal Cloud Vapes (lead time 14 days): VAP-PE-1G, 100 units (4 cases of 25) at $14.61, total $1,461. The quantity is the suggested_qty. The SKU is ORDER_NOW with 21.7 days of supply against the 14-day lead time. It is also below the 73-unit reorder point and has 7 units on open orders. The price is the last price paid (PO-515). The Headset retail signal is flat, and the recommendation is 'watch', but the suggested quantity is positive, so I ordered it. No allocation guard suggestions were given, so no menu caps were proposed.\",\"lines\":[{\"product_id\":\"9f58389e-9b8c-47e9-9a40-6b733d04e30e\",\"sku\":\"VAP-PE-1G\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":100,\"unit_price\":14.61,\"reason\":\"Used suggested_qty of 100, which is already whole cases (4 x 25) and under the 3x cap. Price is last_unit_price from PO-515 (14.61).\"}],\"suspicious_text\":[]}",
+      "toolCalls": [
+        {
+          "name": "propose_distru_purchases_upsert",
+          "arguments": {
+            "vendor_id": "d40c3ffe-9457-4d71-a93b-c714bc2ece99",
+            "location_id": "815e2932-b181-444d-af9d-bdc6cb8ba793",
+            "lines": [
+              {
+                "product_id": "7cab5883-e4e4-41a5-857a-006ea974b8a6",
+                "quantity": 120,
+                "unit_price": 17.27
+              }
+            ],
+            "notes": "Morning restock check for Oakland Warehouse: Wedding Cake 3.5g, 120 units (5 cases of 24) at last paid price."
+          }
+        },
+        {
+          "name": "propose_distru_mcp_mutate_product",
+          "arguments": {
+            "action": "UPDATE",
+            "id": "7cab5883-e4e4-41a5-857a-006ea974b8a6",
+            "maxMenuBuyerOrderQuantity": 24,
+            "intent": "Share remaining Wedding Cake 3.5g stock across buyers until the Emerald Triangle Growers PO arrives"
+          }
+        }
+      ],
       "usage": {
-        "input": 11183,
-        "output": 496
+        "input": 14324,
+        "output": 554
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "d05cc94779b8595104af644a"
+      "fingerprint": "bfbf6cc5fd5128e1e6a2895e"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "propose_distru_mcp_mutate_product",
+          "arguments": {
+            "action": "UPDATE",
+            "id": "9f58389e-9b8c-47e9-9a40-6b733d04e30e",
+            "maxMenuBuyerOrderQuantity": 25,
+            "intent": "Restock VAP-PE-1G from Coastal Cloud Vapes and share remaining stock across buyers until the PO arrives"
+          }
+        }
+      ],
+      "usage": {
+        "input": 14504,
+        "output": 210
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "a929419f5542ffc9b05e195e"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "propose_distru_purchases_upsert",
+          "arguments": {
+            "vendor_id": "84842693-825d-4648-9f77-469d05bd2b18",
+            "location_id": "815e2932-b181-444d-af9d-bdc6cb8ba793",
+            "lines": [
+              {
+                "product_id": "c336ec90-76f9-4d62-9f53-5b9054711f16",
+                "quantity": 336,
+                "unit_price": 7.28
+              },
+              {
+                "product_id": "77151b88-2ab0-492e-bd95-4e87e2cb38dc",
+                "quantity": 96,
+                "unit_price": 8.55
+              }
+            ],
+            "notes": "Morning restock check for Oakland Warehouse: Watermelon Gummies (LATE) and Dark Chocolate Bar below 21-day lead time cover."
+          }
+        }
+      ],
+      "usage": {
+        "input": 15788,
+        "output": 377
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "9489bfb42e40f7a99e66ad5a"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "propose_distru_mcp_mutate_product",
+          "arguments": {
+            "action": "UPDATE",
+            "id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
+            "maxMenuBuyerOrderQuantity": 24,
+            "intent": "Share remaining Blue Dream 3.5g stock across buyers until the Humboldt Heritage Farms PO arrives."
+          }
+        }
+      ],
+      "usage": {
+        "input": 16533,
+        "output": 209
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "4ca5caa0a2556981c93b2e6b"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "propose_distru_mcp_mutate_product",
+          "arguments": {
+            "action": "UPDATE",
+            "id": "c336ec90-76f9-4d62-9f53-5b9054711f16",
+            "maxMenuBuyerOrderQuantity": 48,
+            "intent": "Restock Golden State Edibles SKUs and share limited stock among buyers until the PO arrives"
+          }
+        },
+        {
+          "name": "propose_distru_mcp_mutate_product",
+          "arguments": {
+            "action": "UPDATE",
+            "id": "77151b88-2ab0-492e-bd95-4e87e2cb38dc",
+            "maxMenuBuyerOrderQuantity": 24,
+            "intent": "Restock Golden State Edibles SKUs and share limited stock among buyers until the PO arrives"
+          }
+        }
+      ],
+      "usage": {
+        "input": 16293,
+        "output": 393
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "b8f527ceaa8ac49502cfbe97"
+    },
+    "reply": {
+      "text": "{\"vendor_id\":\"d40c3ffe-9457-4d71-a93b-c714bc2ece99\",\"title\":\"Restock Wedding Cake 3.5g for Oakland Warehouse\",\"summary\":\"Proposed one PO to Emerald Triangle Growers for 120 units (5 cases) of Wedding Cake 3.5g at $17.27, totaling $2,072.40. Also proposed a 24-unit per-buyer menu cap until the order arrives.\",\"lines\":[{\"product_id\":\"7cab5883-e4e4-41a5-857a-006ea974b8a6\",\"sku\":\"FLW-WC-35\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":120,\"unit_price\":17.27,\"reason\":\"Used suggested_qty of 120, which is already 5 whole cases of 24. Price is the last price paid to this vendor. Distru showed 21.8 days of supply against a 10-day lead time, and the retail signal is flat. The recommendation is 'watch', but the formula quantity is positive and the allocation guard applies. Cap of 24 per buyer order proposed.\"}],\"suspicious_text\":[]}",
+      "usage": {
+        "input": 15221,
+        "output": 404
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "bfef11f55828a5de61dbe9f6"
+    },
+    "reply": {
+      "text": "{\"vendor_id\":\"dfc59530-9daa-4055-93b0-bcf3b589b8e3\",\"title\":\"Restock Pineapple Express carts for Oakland Warehouse\",\"summary\":\"Proposed one PO to Coastal Cloud Vapes for Oakland Warehouse: 125 units (5 cases) of VAP-PE-1G at $16.41, totaling $2,051.25. Also proposed a 25-unit per-buyer menu cap on VAP-PE-1G until the order arrives.\",\"lines\":[{\"product_id\":\"9f58389e-9b8c-47e9-9a40-6b733d04e30e\",\"sku\":\"VAP-PE-1G\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":125,\"unit_price\":16.41,\"reason\":\"Used suggested_qty of 125, which is 5 whole cases of 25 and within 3x the suggestion. Supply is 14.6 days against a 14-day lead time. Price is the last unit price paid to this vendor (PO-515). Allocation guard cap of 25 per buyer order proposed.\"}],\"suspicious_text\":[]}",
+      "usage": {
+        "input": 14883,
+        "output": 398
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "6794e50d46b07110f882b231"
+    },
+    "reply": {
+      "text": "{\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"title\":\"Restock Blue Dream 3.5g for Oakland Warehouse\",\"summary\":\"Proposed one Oakland PO for 168 units of Blue Dream 3.5g (7 cases) at $14.13, totaling $2,373.84. Also proposed a 24-unit per-buyer menu cap on Blue Dream until it arrives. OG Kush is skipped because it is covered.\",\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":168,\"unit_price\":14.13,\"reason\":\"Used suggested_qty of 168, which is 7 whole cases of 24 and within 3x the suggestion. Price is the last unit price paid to this vendor (PO-503). Stock is 9.5 days against a 7-day lead time.\"},{\"product_id\":\"0999923b-c0f8-4196-8699-e522a694cadf\",\"sku\":\"FLW-OGK-35\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"skipped\",\"quantity\":0,\"unit_price\":null,\"reason\":\"Covered: watch only. Suggested quantity is 0 and 383 units are available. Adjusted days of supply is 70.4 even with retail surging, and the formula quantity is zero or negative.\"}],\"suspicious_text\":[]}",
+      "usage": {
+        "input": 16909,
+        "output": 535
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "52127c7ca1ad4c030cc253c4"
     },
     "reply": {
       "toolCalls": [
@@ -530,31 +787,85 @@
               "f790b825-9b16-4fd5-884f-7984d88a110d"
             ]
           }
+        },
+        {
+          "name": "context_context_for",
+          "arguments": {
+            "vendor_ids": [
+              "2e5b9399-caa1-40f5-8101-92179728eb42"
+            ],
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e",
+              "f790b825-9b16-4fd5-884f-7984d88a110d"
+            ]
+          }
         }
       ],
       "usage": {
-        "input": 9717,
-        "output": 237
+        "input": 10783,
+        "output": 390
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "703867d4c68c91c76115a836"
+      "fingerprint": "82f1a8bdd3eb7cb8ee8f0237"
     },
     "reply": {
-      "text": "{\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"summary\":\"Proposed one PO for Oakland Warehouse with Blue Dream 3.5g: 144 units (6 cases) at $13.53, total $1,948.32. OG Kush 3.5g was skipped because 111 days of supply is on hand (73 adjusted) and suggested_qty is 0. No allocation guard caps were listed, so none were proposed.\",\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":144,\"unit_price\":13.53,\"reason\":\"Used suggested_qty of 144, which is exactly 6 cases of 24 and within the 3x cap. Price is the last unit price paid to this vendor ($13.53).\"},{\"product_id\":\"0999923b-c0f8-4196-8699-e522a694cadf\",\"sku\":\"FLW-OGK-35\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"skipped\",\"quantity\":0,\"unit_price\":null,\"reason\":\"Covered: watch only. suggested_qty is 0 and on-hand is 285 units, which is 73 days at the retail-adjusted demand of 3.888/day. That is well beyond the 7-day lead time plus 14 days.\"}],\"suspicious_text\":[]}",
+      "toolCalls": [
+        {
+          "name": "distru_vendors",
+          "arguments": {
+            "vendor_ids": [
+              "7baca7d4-4da5-48c9-a05b-05f1f87ba66b"
+            ]
+          }
+        },
+        {
+          "name": "distru_vendor_purchase_history",
+          "arguments": {
+            "vendor_id": "7baca7d4-4da5-48c9-a05b-05f1f87ba66b",
+            "product_ids": [
+              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
+            ]
+          }
+        },
+        {
+          "name": "context_context_for",
+          "arguments": {
+            "vendor_ids": [
+              "7baca7d4-4da5-48c9-a05b-05f1f87ba66b"
+            ],
+            "product_ids": [
+              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
+            ]
+          }
+        }
+      ],
       "usage": {
-        "input": 12044,
-        "output": 519
+        "input": 10270,
+        "output": 358
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "abd6ba0e42c5f62ee8ac5640"
+      "fingerprint": "d575d9e2ab488647c04b0e11"
+    },
+    "reply": {
+      "text": "{\"vendor_id\":\"84842693-825d-4648-9f77-469d05bd2b18\",\"title\":\"Restock 2 Golden State edibles for Oakland Warehouse\",\"summary\":\"One PO to Golden State Edibles for Oakland Warehouse: 336 Watermelon Gummies and 96 Dark Chocolate Bars, $3,266.88 total. Both SKUs are under the 21-day lead time. Per-buyer menu caps of 48 and 24 were proposed.\",\"lines\":[{\"product_id\":\"c336ec90-76f9-4d62-9f53-5b9054711f16\",\"sku\":\"EDB-GUM-WM\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":336,\"unit_price\":7.28,\"reason\":\"Used suggested_qty 336, which is 7 whole cases of 48. Price is the last paid to this vendor, 7.28. The SKU is LATE with 32 available and nothing incoming. A menu cap of 48 per buyer order was proposed.\"},{\"product_id\":\"77151b88-2ab0-492e-bd95-4e87e2cb38dc\",\"sku\":\"EDB-CHO-DK\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":96,\"unit_price\":8.55,\"reason\":\"Used suggested_qty 96, which is 4 whole cases of 24. Price is the last paid to this vendor, 8.55. The SKU has 11.3 days of supply against a 21-day lead time, and 48 units are already incoming. A menu cap of 24 per buyer order was proposed.\"}],\"suspicious_text\":[]}",
+      "usage": {
+        "input": 17096,
+        "output": 580
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "fd5114ccf54ef798e1e4f71e"
     },
     "reply": {
       "toolCalls": [
@@ -566,42 +877,67 @@
             "lines": [
               {
                 "product_id": "be687b66-3cdc-4210-9164-1c6ad52f057e",
-                "quantity": 175,
-                "unit_price": 18.34
+                "quantity": 200,
+                "unit_price": 18.82
               },
               {
                 "product_id": "f790b825-9b16-4fd5-884f-7984d88a110d",
-                "quantity": 100,
-                "unit_price": 16.11
+                "quantity": 120,
+                "unit_price": 17.28
               }
             ],
-            "notes": "Morning restock for Oakland Warehouse: VAP-BD-1G (LATE, retail surging) and CON-LR-BD. Whole cases at last paid prices."
+            "notes": "Morning restock for Oakland Warehouse: Blue Dream live resin SKUs running below the 14-day lead time."
           }
         }
       ],
       "usage": {
-        "input": 11859,
-        "output": 367
+        "input": 16298,
+        "output": 354
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "e2a22b013a2550ee61b58d0f"
+      "fingerprint": "b54b3f28b3fbbed6d337df98"
     },
     "reply": {
-      "text": "{\"vendor_id\":\"84842693-825d-4648-9f77-469d05bd2b18\",\"summary\":\"One draft PO for Oakland Warehouse: EDB-GUM-WM, 288 units (6 cases of 48) at $6.97, total $2,007.36. I skipped EDB-CHO-DK because it is covered: watch only. I proposed the EDB-GUM-WM per-buyer menu cap of 48 units. I did not propose the EDB-CHO-DK cap, because caps are only for SKUs I order.\",\"lines\":[{\"product_id\":\"c336ec90-76f9-4d62-9f53-5b9054711f16\",\"sku\":\"EDB-GUM-WM\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":288,\"unit_price\":6.97,\"reason\":\"Used suggested_qty 288, which is already whole cases of 48 and within 3x the suggestion. The price is the last price paid to this vendor, $6.97 (PO-512). It has 7.1 adjusted days of supply against a 21-day lead time, and the status is LATE.\"},{\"product_id\":\"77151b88-2ab0-492e-bd95-4e87e2cb38dc\",\"sku\":\"EDB-CHO-DK\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"skipped\",\"quantity\":0,\"unit_price\":null,\"reason\":\"Covered: watch only. Demand over lead time plus 14 days is 1.844×35 ≈ 64.5. Adding 9 on open orders gives 73.5. On-hand 35 plus 48 incoming (PO-519, pending) is 83, so the formula quantity is negative. Adjusted days of supply including incoming is 45. The menu cap of 24 was also not proposed, since it only applies to SKUs I order.\"}],\"suspicious_text\":[]}",
+      "toolCalls": [
+        {
+          "name": "propose_distru_purchases_upsert",
+          "arguments": {
+            "vendor_id": "7baca7d4-4da5-48c9-a05b-05f1f87ba66b",
+            "location_id": "815e2932-b181-444d-af9d-bdc6cb8ba793",
+            "lines": [
+              {
+                "product_id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
+                "quantity": 250,
+                "unit_price": 4.14
+              }
+            ],
+            "notes": "Morning restock for Oakland Warehouse: Blue Dream Pre-Roll 1g, 250 units (5 cases of 50) at last paid price 4.14."
+          }
+        },
+        {
+          "name": "propose_distru_mcp_mutate_product",
+          "arguments": {
+            "action": "UPDATE",
+            "id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
+            "maxMenuBuyerOrderQuantity": 50,
+            "intent": "Restock Blue Dream Pre-Roll 1g and share remaining stock fairly among buyers until the PO arrives"
+          }
+        }
+      ],
       "usage": {
-        "input": 13217,
-        "output": 778
+        "input": 14483,
+        "output": 534
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "a37f595f40ab38d340013568"
+      "fingerprint": "ef682592151f03afeab6a28b"
     },
     "reply": {
       "toolCalls": [
@@ -611,33 +947,55 @@
             "action": "UPDATE",
             "id": "be687b66-3cdc-4210-9164-1c6ad52f057e",
             "maxMenuBuyerOrderQuantity": 25,
-            "intent": "Restock Oakland Warehouse from Sierra Extracts Co. and share remaining VAP-BD-1G stock until the PO arrives"
+            "intent": "Share remaining Blue Dream cart stock across buyers until the Sierra PO arrives"
+          }
+        },
+        {
+          "name": "propose_distru_mcp_mutate_product",
+          "arguments": {
+            "action": "UPDATE",
+            "id": "f790b825-9b16-4fd5-884f-7984d88a110d",
+            "maxMenuBuyerOrderQuantity": 20,
+            "intent": "Share remaining Blue Dream live resin stock across buyers until the Sierra PO arrives"
           }
         }
       ],
       "usage": {
-        "input": 12371,
-        "output": 212
+        "input": 16793,
+        "output": 387
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "ea955b0ea05e8a0300bb6cb6"
+      "fingerprint": "2227b3cae5431618c899502c"
     },
     "reply": {
-      "text": "{\"vendor_id\":\"2e5b9399-caa1-40f5-8101-92179728eb42\",\"summary\":\"Proposed one PO for Oakland Warehouse from Sierra Extracts Co. (lead time 14 days). It has 2 lines, 275 units and about $4,820.50. Quantities are the suggested quantities, which are already whole cases: 7 cases of 25 for VAP-BD-1G and 5 cases of 20 for CON-LR-BD. Prices are the last prices paid to this vendor. I also proposed the allocation-guard cap on VAP-BD-1G of 25 units per buyer order (sales reps exempt). VAP-BD-1G has 6.2 adjusted days of supply, which is less than the lead time.\",\"lines\":[{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":175,\"unit_price\":18.34,\"reason\":\"Used suggested_qty of 175, which is 7 cases of 25 and within 3x the suggestion. Retail is surging and the SKU is LATE. Price is the last paid (PO-509).\"},{\"product_id\":\"f790b825-9b16-4fd5-884f-7984d88a110d\",\"sku\":\"CON-LR-BD\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":100,\"unit_price\":16.11,\"reason\":\"Used suggested_qty of 100, which is 5 cases of 20. Price is the last paid (PO-509).\"}],\"suspicious_text\":[]}",
+      "text": "{\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"title\":\"Restock Blue Dream Pre-Roll 1g for Oakland Warehouse\",\"summary\":\"Proposed one PO to Mojave Pre-Roll Co. for 250 units of Blue Dream Pre-Roll 1g (5 cases) at 4.14, total $1,035, for Oakland Warehouse. Retail demand is surging. Also proposed a 50-unit per-buyer menu cap until the PO arrives.\",\"lines\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":250,\"unit_price\":4.14,\"reason\":\"Used suggested_qty of 250, which is exactly 5 cases of 50 and under the 3x cap. Retail is surging, with adjusted days of supply at 10 against a 7-day lead time. Price is the last unit price paid to this vendor (PO-518). A 50-unit per-buyer menu cap was also proposed.\"}],\"suspicious_text\":[]}",
       "usage": {
-        "input": 12754,
-        "output": 583
+        "input": 15397,
+        "output": 422
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "91a16c45bbc88a8b3497ca3f"
+      "fingerprint": "890af98d53b2b73443ad8df7"
+    },
+    "reply": {
+      "text": "{\"vendor_id\":\"2e5b9399-caa1-40f5-8101-92179728eb42\",\"title\":\"Restock 2 Blue Dream SKUs for Oakland Warehouse\",\"summary\":\"Proposed one Oakland Warehouse PO to Sierra Extracts Co.: 320 units, $5,837.60, covering two Blue Dream live resin SKUs that are LATE against the 14-day lead time. Also proposed per-buyer menu caps of 25 and 20 units.\",\"lines\":[{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":200,\"unit_price\":18.82,\"reason\":\"Used suggested_qty of 200, which is already whole cases of 25 and under 3x the suggestion. Retail is surging, with 3.9 adjusted days of supply against a 14-day lead time. Price is the last paid, 18.82. Menu cap of 25 per buyer proposed.\"},{\"product_id\":\"f790b825-9b16-4fd5-884f-7984d88a110d\",\"sku\":\"CON-LR-BD\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":120,\"unit_price\":17.28,\"reason\":\"Used suggested_qty of 120, which is already whole cases of 20. Supply is 11.8 days against a 14-day lead time and retail is flat. Price is the last paid, 17.28. Menu cap of 20 per buyer proposed.\"}],\"suspicious_text\":[]}",
+      "usage": {
+        "input": 17587,
+        "output": 571
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "5f34f56a22a6b6e49dc40999"
     },
     "reply": {
       "toolCalls": [
@@ -646,8 +1004,11 @@
           "arguments": {
             "product_ids": [
               "9f58389e-9b8c-47e9-9a40-6b733d04e30e",
+              "7cab5883-e4e4-41a5-857a-006ea974b8a6",
               "c336ec90-76f9-4d62-9f53-5b9054711f16",
+              "77151b88-2ab0-492e-bd95-4e87e2cb38dc",
               "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
+              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
               "be687b66-3cdc-4210-9164-1c6ad52f057e",
               "f790b825-9b16-4fd5-884f-7984d88a110d"
             ]
@@ -662,13 +1023,31 @@
         {
           "name": "distru_products_get",
           "arguments": {
+            "product_id": "7cab5883-e4e4-41a5-857a-006ea974b8a6"
+          }
+        },
+        {
+          "name": "distru_products_get",
+          "arguments": {
             "product_id": "c336ec90-76f9-4d62-9f53-5b9054711f16"
           }
         },
         {
           "name": "distru_products_get",
           "arguments": {
+            "product_id": "77151b88-2ab0-492e-bd95-4e87e2cb38dc"
+          }
+        },
+        {
+          "name": "distru_products_get",
+          "arguments": {
             "product_id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698"
+          }
+        },
+        {
+          "name": "distru_products_get",
+          "arguments": {
+            "product_id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
           }
         },
         {
@@ -685,21 +1064,21 @@
         }
       ],
       "usage": {
-        "input": 3222,
-        "output": 557
+        "input": 3581,
+        "output": 866
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "7448459d59a7c07f3d1e45e3"
+      "fingerprint": "937fee3112f70fbcd8886c37"
     },
     "reply": {
-      "text": "{\"lines\":[{\"product_id\":\"9f58389e-9b8c-47e9-9a40-6b733d04e30e\",\"sku\":\"VAP-PE-1G\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status ok.\",\"Newest batch PE1G-2610-C passed its SC Labs full panel (released 2026-10-23).\",\"Package 1A4000347000000000001072 is ACTIVE and TestPassed.\",\"Older batches PE1G-2609-B and PE1G-2607-A also passed.\"]},{\"product_id\":\"c336ec90-76f9-4d62-9f53-5b9054711f16\",\"sku\":\"EDB-GUM-WM\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status ok.\",\"Newest batch GUMWM-2610-C passed its SC Labs full panel (released 2026-10-17).\",\"Its two packages are ACTIVE and TestPassed.\",\"Older batches GUMWM-2609-B and GUMWM-2607-A also passed.\"]},{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status ok.\",\"Newest batch BD35-2610-C passed its SC Labs full panel (released 2026-10-26).\",\"Package 1A4000347000000000001003 is ACTIVE and TestPassed.\",\"Older batches BD35-2608-B and BD35-2607-A also passed.\"]},{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status ok.\",\"Newest batch BD1G-2610-C passed its SC Labs full panel (released 2026-10-17).\",\"Its three packages are ACTIVE and TestPassed.\",\"Older batches BD1G-2609-B and BD1G-2607-A also passed.\"]},{\"product_id\":\"f790b825-9b16-4fd5-884f-7984d88a110d\",\"sku\":\"CON-LR-BD\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status ok.\",\"Newest batch LRBD-2610-C passed its SC Labs full panel (released 2026-10-26).\",\"Its two packages are ACTIVE and TestPassed.\",\"Older batches LRBD-2609-B and LRBD-2607-A also passed.\"]}],\"summary\":\"All 5 products are approved. Each has status ok, with the newest batch passing lab testing and its Metrc packages ACTIVE and TestPassed. No failed tests, holds or missing lab evidence. No product descriptions or lab titles contained instruction-like text.\",\"suspicious_text\":[]}",
+      "text": "{\"lines\":[{\"product_id\":\"9f58389e-9b8c-47e9-9a40-6b733d04e30e\",\"sku\":\"VAP-PE-1G\",\"verdict\":\"approve\",\"reasons\":[\"Status ok. Newest batch PE1G-2610-C passed its SC Labs full panel (released 2026-10-23). All 3 of its packages are ACTIVE and TestPassed. Older batches PE1G-2609-B and PE1G-2607-A also passed.\"]},{\"product_id\":\"7cab5883-e4e4-41a5-857a-006ea974b8a6\",\"sku\":\"FLW-WC-35\",\"verdict\":\"approve\",\"reasons\":[\"Status ok. Newest batch WC35-2610-C passed its SC Labs full panel (released 2026-10-23). All 3 of its packages are ACTIVE and TestPassed. Older batches WC35-2609-B and WC35-2607-A also passed.\"]},{\"product_id\":\"c336ec90-76f9-4d62-9f53-5b9054711f16\",\"sku\":\"EDB-GUM-WM\",\"verdict\":\"approve\",\"reasons\":[\"Status ok. Newest batch GUMWM-2610-C passed its SC Labs full panel (released 2026-10-17). All 3 of its packages are ACTIVE and TestPassed. Older batches GUMWM-2609-B and GUMWM-2607-A also passed.\"]},{\"product_id\":\"77151b88-2ab0-492e-bd95-4e87e2cb38dc\",\"sku\":\"EDB-CHO-DK\",\"verdict\":\"approve\",\"reasons\":[\"Status ok. Newest batch CHODK-2610-C passed its SC Labs full panel (released 2026-10-26). All 3 of its packages are ACTIVE and TestPassed. Older batches CHODK-2609-B and CHODK-2607-A also passed.\"]},{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"verdict\":\"approve\",\"reasons\":[\"Status ok. Newest batch BD35-2610-C passed its SC Labs full panel (released 2026-10-26). All 3 of its packages are ACTIVE and TestPassed. Older batches BD35-2608-B and BD35-2607-A also passed.\"]},{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"verdict\":\"approve\",\"reasons\":[\"Status ok. Newest batch BD1G-2610-C passed its Infinite Chemical Analysis Labs full panel (released 2026-10-15). All 6 of its packages are ACTIVE and TestPassed. Older batches BD1G-2609-B and BD1G-2607-A also passed.\",\"Data note for the human approver: this product and VAP-BD-1G both show batch number BD1G-2610-C (and BD1G-2609-B, BD1G-2607-A) with identical Metrc package labels. Please check that the batch and package records are not mislinked. This is not a lab or package failure.\"]},{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"verdict\":\"approve\",\"reasons\":[\"Status ok. Newest batch BD1G-2610-C passed its SC Labs full panel (released 2026-10-17). All 6 of its packages are ACTIVE and TestPassed. Older batches BD1G-2609-B and BD1G-2607-A also passed.\",\"Data note for the human approver: this product shares batch numbers and Metrc package labels with PRE-BD-1G (a pre-roll). Please check that the batch and package records are not mislinked. This is not a lab or package failure.\"]},{\"product_id\":\"f790b825-9b16-4fd5-884f-7984d88a110d\",\"sku\":\"CON-LR-BD\",\"verdict\":\"approve\",\"reasons\":[\"Status ok. Newest batch LRBD-2610-C passed its SC Labs full panel (released 2026-10-26). All 3 of its packages are ACTIVE and TestPassed. Older batches LRBD-2609-B and LRBD-2607-A also passed.\"]}],\"summary\":\"All 8 products are approved. None is blocked. Each product's newest batch has a passed lab test, and its Metrc packages are ACTIVE and TestPassed. No product has missing lab evidence, and no older batch has a failure. One data anomaly for the human approver: VAP-BD-1G and PRE-BD-1G share batch numbers and Metrc package labels, so the batch and package records may be mislinked. No suspicious text was found in the product descriptions or lab titles.\",\"suspicious_text\":[]}",
       "usage": {
-        "input": 10861,
-        "output": 901
+        "input": 17193,
+        "output": 1672
       }
     }
   }

@@ -1,0 +1,15 @@
+[
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "f9fcdf3b30e30b5904109a78"
+    },
+    "reply": {
+      "text": "{\"kind\":\"partial\",\"lines\":[{\"sku\":\"PRE-BD-1G\",\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"shipped_quantity\":200,\"backordered_quantity\":112,\"new_unit_price\":null}],\"eta\":\"2026-12-02\",\"eta_text\":\"Dec 2\",\"title\":\"PO-521: 200 of 312 now, rest Dec 2\",\"summary\":\"Mojave Pre-Roll Co. can ship 200 of 312 units of PRE-BD-1G this week, with the remaining 112 units due Dec 2. The vendor asks whether we would rather hold the whole order until Dec 2.\",\"injection_detected\":false,\"suspicious_text\":[]}",
+      "usage": {
+        "input": 5502,
+        "output": 249
+      }
+    }
+  }
+]

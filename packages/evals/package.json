@@ -19,6 +19,7 @@
     "@mastra/evals": "~1.10.11",
     "@ops/connector-email": "workspace:*",
     "@ops/connector-mcp": "workspace:*",
+    "@ops/context": "workspace:*",
     "@ops/distru-client": "workspace:*",
     "@ops/distru-mock": "workspace:*",
     "@ops/emulators": "workspace:*",

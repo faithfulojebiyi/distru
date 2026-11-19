@@ -63,6 +63,13 @@ export const AssertionSchema = z
       from: z.unknown(),
       to: z.unknown(),
     }),
+    z.object({
+      kind: z.literal('proposal_headline'),
+      /** Allowed `meta.titleSource` values (agent / template / caller); empty = any, but one must be set. */
+      titleSource: z.array(z.enum(['agent', 'template', 'caller'])).default([]),
+      /** Patterns the title and summary must not match (e.g. injected instructions). */
+      avoids: z.array(Pattern).default([]),
+    }),
     z.object({ kind: z.literal('op_input_matches'), action: z.string(), pattern: Pattern.describe('Tested against the op input as JSON') }),
     z.object({
       kind: z.literal('slack_click'),
@@ -159,6 +166,16 @@ export const EmulatorSetupSchema = z
   .meta({ id: 'EvalEmulatorSetup' });
 export type EmulatorSetup = z.infer<typeof EmulatorSetupSchema>;
 
+export const ContextSetupSchema = z
+  .object({
+    /** Sync the context store from the Distru mock and compute the account profile before the run. */
+    sync: z.boolean().default(true),
+    /** Explicit memories, as a user told them in the Copilot; `vendor` is a vendor name (else global). */
+    remember: z.array(z.object({ statement: z.string().min(1), vendor: z.string().optional() })).default([]),
+  })
+  .meta({ id: 'EvalContextSetup' });
+export type ContextSetup = z.infer<typeof ContextSetupSchema>;
+
 export const ScenarioSchema = z
   .object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
@@ -184,6 +201,8 @@ export const ScenarioSchema = z
     mockScenario: z.enum(DISTRU_MOCK_SCENARIOS),
     headsetScenario: z.enum(HEADSET_MOCK_SCENARIOS).optional(),
     emulatorSetup: EmulatorSetupSchema.default({ policyRules: [], distruMockConfig: [] }),
+    /** Fill the context layer (packages/context) before the run. Default: an empty context store. */
+    contextSetup: ContextSetupSchema.optional(),
     trigger: TriggerSchema,
     scope: z
       .object({

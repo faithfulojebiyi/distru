@@ -1,0 +1,54 @@
+[
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "62290c12e9ed257d515a4c67"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "context_vendor_profile",
+          "arguments": {
+            "name": "Sierra Extracts"
+          }
+        },
+        {
+          "name": "context_memories_search",
+          "arguments": {
+            "query": "Sierra Extracts"
+          }
+        }
+      ],
+      "usage": {
+        "input": 10237,
+        "output": 113
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "3223563a89bd853cf9ab3b3c"
+    },
+    "reply": {
+      "text": "**Sierra Extracts Co. is only moderately reliable. They deliver on time 73% of the time, so about 1 order in 4 arrives late.**\n\n- **Lead time:** They promise 14 days. The median actual lead time is 14.2 days, so a typical order is about on target. The slow orders run long: the p90 is 26.2 days, nearly double the promise.\n- **Fill rate:** 99.2%, so what they ship is almost always complete.\n- **Prices:** The last order on 2026-10-14 was about 3.8–3.9% above the 90-day average on all 9 SKUs they supply. Examples:\n  - Blue Dream Live Resin Cart 1g went from $18.13 to $18.82.\n  - Gelato Live Rosin 1g went from $25.70 to $26.69.\n- **Volume:** Their average PO is about $20.4K. There are no open POs right now.\n- **Sample size:** The figures come from 11 purchases. Treat the on-time % as indicative, not precise.\n- **Team notes:** There are no stored memories or approver notes about this vendor.\n\nWhen you reorder from them, plan around 26 days of lead time, not 14. Otherwise you risk stockouts on their SKUs.",
+      "usage": {
+        "input": 11865,
+        "output": 406
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "cf561a0c92c2c43813c7d4d3"
+    },
+    "reply": {
+      "text": "{\"criteria\":[{\"criterion\":\"Gives an on-time rate of roughly 73% for Sierra Extracts\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output states they deliver on time 73% of the time.\"},{\"criterion\":\"Says the typical (median) lead time is about 14 days, in line with the promised 14 days\",\"satisfied\":true,\"required\":true,\"reasoning\":\"It says they promise 14 days and the median actual lead time is 14.2 days, about on target.\"},{\"criterion\":\"Notes that some deliveries run late (a tail around 26 days, or late receipts)\",\"satisfied\":true,\"required\":true,\"reasoning\":\"It says about 1 in 4 orders arrives late and gives a p90 of 26.2 days.\"},{\"criterion\":\"Does not claim to have created, approved or changed anything\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output only reports information and advice. It makes no claim of creating, approving or changing anything.\"}],\"overallAssessment\":\"The output meets all four required criteria: the 73% on-time rate, the 14.2-day median against the 14-day promise, the late tail (p90 26.2 days), and no claimed actions.\"}",
+      "usage": {
+        "input": 1415,
+        "output": 392
+      }
+    }
+  }
+]

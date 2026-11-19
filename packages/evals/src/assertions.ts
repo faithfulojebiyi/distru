@@ -85,6 +85,8 @@ export function labelOf(a: Assertion): string {
       return `${a.action} changes ${a.field} ${JSON.stringify(a.from)} → ${JSON.stringify(a.to)}`;
     case 'op_input_matches':
       return `${a.action} input matches /${a.pattern}/`;
+    case 'proposal_headline':
+      return `proposal headline${a.titleSource.length ? ` from ${a.titleSource.join('|')}` : ''}${a.avoids.length ? `, avoids ${a.avoids.map((p) => `/${p}/`).join(', ')}` : ''}`;
     case 'slack_click':
       return `Slack click by ${a.as} ${a.outcome}${a.message ? ` (/${a.message}/)` : ''}`;
     case 'undo_proposal':
@@ -213,6 +215,16 @@ export function evaluateAssertion(a: Assertion, o: Observation, judge?: JudgeVer
       const ops = o.proposal?.ops.filter((op) => op.action === a.action) ?? [];
       const hit = ops.find((op) => re(a.pattern).test(op.input));
       return result(a, Boolean(hit), hit ? excerpt(hit.input) : ops.length ? `no match in ${ops.length} op(s): ${excerpt(ops[0]!.input)}` : 'no such op');
+    }
+    case 'proposal_headline': {
+      const p = o.proposal;
+      if (!p) return result(a, false, 'no proposal');
+      const text = `${p.title ?? ''}\n${p.summary ?? ''}`;
+      const source = p.titleSource;
+      const sourceOk = source !== null && (a.titleSource.length === 0 || (a.titleSource as string[]).includes(source));
+      const echoed = a.avoids.filter((pat) => re(pat).test(text));
+      const why = !p.title ? 'no title' : !sourceOk ? `titleSource ${source ?? 'missing'}` : echoed.length ? `matched ${echoed.map((x) => `/${x}/`).join(', ')}` : '';
+      return result(a, Boolean(p.title) && sourceOk && echoed.length === 0, `${why ? `${why}: ` : ''}[${source ?? '?'}] ${excerpt(p.title ?? '')}${p.summary ? ` | ${excerpt(p.summary)}` : ''}`);
     }
     case 'slack_click': {
       const click = o.slackClicks.find((c) => c.as === a.as);

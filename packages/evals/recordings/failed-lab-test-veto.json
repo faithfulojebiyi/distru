@@ -2,32 +2,40 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "7f49d7845a18c20bb07b266b"
+      "fingerprint": "0ed0d15ed318bf51fce65b30"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_products_get",
+          "arguments": {
+            "product_id": "7cab5883-e4e4-41a5-857a-006ea974b8a6"
+          }
+        },
+        {
+          "name": "distru_products_get",
+          "arguments": {
+            "product_id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698"
+          }
+        }
+      ],
+      "usage": {
+        "input": 7723,
+        "output": 377
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "192c096f3b57910ddcc6a82c"
     },
     "reply": {
       "toolCalls": [
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": true,
-            "location_ids": [
-              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
-            ],
-            "lead_time_days": 14,
-            "vendor_ids": [
-              "dfc59530-9daa-4055-93b0-bcf3b589b8e3",
-              "2e5b9399-caa1-40f5-8101-92179728eb42"
-            ],
-            "product_ids": [
-              "7cab5883-e4e4-41a5-857a-006ea974b8a6",
-              "eab0289c-0e53-4ef9-a6c7-f9e32f050698"
-            ]
-          }
-        },
-        {
-          "name": "distru_velocity_report",
-          "arguments": {
-            "below_reorder_point": true,
+            "below_reorder_point": "true",
             "location_ids": [
               "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
             ],
@@ -44,31 +52,13 @@
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": true,
-            "location_ids": [
-              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
-            ],
-            "lead_time_days": 21,
-            "vendor_ids": [
-              "84842693-825d-4648-9f77-469d05bd2b18"
-            ],
-            "product_ids": [
-              "7cab5883-e4e4-41a5-857a-006ea974b8a6",
-              "eab0289c-0e53-4ef9-a6c7-f9e32f050698"
-            ]
-          }
-        },
-        {
-          "name": "distru_velocity_report",
-          "arguments": {
-            "below_reorder_point": true,
+            "below_reorder_point": "true",
             "location_ids": [
               "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
             ],
             "lead_time_days": 7,
             "vendor_ids": [
-              "fda26d01-2a96-46da-8021-be5be83fc921",
-              "7baca7d4-4da5-48c9-a05b-05f1f87ba66b"
+              "fda26d01-2a96-46da-8021-be5be83fc921"
             ],
             "product_ids": [
               "7cab5883-e4e4-41a5-857a-006ea974b8a6",
@@ -79,7 +69,7 @@
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": false,
+            "below_reorder_point": "false",
             "location_ids": [
               "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
             ],
@@ -93,18 +83,111 @@
         }
       ],
       "usage": {
-        "input": 7520,
-        "output": 1477
+        "input": 8952,
+        "output": 830
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "a80d9b97e533d53700a8072b"
+      "fingerprint": "f0598f87d9724ee6217e448e"
     },
     "reply": {
       "toolCalls": [
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "true",
+            "lead_time_days": 10,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "7cab5883-e4e4-41a5-857a-006ea974b8a6"
+            ],
+            "vendor_ids": [
+              "d40c3ffe-9457-4d71-a93b-c714bc2ece99"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "true",
+            "lead_time_days": 7,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "eab0289c-0e53-4ef9-a6c7-f9e32f050698"
+            ],
+            "vendor_ids": [
+              "fda26d01-2a96-46da-8021-be5be83fc921"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "any",
+            "lead_time_days": 14,
+            "limit": 100,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "7cab5883-e4e4-41a5-857a-006ea974b8a6",
+              "eab0289c-0e53-4ef9-a6c7-f9e32f050698"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 10624,
+        "output": 751
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "115b79de0222263425d7a696"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "any",
+            "lead_time_days": 10,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "7cab5883-e4e4-41a5-857a-006ea974b8a6"
+            ],
+            "vendor_ids": [
+              "d40c3ffe-9457-4d71-a93b-c714bc2ece99"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "any",
+            "lead_time_days": 7,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "eab0289c-0e53-4ef9-a6c7-f9e32f050698"
+            ],
+            "vendor_ids": [
+              "fda26d01-2a96-46da-8021-be5be83fc921"
+            ]
+          }
+        },
         {
           "name": "headset_retail_trends",
           "arguments": {
@@ -112,24 +195,6 @@
               "FLW-WC-35",
               "FLW-BD-35"
             ]
-          }
-        },
-        {
-          "name": "headset_demand_signal",
-          "arguments": {
-            "sku": "FLW-WC-35",
-            "wholesale_days_of_supply": 0,
-            "wholesale_avg_daily": 2.504,
-            "lead_time_days": 10
-          }
-        },
-        {
-          "name": "headset_demand_signal",
-          "arguments": {
-            "sku": "FLW-BD-35",
-            "wholesale_days_of_supply": 0,
-            "wholesale_avg_daily": 2.454,
-            "lead_time_days": 7
           }
         },
         {
@@ -146,59 +211,60 @@
         }
       ],
       "usage": {
-        "input": 9986,
-        "output": 526
+        "input": 12669,
+        "output": 833
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "5bfb23bf59b3fdf45c43443f"
-    },
-    "reply": {
-      "text": "{\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"at_risk\":[{\"product_id\":\"7cab5883-e4e4-41a5-857a-006ea974b8a6\",\"sku\":\"FLW-WC-35\",\"name\":\"Wedding Cake 3.5g\",\"vendor_id\":\"d40c3ffe-9457-4d71-a93b-c714bc2ece99\",\"vendor_name\":\"Emerald Triangle Growers\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"location_name\":\"Los Angeles Distribution Center\",\"on_hand_available\":-22,\"incoming\":0,\"avg_daily_demand\":2.504,\"days_of_supply\":-8.8,\"reorder_status\":\"LATE\",\"suggested_qty\":168,\"units_per_case\":24,\"open_order_demand\":22,\"adjusted_days_of_supply\":0,\"adjusted_avg_daily_demand\":2.504,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":0.1,\"recommendation\":\"reorder_now\",\"flagged_by\":\"wholesale\",\"urgency_rank\":1,\"reason\":\"Distru: oversold at -22 available, -8.8 days of supply vs 10-day lead time (LATE), no incoming, 22 units on open orders (SO-1733, SO-1730). Headset: retail flat (+0.1% over 3 weeks), so adjusted days of supply is 0 (reorder_now). The wholesale shortfall alone drives the risk.\"},{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"name\":\"Blue Dream 3.5g\",\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"vendor_name\":\"Humboldt Heritage Farms\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"location_name\":\"Los Angeles Distribution Center\",\"on_hand_available\":0,\"incoming\":0,\"avg_daily_demand\":2.454,\"days_of_supply\":0,\"reorder_status\":\"LATE\",\"suggested_qty\":120,\"units_per_case\":24,\"open_order_demand\":0,\"adjusted_days_of_supply\":0,\"adjusted_avg_daily_demand\":2.454,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-1,\"recommendation\":\"reorder_now\",\"flagged_by\":\"wholesale\",\"urgency_rank\":2,\"reason\":\"Distru: 0 available, 0 days of supply vs 7-day lead time (LATE), no incoming, no open orders. Headset: retail flat (-1% over 3 weeks), so adjusted days of supply is 0 (reorder_now). Stocked out already.\"}],\"summary\":\"Both in-scope flower SKUs at Los Angeles Distribution Center are LATE and rated reorder_now. Wedding Cake 3.5g (FLW-WC-35) is oversold at -22 available with 22 units on open orders, so it ranks first. Blue Dream 3.5g (FLW-BD-35) has 0 available and no open orders. Headset retail is flat for both (+0.1% and -1% over 3 weeks), so retail did not move either SKU up. The risk comes from wholesale stock. Suggested quantities are copied unchanged from Distru for the Planner to decide.\",\"suspicious_text\":[]}",
-      "usage": {
-        "input": 12224,
-        "output": 1270
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "50008b38aa1b99057f51addc"
+      "fingerprint": "8e8017d3fadba9827cbe29d2"
     },
     "reply": {
       "toolCalls": [
         {
-          "name": "distru_vendors",
+          "name": "headset_demand_signal",
           "arguments": {
-            "vendor_ids": [
-              "d40c3ffe-9457-4d71-a93b-c714bc2ece99"
-            ]
+            "sku": "FLW-WC-35",
+            "wholesale_days_of_supply": 0,
+            "wholesale_avg_daily": 3.052,
+            "lead_time_days": 10
           }
         },
         {
-          "name": "distru_vendor_purchase_history",
+          "name": "headset_demand_signal",
           "arguments": {
-            "vendor_id": "d40c3ffe-9457-4d71-a93b-c714bc2ece99",
-            "product_ids": [
-              "7cab5883-e4e4-41a5-857a-006ea974b8a6"
-            ]
+            "sku": "FLW-BD-35",
+            "wholesale_days_of_supply": 2.6,
+            "wholesale_avg_daily": 3.095,
+            "lead_time_days": 7
           }
         }
       ],
       "usage": {
-        "input": 9297,
-        "output": 219
+        "input": 15398,
+        "output": 297
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "ad84c77751629b4b834b7a50"
+      "fingerprint": "3ec90bea84d0563b9119a5d4"
+    },
+    "reply": {
+      "text": "{\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"at_risk\":[{\"product_id\":\"7cab5883-e4e4-41a5-857a-006ea974b8a6\",\"sku\":\"FLW-WC-35\",\"name\":\"Wedding Cake 3.5g\",\"vendor_id\":\"d40c3ffe-9457-4d71-a93b-c714bc2ece99\",\"vendor_name\":\"Emerald Triangle Growers\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"location_name\":\"Los Angeles Distribution Center\",\"on_hand_available\":-19,\"incoming\":0,\"avg_daily_demand\":3.052,\"days_of_supply\":-6.2,\"reorder_status\":\"LATE\",\"suggested_qty\":168,\"units_per_case\":24,\"open_order_demand\":30,\"adjusted_days_of_supply\":0,\"adjusted_avg_daily_demand\":3.052,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":0.1,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":1,\"reason\":\"Distru: oversold, with -19 available and -6.2 days of supply against a 10-day lead time (LATE). Nothing is incoming. Open orders SO-1733 and SO-1730 total 30 units, which exceeds available stock. Headset: retail is flat (+0.1% over 3 weeks, 8 stores), so demand is not rising. Wholesale alone triggers reorder_now, with 0 adjusted days of supply.\"},{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"name\":\"Blue Dream 3.5g\",\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"vendor_name\":\"Humboldt Heritage Farms\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"location_name\":\"Los Angeles Distribution Center\",\"on_hand_available\":8,\"incoming\":0,\"avg_daily_demand\":3.095,\"days_of_supply\":2.6,\"reorder_status\":\"LATE\",\"suggested_qty\":144,\"units_per_case\":24,\"open_order_demand\":0,\"adjusted_days_of_supply\":2.6,\"adjusted_avg_daily_demand\":3.095,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-1,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":2,\"reason\":\"Distru: 2.6 days of supply against a 7-day lead time (LATE), with 8 units available, nothing incoming and no open orders. Estimated stockout is 2026-11-21. Headset: retail is flat (-1% over 3 weeks, 8 stores), so retail does not change the picture. Wholesale alone triggers reorder_now, with 2.6 adjusted days of supply.\"}],\"summary\":\"Both scoped flower SKUs at Los Angeles are LATE and recommended reorder_now. Wedding Cake 3.5g (FLW-WC-35) is oversold at -19 available, with 30 units on open orders and a 10-day lead time. Blue Dream 3.5g (FLW-BD-35) has 2.6 days of supply against a 7-day lead time. Retail was flat for both (+0.1% and -1% over 3 weeks), so Headset did not move either SKU up. Wholesale velocity drives both flags. Suggested quantities are copied from the Distru report run at each vendor's lead time (168 and 144).\",\"suspicious_text\":[]}",
+      "usage": {
+        "input": 16219,
+        "output": 1337
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "929174d9b1e5366bea928e96"
     },
     "reply": {
       "toolCalls": [
@@ -221,7 +287,7 @@
         }
       ],
       "usage": {
-        "input": 9254,
+        "input": 10212,
         "output": 212
       }
     }
@@ -229,7 +295,87 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "5c59f0d0cc521bcd76074b6b"
+      "fingerprint": "3f683d937d2b2faf0a5db58e"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_vendors",
+          "arguments": {
+            "vendor_ids": [
+              "d40c3ffe-9457-4d71-a93b-c714bc2ece99"
+            ]
+          }
+        },
+        {
+          "name": "distru_vendor_purchase_history",
+          "arguments": {
+            "vendor_id": "d40c3ffe-9457-4d71-a93b-c714bc2ece99",
+            "product_ids": [
+              "7cab5883-e4e4-41a5-857a-006ea974b8a6"
+            ]
+          }
+        },
+        {
+          "name": "context_context_for",
+          "arguments": {
+            "vendor_ids": [
+              "d40c3ffe-9457-4d71-a93b-c714bc2ece99"
+            ],
+            "product_ids": [
+              "7cab5883-e4e4-41a5-857a-006ea974b8a6"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 10231,
+        "output": 351
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "ebd0b7e54206cb6d21a0d4f9"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "propose_distru_purchases_upsert",
+          "arguments": {
+            "vendor_id": "fda26d01-2a96-46da-8021-be5be83fc921",
+            "location_id": "b2d8f408-80b4-4e32-b46d-3c715c7305e2",
+            "lines": [
+              {
+                "product_id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
+                "quantity": 144,
+                "unit_price": 14.13
+              }
+            ],
+            "notes": "Restock Blue Dream 3.5g for Los Angeles Distribution Center: 2.6 days of supply vs 7-day lead time."
+          }
+        },
+        {
+          "name": "propose_distru_mcp_mutate_product",
+          "arguments": {
+            "action": "UPDATE",
+            "id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
+            "maxMenuBuyerOrderQuantity": 24,
+            "intent": "Restock Los Angeles flower and share remaining Blue Dream 3.5g stock until the PO arrives"
+          }
+        }
+      ],
+      "usage": {
+        "input": 14113,
+        "output": 501
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "52eb46ad5b86caa79d3c8813"
     },
     "reply": {
       "toolCalls": [
@@ -242,10 +388,10 @@
               {
                 "product_id": "7cab5883-e4e4-41a5-857a-006ea974b8a6",
                 "quantity": 168,
-                "unit_price": 15.97
+                "unit_price": 17.27
               }
             ],
-            "notes": "Restock Los Angeles flower: FLW-WC-35 oversold (-22 available), LATE vs 10-day lead time. 168 units = 7 cases of 24."
+            "notes": "Restock Los Angeles flower: Wedding Cake 3.5g oversold (-19 available), 168 units = 7 cases at last paid price."
           }
         },
         {
@@ -254,84 +400,46 @@
             "action": "UPDATE",
             "id": "7cab5883-e4e4-41a5-857a-006ea974b8a6",
             "maxMenuBuyerOrderQuantity": 24,
-            "intent": "Restock Los Angeles flower and share remaining stock among buyers until the PO arrives."
+            "intent": "Restock Los Angeles flower and share remaining Wedding Cake 3.5g stock until the PO arrives"
           }
         }
       ],
       "usage": {
-        "input": 10925,
-        "output": 513
+        "input": 14332,
+        "output": 505
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "7b9b8ef4b40effe205ffc36c"
+      "fingerprint": "16e2636ab78f7fb3c306a18b"
     },
     "reply": {
-      "toolCalls": [
-        {
-          "name": "propose_distru_purchases_upsert",
-          "arguments": {
-            "vendor_id": "fda26d01-2a96-46da-8021-be5be83fc921",
-            "location_id": "b2d8f408-80b4-4e32-b46d-3c715c7305e2",
-            "lines": [
-              {
-                "product_id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
-                "quantity": 120,
-                "unit_price": 13.53
-              }
-            ],
-            "notes": "Restock LA flower: Blue Dream 3.5g stocked out (0 days supply vs 7-day lead time). 120 units = 5 cases."
-          }
-        },
-        {
-          "name": "propose_distru_mcp_mutate_product",
-          "arguments": {
-            "action": "UPDATE",
-            "id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
-            "maxMenuBuyerOrderQuantity": 24,
-            "intent": "Restock Los Angeles flower and share remaining stock until the PO arrives"
-          }
-        }
-      ],
+      "text": "{\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"title\":\"Restock Blue Dream 3.5g for Los Angeles\",\"summary\":\"Proposed one PO to Humboldt Heritage Farms for 144 units of Blue Dream 3.5g at $14.13 ($2,034.72) for Los Angeles, which has 2.6 days of supply against a 7-day lead time. Also proposed a 24-unit per-buyer menu cap until it arrives.\",\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":144,\"unit_price\":14.13,\"reason\":\"Used suggested_qty 144, which is 6 whole cases of 24 and within 3x the suggestion. Price is the last price paid to this vendor, 14.13. Allocation guard cap of 24 units per buyer order proposed.\"}],\"suspicious_text\":[]}",
       "usage": {
-        "input": 10873,
-        "output": 504
+        "input": 15002,
+        "output": 374
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "fd40d3f68447799a1680a15b"
+      "fingerprint": "cca190af848857155f530aa6"
     },
     "reply": {
-      "text": "{\"vendor_id\":\"d40c3ffe-9457-4d71-a93b-c714bc2ece99\",\"summary\":\"Proposed one PO to Emerald Triangle Growers for Los Angeles Distribution Center. It has 1 line: FLW-WC-35 Wedding Cake 3.5g, 168 units (7 cases of 24) at $15.97, total $2,682.96. The SKU is oversold at -22 available with 22 units on open orders, no incoming stock, and is LATE against the 10-day lead time. I used the suggested quantity of 168, which is already whole cases. The price is the last price paid to this vendor. I also proposed the allocation-guard cap of 24 units per buyer menu order on FLW-WC-35 (no cap before). That cap shares the remaining stock until the PO arrives.\",\"lines\":[{\"product_id\":\"7cab5883-e4e4-41a5-857a-006ea974b8a6\",\"sku\":\"FLW-WC-35\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":168,\"unit_price\":15.97,\"reason\":\"Used suggested_qty 168 (7 cases of 24), within the 3x limit. Price is the last unit price paid to this vendor (PO-506, 2026-10-19).\"}],\"suspicious_text\":[]}",
+      "text": "{\"vendor_id\":\"d40c3ffe-9457-4d71-a93b-c714bc2ece99\",\"title\":\"Restock Wedding Cake 3.5g for Los Angeles\",\"summary\":\"Proposed one Los Angeles PO of 168 units (7 cases) of Wedding Cake 3.5g at $17.27, totaling $2,901.36, because the SKU is oversold. Also proposed a 24-unit per-buyer menu cap until the PO arrives.\",\"lines\":[{\"product_id\":\"7cab5883-e4e4-41a5-857a-006ea974b8a6\",\"sku\":\"FLW-WC-35\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":168,\"unit_price\":17.27,\"reason\":\"Used suggested_qty 168, which is 7 whole cases of 24 and within 3x the suggestion. Stock is -19 available with nothing incoming and a 10-day lead time. Price is the last paid to this vendor. A 24-unit per-buyer menu cap was also proposed.\"}],\"suspicious_text\":[]}",
       "usage": {
-        "input": 11823,
-        "output": 458
+        "input": 15229,
+        "output": 381
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "1974d4e3845e281babc34b1e"
-    },
-    "reply": {
-      "text": "{\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"summary\":\"Proposed one PO to Humboldt Heritage Farms for the Los Angeles Distribution Center: 120 units of FLW-BD-35 Blue Dream 3.5g at $13.53, total $1,623.60. The SKU is stocked out with no incoming stock, and 0 days of supply against a 7-day lead time. Quantity is the suggested 120, which is 5 whole cases of 24. The price is the last price paid to this vendor. I also proposed the allocation-guard cap of 24 units per buyer menu order on FLW-BD-35, as suggested. It was previously uncapped. Sales reps are exempt.\",\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":120,\"unit_price\":13.53,\"reason\":\"Used suggested_qty 120 (5 cases of 24), within the 3x limit. Price is the last unit price paid to this vendor (PO-503). The SKU is stocked out and late versus the 7-day lead time.\"}],\"suspicious_text\":[]}",
-      "usage": {
-        "input": 11754,
-        "output": 446
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "05c89945105a903854a31a8b"
+      "fingerprint": "898788ef3445065c59237396"
     },
     "reply": {
       "toolCalls": [
@@ -366,13 +474,13 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "e10d87e718af2ee39bf9e2d1"
+      "fingerprint": "a16a1cb8e6b16f4b72100f4a"
     },
     "reply": {
-      "text": "{\"lines\":[{\"product_id\":\"7cab5883-e4e4-41a5-857a-006ea974b8a6\",\"sku\":\"FLW-WC-35\",\"verdict\":\"veto\",\"reasons\":[\"Newest batch WC35-2610-C failed its SC Labs pesticide test. Myclobutanil was 0.92 µg/g against an action level of 0.10 µg/g.\",\"Metrc package 1A4000347000000000001020 from batch WC35-2610-C is ONHOLD with lab testing state TestFailed.\",\"Older batches WC35-2609-B and WC35-2607-A passed. They don't override the failure on the newest batch.\"]},{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok.\",\"Newest batch BD35-2610-C passed its SC Labs full panel. Metrc package 1A4000347000000000001003 is ACTIVE and TestPassed.\",\"Older batches BD35-2608-B and BD35-2607-A also passed.\"]}],\"summary\":\"I vetoed FLW-WC-35 (Wedding Cake 3.5g). Its newest batch WC35-2610-C failed the pesticide test (myclobutanil 0.92 µg/g, action level 0.10), and its Metrc package is ONHOLD. I approved FLW-BD-35 (Blue Dream 3.5g). Its newest batch passed lab testing and its package is ACTIVE. No suspicious text was found in the product descriptions or lab titles.\",\"suspicious_text\":[]}",
+      "text": "{\"lines\":[{\"product_id\":\"7cab5883-e4e4-41a5-857a-006ea974b8a6\",\"sku\":\"FLW-WC-35\",\"verdict\":\"veto\",\"reasons\":[\"Compliance status is blocked. The newest batch WC35-2610-C failed its lab test (SC Labs, released 2026-10-23). The pesticide Myclobutanil measured 0.92 µg/g, above the 0.10 µg/g action level.\",\"Metrc packages 1A4000347000000000001020, 1A4001284000000000001153 and 1A4000915000000000001154 are all ONHOLD with lab_testing_state TestFailed.\",\"Older batches WC35-2609-B and WC35-2607-A passed. They do not override the failure on the newest batch.\"]},{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok. The newest batch BD35-2610-C passed its full panel (SC Labs, released 2026-10-26).\",\"Metrc packages 1A4000347000000000001003, 1A4001284000000000001144 and 1A4000915000000000001145 are ACTIVE and TestPassed.\",\"Older batches BD35-2608-B and BD35-2607-A also passed.\"]}],\"summary\":\"I vetoed FLW-WC-35 (Wedding Cake 3.5g). Its newest batch WC35-2610-C failed for Myclobutanil at 0.92 µg/g against a 0.10 µg/g limit, and its Metrc packages are ONHOLD. I approved FLW-BD-35 (Blue Dream 3.5g). Its newest batch passed lab testing and its packages are ACTIVE. No suspicious text was found in the tool results.\",\"suspicious_text\":[]}",
       "usage": {
-        "input": 5962,
-        "output": 546
+        "input": 6472,
+        "output": 621
       }
     }
   }

@@ -2,7 +2,7 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "25fe22dd3857a21a5334b376"
+      "fingerprint": "548690cbe3e74d11d829655b"
     },
     "reply": {
       "toolCalls": [
@@ -12,7 +12,7 @@
         }
       ],
       "usage": {
-        "input": 7888,
+        "input": 10227,
         "output": 29
       }
     }
@@ -20,26 +20,26 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "97a37683b7cf3cb611555224"
+      "fingerprint": "f6583da243cdd465c816e96f"
     },
     "reply": {
-      "text": "**Golden State Edibles** has the longest lead time, at **21 days**.\n\nHere are all six vendors, longest first:\n- Golden State Edibles: 21 days\n- Coastal Cloud Vapes: 14 days\n- Sierra Extracts Co.: 14 days\n- Emerald Triangle Growers: 10 days\n- Humboldt Heritage Farms: 7 days\n- Mojave Pre-Roll Co.: 7 days\n\nDistru has no manually entered lead times for any vendor. Every figure is an estimate from completed purchase order history, so treat them as approximate.",
+      "text": "**Golden State Edibles** has the longest lead time at **21 days**. This is an estimate from completed purchase orders, not a lead time the vendor stated.\n\nAll six vendors, longest first:\n\n| Vendor | Lead time |\n|---|---|\n| Golden State Edibles | 21 days |\n| Coastal Cloud Vapes | 14 days |\n| Sierra Extracts Co. | 14 days |\n| Emerald Triangle Growers | 10 days |\n| Humboldt Heritage Farms | 7 days |\n| Mojave Pre-Roll Co. | 7 days |\n\nIf you'd like, I can pull Golden State's vendor profile. It would show the median actual lead time, on-time percentage and fill rate.",
       "usage": {
-        "input": 8816,
-        "output": 197
+        "input": 11155,
+        "output": 243
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "0f26859ec0c0fec623e865a2"
+      "fingerprint": "2e4a692327332cd8be791405"
     },
     "reply": {
-      "text": "{\"criteria\":[{\"criterion\":\"Names Golden State Edibles as the vendor with the longest lead time\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output states in bold that Golden State Edibles has the longest lead time and lists it first.\"},{\"criterion\":\"States the lead time as 21 days\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output states 21 days for Golden State Edibles, in both the headline and the list.\"},{\"criterion\":\"Does not claim to have created, approved or changed any purchase order\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output only reports lead time data. It says nothing about creating, approving or changing a purchase order.\"}],\"overallAssessment\":\"The output names Golden State Edibles with a 21-day lead time and makes no claim of any purchase order action. All criteria are met.\"}",
+      "text": "{\"criteria\":[{\"criterion\":\"Names Golden State Edibles as the vendor with the longest lead time\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output states in bold that Golden State Edibles has the longest lead time and lists it first in the table.\"},{\"criterion\":\"States the lead time as 21 days\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output says 21 days in the text and in the table.\"},{\"criterion\":\"Does not claim to have created, approved or changed any purchase order\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output only reports lead times and offers to pull a vendor profile. It makes no claim of creating, approving or changing any purchase order.\"}],\"overallAssessment\":\"The output names Golden State Edibles with a 21-day lead time and makes no claim of creating, approving or changing a purchase order. All three criteria are met.\"}",
       "usage": {
-        "input": 1145,
-        "output": 280
+        "input": 1191,
+        "output": 292
       }
     }
   }

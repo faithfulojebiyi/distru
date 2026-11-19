@@ -2,14 +2,14 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "6f524283be46b393b0624fb3"
+      "fingerprint": "fdcdfed89a2e6f360825ccb6"
     },
     "reply": {
       "toolCalls": [
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": true,
+            "below_reorder_point": "true",
             "location_ids": [
               "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
             ],
@@ -27,7 +27,7 @@
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": true,
+            "below_reorder_point": "true",
             "location_ids": [
               "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
             ],
@@ -44,7 +44,7 @@
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": true,
+            "below_reorder_point": "true",
             "location_ids": [
               "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
             ],
@@ -61,7 +61,7 @@
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": true,
+            "below_reorder_point": "true",
             "location_ids": [
               "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
             ],
@@ -79,7 +79,7 @@
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": false,
+            "below_reorder_point": "false",
             "location_ids": [
               "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
             ],
@@ -93,43 +93,85 @@
         }
       ],
       "usage": {
-        "input": 7526,
-        "output": 1503
+        "input": 7730,
+        "output": 1552
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "6dae2a0facb4c127608d9aad"
+      "fingerprint": "7094b5cb387238e5a1eef868"
     },
     "reply": {
       "toolCalls": [
         {
-          "name": "headset_retail_trends",
+          "name": "distru_velocity_report",
           "arguments": {
-            "skus": [
-              "FLW-BD-35",
-              "PRE-BD-1G"
+            "below_reorder_point": "true",
+            "lead_time_days": 14,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
+              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
             ]
           }
         },
         {
-          "name": "headset_demand_signal",
+          "name": "distru_velocity_report",
           "arguments": {
-            "sku": "FLW-BD-35",
-            "wholesale_days_of_supply": 0,
-            "wholesale_avg_daily": 2.454,
-            "lead_time_days": 7
+            "below_reorder_point": "any",
+            "lead_time_days": 14,
+            "limit": 100,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
+              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 10600,
+        "output": 522
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "01ebac005f76bc2e78a1c229"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "lead_time_days": 7,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
+              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
+            ],
+            "vendor_ids": [
+              "fda26d01-2a96-46da-8021-be5be83fc921",
+              "7baca7d4-4da5-48c9-a05b-05f1f87ba66b"
+            ]
           }
         },
         {
-          "name": "headset_demand_signal",
+          "name": "headset_retail_trends",
           "arguments": {
-            "sku": "PRE-BD-1G",
-            "wholesale_days_of_supply": 0,
-            "wholesale_avg_daily": 3.665,
-            "lead_time_days": 7
+            "skus": [
+              "PRE-BD-1G",
+              "FLW-BD-35"
+            ]
           }
         },
         {
@@ -143,31 +185,49 @@
               "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
             ]
           }
+        },
+        {
+          "name": "headset_demand_signal",
+          "arguments": {
+            "sku": "PRE-BD-1G",
+            "wholesale_days_of_supply": 1.4,
+            "wholesale_avg_daily": 4.844,
+            "lead_time_days": 7
+          }
+        },
+        {
+          "name": "headset_demand_signal",
+          "arguments": {
+            "sku": "FLW-BD-35",
+            "wholesale_days_of_supply": 2.6,
+            "wholesale_avg_daily": 3.095,
+            "lead_time_days": 7
+          }
         }
       ],
       "usage": {
-        "input": 10005,
-        "output": 530
+        "input": 12090,
+        "output": 908
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "26b459b01fb9f78cfa539289"
+      "fingerprint": "157d5ae0e61adafe1cb05a9e"
     },
     "reply": {
-      "text": "{\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"at_risk\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"name\":\"Blue Dream Pre-Roll 1g\",\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"vendor_name\":\"Mojave Pre-Roll Co.\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"location_name\":\"Los Angeles Distribution Center\",\"on_hand_available\":0,\"incoming\":0,\"avg_daily_demand\":3.665,\"days_of_supply\":0,\"reorder_status\":\"LATE\",\"suggested_qty\":200,\"units_per_case\":50,\"open_order_demand\":0,\"adjusted_days_of_supply\":0,\"adjusted_avg_daily_demand\":5.311,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":44.9,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":1,\"reason\":\"Distru: 0 available, 0 incoming, 0 days of supply vs 7-day lead time (LATE), 3.665 units/day. Headset: retail surging +44.9% over 3 weeks (WoW +13.7%, 10 stores) → projected demand 5.311/day, 0 adjusted days of supply (reorder_now). No open orders.\"},{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"name\":\"Blue Dream 3.5g\",\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"vendor_name\":\"Humboldt Heritage Farms\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"location_name\":\"Los Angeles Distribution Center\",\"on_hand_available\":0,\"incoming\":0,\"avg_daily_demand\":2.454,\"days_of_supply\":0,\"reorder_status\":\"LATE\",\"suggested_qty\":120,\"units_per_case\":24,\"open_order_demand\":0,\"adjusted_days_of_supply\":0,\"adjusted_avg_daily_demand\":2.454,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-1,\"recommendation\":\"reorder_now\",\"flagged_by\":\"wholesale\",\"urgency_rank\":2,\"reason\":\"Distru: 0 available, 0 incoming, 0 days of supply vs 7-day lead time (LATE), 2.454 units/day. Headset: retail flat (-1% over 3 weeks, 8 stores), so no retail uplift, but wholesale is already out → reorder_now. No open orders.\"}],\"summary\":\"Both in-scope Blue Dream SKUs at Los Angeles Distribution Center are out of stock (0 available, nothing incoming) and LATE against the 7-day lead time. Blue Dream Pre-Roll 1g (PRE-BD-1G) is ranked first because Headset retail is surging +44.9% over 3 weeks, which lifts projected demand to 5.311/day. Blue Dream 3.5g (FLW-BD-35) has flat retail (-1%) but is also at zero stock. Neither has open orders. Suggested quantities are copied unchanged from Distru for the Planner to decide.\",\"suspicious_text\":[]}",
+      "text": "{\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"at_risk\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"name\":\"Blue Dream Pre-Roll 1g\",\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"vendor_name\":\"Mojave Pre-Roll Co.\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"location_name\":\"Los Angeles Distribution Center\",\"on_hand_available\":7,\"incoming\":0,\"avg_daily_demand\":4.844,\"days_of_supply\":1.4,\"reorder_status\":\"LATE\",\"suggested_qty\":200,\"units_per_case\":50,\"open_order_demand\":0,\"adjusted_days_of_supply\":1,\"adjusted_avg_daily_demand\":7.019,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":44.9,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":1,\"reason\":\"Distru: 1.4 days of supply vs 7-day lead time (LATE), 7 units available, none incoming, no open orders. Headset: retail surging +44.9% over 3 weeks (+13.7% WoW, 10 stores) → 1.0 adjusted days of supply at 7.019 units/day (reorder_now).\"},{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"name\":\"Blue Dream 3.5g\",\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"vendor_name\":\"Humboldt Heritage Farms\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"location_name\":\"Los Angeles Distribution Center\",\"on_hand_available\":8,\"incoming\":0,\"avg_daily_demand\":3.095,\"days_of_supply\":2.6,\"reorder_status\":\"LATE\",\"suggested_qty\":144,\"units_per_case\":24,\"open_order_demand\":0,\"adjusted_days_of_supply\":2.6,\"adjusted_avg_daily_demand\":3.095,\"retail_signal\":\"flat\",\"retail_growth_3w_pct\":-1,\"recommendation\":\"reorder_now\",\"flagged_by\":\"wholesale\",\"urgency_rank\":2,\"reason\":\"Distru: 2.6 days of supply vs 7-day lead time (LATE), 8 units available, none incoming, no open orders. Headset: retail flat (-1% over 3 weeks, 8 stores), so no retail uplift. Adjusted days of supply stay at 2.6 (reorder_now on wholesale cover alone).\"}],\"summary\":\"Both in-scope Blue Dream SKUs at Los Angeles are LATE and are reorder_now. Both will stock out before a replenishment order could arrive, with a 7-day lead time for each vendor. Retail moved PRE-BD-1G up: Headset shows it surging +44.9% over 3 weeks, which cuts cover from 1.4 to 1.0 days. FLW-BD-35 is flat at retail and is flagged on wholesale cover alone. Neither SKU has open orders or incoming stock. Suggested quantities are copied unchanged from Distru at the 7-day lead time for the Planner to decide. No suspicious text was found.\",\"suspicious_text\":[]}",
       "usage": {
-        "input": 11434,
-        "output": 1184
+        "input": 14534,
+        "output": 1206
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "197c88591ac3af4409312100"
+      "fingerprint": "77e999610a3808f86b01999b"
     },
     "reply": {
       "toolCalls": [
@@ -187,18 +247,29 @@
               "eab0289c-0e53-4ef9-a6c7-f9e32f050698"
             ]
           }
+        },
+        {
+          "name": "context_context_for",
+          "arguments": {
+            "vendor_ids": [
+              "fda26d01-2a96-46da-8021-be5be83fc921"
+            ],
+            "product_ids": [
+              "eab0289c-0e53-4ef9-a6c7-f9e32f050698"
+            ]
+          }
         }
       ],
       "usage": {
-        "input": 9271,
-        "output": 212
+        "input": 10197,
+        "output": 341
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "7932147793f93b80e2faea83"
+      "fingerprint": "643050fc5620cd84fdd17e98"
     },
     "reply": {
       "toolCalls": [
@@ -218,18 +289,29 @@
               "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
             ]
           }
+        },
+        {
+          "name": "context_context_for",
+          "arguments": {
+            "vendor_ids": [
+              "7baca7d4-4da5-48c9-a05b-05f1f87ba66b"
+            ],
+            "product_ids": [
+              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
+            ]
+          }
         }
       ],
       "usage": {
-        "input": 9312,
-        "output": 223
+        "input": 10221,
+        "output": 358
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "8ea97e96cdf80e53aa0bca07"
+      "fingerprint": "509ac90b8c76865a5ff2eee4"
     },
     "reply": {
       "toolCalls": [
@@ -241,47 +323,33 @@
             "lines": [
               {
                 "product_id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
-                "quantity": 120,
-                "unit_price": 13.53
+                "quantity": 144,
+                "unit_price": 14.13
               }
             ],
-            "notes": "Restock Blue Dream 3.5g for Los Angeles Distribution Center. Out of stock, 7-day lead time. 120 units (5 cases of 24) at last paid price 13.53."
+            "notes": "Restock Blue Dream 3.5g for Los Angeles Distribution Center; LATE at 2.6 days of supply vs 7-day lead time."
           }
-        }
-      ],
-      "usage": {
-        "input": 10890,
-        "output": 332
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "24e1b0d39e92200cf6aded0b"
-    },
-    "reply": {
-      "toolCalls": [
+        },
         {
           "name": "propose_distru_mcp_mutate_product",
           "arguments": {
             "action": "UPDATE",
             "id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
             "maxMenuBuyerOrderQuantity": 24,
-            "intent": "Restock Los Angeles Blue Dream and share remaining stock fairly until the PO arrives."
+            "intent": "Restock Los Angeles Blue Dream and share remaining stock among buyers until the PO arrives"
           }
         }
       ],
       "usage": {
-        "input": 11362,
-        "output": 200
+        "input": 14315,
+        "output": 511
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "728eb9d9c281a0bd9107f563"
+      "fingerprint": "6f8b8ff232603bd3068c8229"
     },
     "reply": {
       "toolCalls": [
@@ -294,10 +362,10 @@
               {
                 "product_id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
                 "quantity": 200,
-                "unit_price": 3.99
+                "unit_price": 4.14
               }
             ],
-            "notes": "Restock Blue Dream Pre-Roll 1g at LA DC: 0 available, LATE, retail surging. 200 units = 4 cases."
+            "notes": "Restock Blue Dream Pre-Roll 1g for Los Angeles DC: 1.4 days of supply, retail surging."
           }
         },
         {
@@ -306,46 +374,46 @@
             "action": "UPDATE",
             "id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
             "maxMenuBuyerOrderQuantity": 50,
-            "intent": "Restock Los Angeles Blue Dream and share remaining stock fairly until the PO arrives."
+            "intent": "Restock Los Angeles Blue Dream and share remaining stock until the PO arrives"
           }
         }
       ],
       "usage": {
-        "input": 10987,
-        "output": 510
+        "input": 14434,
+        "output": 496
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "50b0dadcb43d10b5d488ee79"
+      "fingerprint": "2a5248d34f44a0d2656977dd"
     },
     "reply": {
-      "text": "{\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"summary\":\"Proposed one PO to Humboldt Heritage Farms for Los Angeles Distribution Center. It has 120 units of Blue Dream 3.5g (FLW-BD-35), which is 5 cases of 24, at $13.53 each, for a total of $1,623.60. The SKU has 0 available, 0 incoming and 0 days of supply against a 7-day lead time. The quantity is the analyst's suggested_qty, already a whole number of cases and well under the 3x limit. The price is the last price paid to this vendor. Also proposed the allocation-guard cap of 24 units per buyer per menu order on FLW-BD-35. Sales reps are exempt.\",\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":120,\"unit_price\":13.53,\"reason\":\"Used suggested_qty of 120 (5 cases of 24). Price is last_unit_price paid to this vendor (PO-503). Stock is out and the SKU is LATE against the 7-day lead time.\"}],\"suspicious_text\":[]}",
+      "text": "{\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"title\":\"Restock Blue Dream 3.5g for Los Angeles\",\"summary\":\"Proposed one PO to Humboldt Heritage Farms for 144 units of Blue Dream 3.5g at $14.13 ($2,034.72) for Los Angeles, which has 2.6 days of supply against a 7-day lead time. Also proposed a 24-unit per-buyer menu cap until it arrives.\",\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":144,\"unit_price\":14.13,\"reason\":\"Used suggested_qty of 144, which is 6 whole cases of 24 and within 3x the suggestion. Price is the last unit price paid to this vendor (PO-503). SKU is LATE with 8 units available and none incoming.\"}],\"suspicious_text\":[]}",
       "usage": {
-        "input": 11729,
-        "output": 456
+        "input": 15205,
+        "output": 374
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "2097bc9a477531b7c31b5982"
+      "fingerprint": "a279bc3a63c9ae6f6100d038"
     },
     "reply": {
-      "text": "{\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"summary\":\"Proposed one PO to Mojave Pre-Roll Co. for Los Angeles Distribution Center: 200 units of PRE-BD-1G (4 cases of 50) at $3.99, total $798. Blue Dream has 0 available and 0 incoming, is LATE against the 7-day lead time, and retail is surging (+44.9%). Quantity is the suggested_qty of 200, which is already whole cases and within 3x the suggestion. Price is the last price paid to this vendor. Also proposed the allocation-guard cap of 50 units per buyer menu order on PRE-BD-1G (no cap before). Sales reps are exempt. The cap shares remaining stock until the PO arrives.\",\"lines\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":200,\"unit_price\":3.99,\"reason\":\"suggested_qty 200 (4 whole cases of 50); price is last paid, $3.99, from PO-518. Stockout, LATE status, retail surging.\"}],\"suspicious_text\":[]}",
+      "text": "{\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"title\":\"Restock Los Angeles Blue Dream pre-rolls (200 units)\",\"summary\":\"Proposed one PO to Mojave Pre-Roll Co. for 200 units of Blue Dream Pre-Roll 1g at $4.14 ($828) for Los Angeles. Also proposed a 50-unit per-buyer menu cap on PRE-BD-1G until the PO arrives.\",\"lines\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":200,\"unit_price\":4.14,\"reason\":\"Used suggested_qty of 200, which is 4 whole cases of 50 and within 3x the suggestion. Price is the last price paid to this vendor, $4.14. Stock is 1.4 days against a 7-day lead time, and retail demand is surging.\"}],\"suspicious_text\":[]}",
       "usage": {
-        "input": 11889,
-        "output": 459
+        "input": 15326,
+        "output": 388
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "b3e3a61252bcbf93037ce833"
+      "fingerprint": "1f2f74a9fc35380df4cc9611"
     },
     "reply": {
       "toolCalls": [
@@ -380,59 +448,71 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "76a466675b006dfff40c4de5"
+      "fingerprint": "d5bff1169b11f1abbd06ec8d"
     },
     "reply": {
-      "text": "{\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok.\",\"Newest batch BD35-2610-C has a passed full panel from SC Labs, released 2026-10-26.\",\"Its Metrc package 1A4000347000000000001003 is ACTIVE and TestPassed.\",\"Older batches BD35-2608-B and BD35-2607-A also passed.\"]},{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok.\",\"Newest batch BD1G-2610-C has a passed full panel from Infinite Chemical Analysis Labs, released 2026-10-15.\",\"Its three Metrc packages are ACTIVE and TestPassed.\",\"Older batches BD1G-2609-B and BD1G-2607-A also passed.\"]}],\"summary\":\"Both lines are approved. Each product has status ok, a passed lab test on its newest batch, and ACTIVE, TestPassed Metrc packages. No failures or warnings were found on older batches. The product descriptions had no instruction-like content.\",\"suspicious_text\":[]}",
+      "text": "{\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok. The newest batch BD35-2610-C passed its SC Labs full panel (released 2026-10-26).\",\"All three of its Metrc packages are ACTIVE and TestPassed.\",\"Older batches BD35-2608-B and BD35-2607-A also passed. No failures on file.\"]},{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok. The newest batch BD1G-2610-C passed its Infinite Chemical Analysis Labs full panel (released 2026-10-15).\",\"All six of its Metrc packages are ACTIVE and TestPassed.\",\"Older batches BD1G-2609-B and BD1G-2607-A also passed. No failures on file.\"]}],\"summary\":\"Both products are approved. Each has a passing lab result on its newest batch and ACTIVE, TestPassed Metrc packages. No blocked or unknown statuses. No instruction-like text was found in the product descriptions or lab titles.\",\"suspicious_text\":[]}",
       "usage": {
-        "input": 6003,
-        "output": 446
+        "input": 6490,
+        "output": 442
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "a79a86f4a64baff304e5a759"
+      "fingerprint": "69d8c0960f7e2cae3e5e652c"
+    },
+    "reply": {
+      "text": "{\"explanation\":\"Two rules fired. (1) max_total_value (deny): the combined PO total is $2,862.72 against a $300.00 cap. That is Humboldt Heritage Farms $2,034.72 (144 × $14.13) plus Mojave Pre-Roll Co. $828.00 (200 × $4.14). The draft is about 9.5 times the cap, so quantities must be cut sharply. (2) auto_approve_below (needs_approval, warning): the total is above the $500 auto-approve threshold. Once the total is under $300 this warning clears by itself. Nothing else needs to change for it. The other rules passed: allowed_actions, high_risk_requires_approval and plan_guard. The per-buyer menu caps (24 on FLW-BD-35, 50 on PRE-BD-1G) are $0 updates and did not trigger any denial, so leave them as they are. To fit the cap I split the $300 by urgency, weighting by inverse days of supply. PRE-BD-1G (1.4 days) gets about 65% and FLW-BD-35 (2.6 days) about 35%. Do not split POs or move lines to other vendors to get around the cap.\",\"revisions\":[{\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"instruction\":\"Reduce PRE-BD-1G (product 4904ccf8-3f52-4c3a-bb5d-448efd8e8135) from 200 to 48 units at $4.14. The PO becomes $198.72. This is the most urgent SKU at 1.4 days of supply, so it gets the larger share of the cap. Keep the same location and update the note to say the quantity was reduced to fit the $300 total cap.\"},{\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"instruction\":\"Reduce FLW-BD-35 (product eab0289c-0e53-4ef9-a6c7-f9e32f050698) from 144 to 7 units at $14.13. The PO becomes $98.91. Together with the Mojave PO of $198.72, the combined total is $297.63, at or under the $300.00 cap. Keep the same location and update the note to say the quantity was reduced to fit the $300 total cap. Do not raise either quantity, because even 1 more unit of FLW-BD-35 would push the total to $311.76.\"}],\"summary\":\"Denied because the combined PO total of $2,862.72 exceeds the $300 cap. Revise to PRE-BD-1G 48 units ($198.72) and FLW-BD-35 7 units ($98.91), a combined $297.63, with the most urgent SKU getting the larger share.\"}",
+      "usage": {
+        "input": 3640,
+        "output": 1509
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "a8f3130421daa59b111e93b1"
     },
     "reply": {
       "toolCalls": [
         {
-          "name": "distru_products_get",
+          "name": "propose_distru_purchases_upsert",
           "arguments": {
-            "product_id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698"
+            "vendor_id": "7baca7d4-4da5-48c9-a05b-05f1f87ba66b",
+            "location_id": "b2d8f408-80b4-4e32-b46d-3c715c7305e2",
+            "lines": [
+              {
+                "product_id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
+                "quantity": 19,
+                "unit_price": 4.14
+              }
+            ],
+            "notes": "Blue Dream Pre-Roll 1g for Los Angeles DC: quantity reduced to 19 units to fit the $79.82 hard budget (policy feedback). Most urgent SKU, 1.4 days of supply."
           }
         },
         {
-          "name": "distru_products_get",
+          "name": "propose_distru_mcp_mutate_product",
           "arguments": {
-            "product_id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
+            "action": "UPDATE",
+            "id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
+            "maxMenuBuyerOrderQuantity": 50,
+            "intent": "Restock Los Angeles Blue Dream and share remaining stock until the PO arrives"
           }
         }
       ],
       "usage": {
-        "input": 3658,
-        "output": 590
+        "input": 10823,
+        "output": 832
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "7843459f31d5625c29f67493"
-    },
-    "reply": {
-      "text": "{\"explanation\":\"The draft failed one rule, max_total_value. The two POs total $2,421.60 (Humboldt $1,623.60 plus Mojave $798.00) against a $300.00 cap, so about $2,121.60 has to come out. The auto_approve_below warning, $500 threshold, is a consequence of the same oversize total. It clears once the total is under $300. The allowed_actions, high_risk and plan_guard rules passed, and the per-buyer menu cap updates on FLW-BD-35 and PRE-BD-1G are $0 and not a problem. Both SKUs are at 0 days of supply, so they are equally urgent and I can't rank them. A whole case of FLW-BD-35 (24 units × $13.53 = $324.72) is over the cap on its own. A whole case of PRE-BD-1G (50 units × $3.99 = $199.50) fits. Don't split the POs or change vendors to get around the cap. The combined total has to be at most $300.00 after the revision.\",\"revisions\":[{\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"instruction\":\"Reduce PRE-BD-1G (Blue Dream Pre-Roll 1g) from 200 to 50 units, which is 1 case, at $3.99. The Mojave PO is then $199.50. Keep the per-buyer menu cap of 50 on this SKU.\"},{\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"instruction\":\"Reduce FLW-BD-35 (Blue Dream 3.5g) from 120 to 7 units at $13.53. The Humboldt PO is then $94.71, and the combined total with Mojave is $294.21, under the $300.00 cap. A full case of 24 ($324.72) cannot fit under the cap. If the vendor does not accept partial cases, remove this PO and flag the stock-out for the approver. Do not raise the quantity above 7 and do not add lines. Keep the per-buyer menu cap of 24 on this SKU.\"}],\"summary\":\"Denied: total $2,421.60 exceeds the $300 cap. Revise to 50 units of PRE-BD-1G ($199.50) and 7 units of FLW-BD-35 ($94.71), for a combined $294.21.\"}",
-      "usage": {
-        "input": 4653,
-        "output": 1418
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "ca139a0fdfaf4a6b407106ee"
+      "fingerprint": "37943ba3f512a34c2619165c"
     },
     "reply": {
       "toolCalls": [
@@ -445,101 +525,58 @@
               {
                 "product_id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
                 "quantity": 7,
-                "unit_price": 13.53
+                "unit_price": 14.13
               }
             ],
-            "notes": "Restock Blue Dream 3.5g for Los Angeles DC. Out of stock, 7-day lead time. Reduced to 7 units (partial case) at last paid price 13.53 to fit budget cap. A full case of 24 ($324.72) does not fit. Approver: confirm vendor accepts partial cases."
+            "notes": "Restock Blue Dream 3.5g for Los Angeles Distribution Center; LATE at 2.6 days of supply vs 7-day lead time. Quantity reduced from 144 to 7 to fit the $300 total cap."
           }
-        }
-      ],
-      "usage": {
-        "input": 9938,
-        "output": 700
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "7c2732df1b8f820a5f334442"
-    },
-    "reply": {
-      "text": "{\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"summary\":\"Revised the Humboldt PO for Los Angeles Distribution Center. FLW-BD-35 Blue Dream 3.5g goes from 120 to 7 units at $13.53, so the PO is $94.71. That is under the $185.04 hard budget. The Policy Critic said the combined total with Mojave would be $294.21, under the $300 cap. 7 units is a partial case, since cases are 24. A full case would cost $324.72 and does not fit. APPROVER: confirm Humboldt accepts partial cases. If it does not, remove this PO and treat the Blue Dream stock-out (0 available, 0 incoming, 7-day lead time) as a manual escalation. The per-buyer menu cap of 24 units on FLW-BD-35 is unchanged from the earlier proposal, as instructed.\",\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":7,\"unit_price\":13.53,\"reason\":\"Cut from 120 to 7 units per Policy Critic and the $185.04 hard budget (7 × 13.53 = $94.71). Price is the last paid. This is a partial case (24 per case), so the vendor must accept it. SKU is out of stock and LATE.\"}],\"suspicious_text\":[]}",
-      "usage": {
-        "input": 10448,
-        "output": 599
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "3028eb02b6bcbd42c4fbf1ed"
-    },
-    "reply": {
-      "toolCalls": [
-        {
-          "name": "propose_distru_purchases_upsert",
-          "arguments": {
-            "vendor_id": "7baca7d4-4da5-48c9-a05b-05f1f87ba66b",
-            "location_id": "b2d8f408-80b4-4e32-b46d-3c715c7305e2",
-            "lines": [
-              {
-                "product_id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
-                "quantity": 22,
-                "unit_price": 3.99
-              }
-            ],
-            "notes": "Restock Blue Dream Pre-Roll 1g at LA DC: 0 available, LATE, retail surging. Cut to 22 units ($87.78) to fit $90.95 hard budget; less than 1 case (50) - needs approver review."
-          }
-        }
-      ],
-      "usage": {
-        "input": 9878,
-        "output": 1232
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "65f1b66dee268eee95352caa"
-    },
-    "reply": {
-      "toolCalls": [
+        },
         {
           "name": "propose_distru_mcp_mutate_product",
           "arguments": {
             "action": "UPDATE",
-            "id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
-            "maxMenuBuyerOrderQuantity": 50,
-            "intent": "Restock Los Angeles Blue Dream and share remaining stock fairly until the PO arrives."
+            "id": "eab0289c-0e53-4ef9-a6c7-f9e32f050698",
+            "maxMenuBuyerOrderQuantity": 24,
+            "intent": "Restock Los Angeles Blue Dream and share remaining stock among buyers until the PO arrives"
           }
         }
       ],
       "usage": {
-        "input": 10377,
-        "output": 337
+        "input": 10847,
+        "output": 1021
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "a3df17450f47aad8d378a3f9"
+      "fingerprint": "a8bd8f20739a855b11644f93"
     },
     "reply": {
-      "text": "{\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"summary\":\"Revised the Mojave PO for the LA DC. PRE-BD-1G is cut from 200 to 22 units at $3.99, which totals $87.78. That is under the $90.95 HARD BUDGET. The Critic's suggested 50 units (1 case, $199.50) would exceed that budget, so I followed the budget. 22 units is less than one 50-unit case, so the approver should check whether Mojave will sell a partial case. The per-buyer menu cap of 50 on PRE-BD-1G is kept as the allocation guard suggested.\",\"lines\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":22,\"unit_price\":3.99,\"reason\":\"The item is LATE with 0 available and retail demand surging. Quantity was cut to fit the $90.95 hard budget: floor(90.95/3.99) = 22 units, $87.78. This is below the 50-unit case size and well below the original 200 suggested. Price is the last price paid to this vendor.\"}],\"suspicious_text\":[]}",
+      "text": "{\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"title\":\"Partial Blue Dream pre-roll restock within $79.82 budget\",\"summary\":\"Cut the PRE-BD-1G order from 200 to 19 units at $4.14 ($78.66) to fit the $79.82 hard budget. It is the most urgent SKU at 1.4 days of supply. The 50-unit per-buyer menu cap is kept so the remaining stock is shared.\",\"lines\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":19,\"unit_price\":4.14,\"reason\":\"Reduced from 200 to 19 units to meet the policy engine's $79.82 hard budget (19 × $4.14 = $78.66). The policy engine's budget overrides the usual case rounding (50 per case). This is the most urgent SKU, at 1.4 days of supply with retail surging. Price is the last price paid to this vendor.\"}],\"suspicious_text\":[]}",
       "usage": {
-        "input": 10751,
-        "output": 454
+        "input": 11751,
+        "output": 412
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "54f636f67bc2ab92f3ecf3ab"
+      "fingerprint": "421e1807e29fb5e9aa6ca64c"
+    },
+    "reply": {
+      "text": "{\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"title\":\"Trim Blue Dream 3.5g restock to fit $300 cap\",\"summary\":\"Reduced the FLW-BD-35 Blue Dream 3.5g order from 144 to 7 units at $14.13 ($98.91) to meet the policy cap. Kept the 24-unit per-buyer menu cap to share remaining stock until the PO arrives.\",\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":7,\"unit_price\":14.13,\"reason\":\"Cut from the suggested 144 units to 7 as the Policy Critic instructed, to fit the $300 total cap. This is below a full case of 24. Price is the last unit price paid to this vendor. The SKU is LATE at 2.6 days of supply vs a 7-day lead time.\"}],\"suspicious_text\":[]}",
+      "usage": {
+        "input": 11760,
+        "output": 378
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "469d36bd0b61254ec5a07fae"
     },
     "reply": {
       "toolCalls": [
@@ -574,13 +611,13 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "6bee20ff33f7a00fb9d4a80a"
+      "fingerprint": "c0120e3fc1e94dddc0777162"
     },
     "reply": {
-      "text": "{\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok.\",\"Newest batch BD35-2610-C: SC Labs full panel verdict passed (released 2026-10-26).\",\"Its package 1A4000347000000000001003 is ACTIVE and TestPassed.\",\"Older batches BD35-2608-B and BD35-2607-A also passed.\"]},{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok.\",\"Newest batch BD1G-2610-C: Infinite Chemical Analysis Labs full panel verdict passed (released 2026-10-15).\",\"Its three packages (…1041, …1068, …1069) are ACTIVE and TestPassed.\",\"Older batches BD1G-2609-B and BD1G-2607-A also passed.\"]}],\"summary\":\"Both lines are approved. Each product has compliance status ok, with a passed lab test and ACTIVE, TestPassed packages on its newest batch. No failures or warnings on older batches. Product descriptions were plain and had no instruction-like text.\",\"suspicious_text\":[]}",
+      "text": "{\"lines\":[{\"product_id\":\"eab0289c-0e53-4ef9-a6c7-f9e32f050698\",\"sku\":\"FLW-BD-35\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok.\",\"Newest batch BD35-2610-C passed its SC Labs full panel COA, released 2026-10-26.\",\"All three Metrc packages on the newest batch are ACTIVE and TestPassed.\",\"Older batches BD35-2608-B and BD35-2607-A also passed.\"]},{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok.\",\"Newest batch BD1G-2610-C passed its Infinite Chemical Analysis Labs full panel COA, released 2026-10-15.\",\"All six Metrc packages on the newest batch are ACTIVE and TestPassed.\",\"Older batches BD1G-2609-B and BD1G-2607-A also passed.\"]}],\"summary\":\"Both lines are approved. Each product has status ok, a passed lab test on its newest batch, and ACTIVE, TestPassed Metrc packages. No failed or on-hold batches were found. Neither product description contained instruction-like text.\",\"suspicious_text\":[]}",
       "usage": {
-        "input": 6003,
-        "output": 454
+        "input": 6490,
+        "output": 444
       }
     }
   }

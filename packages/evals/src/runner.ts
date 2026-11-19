@@ -141,6 +141,9 @@ function proposalFacts(p: Proposal): NonNullable<Observation['proposal']> {
     status: p.status,
     policyOutcome: p.policy.outcome,
     totalValue: totalValue(p.ops),
+    title: p.title ?? null,
+    summary: p.summary ?? null,
+    titleSource: typeof p.meta.titleSource === 'string' ? p.meta.titleSource : null,
     ops: p.ops.map((op) => ({
       action: op.action,
       status: op.status,
@@ -524,6 +527,9 @@ export async function runCopilot(world: World, scenario: Scenario, observation: 
   if (proposals[0]) observation.proposal = proposalFacts(proposals[0]);
 }
 
+/** Recordings already started over by `--force` in this process. */
+const forcedRecordings = new Set<string>();
+
 export async function runScenario(scenario: Scenario, options: RunnerOptions): Promise<ScenarioResult> {
   const log = options.log ?? (() => {});
   const base = {
@@ -551,7 +557,11 @@ export async function runScenario(scenario: Scenario, options: RunnerOptions): P
   }
   // record: calls already in the recording replay for free; only missing ones reach the model
   // (so a scenario is recorded once, and an interrupted pass resumes). --force starts over.
-  if (mode === 'record' && options.force && recordingExists(recording)) removeRecording(recording);
+  // A recording shared by several scenarios is removed once per process, so the others replay it.
+  if (mode === 'record' && options.force && !forcedRecordings.has(recording)) {
+    forcedRecordings.add(recording);
+    if (recordingExists(recording)) removeRecording(recording);
+  }
   const file = mode === 'live' ? join(options.recordingsDir, '..', 'reports', 'live', `${scenario.id}.${Date.now()}.json`) : recording;
 
   let session: LlmSession | null = null;

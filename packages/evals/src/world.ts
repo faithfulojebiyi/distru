@@ -16,8 +16,9 @@ import { Mastra } from '@mastra/core';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { InMemoryStore } from '@mastra/core/storage';
 import { OutboxTransport } from '@ops/connector-email';
+import { buildProfile, createDistruSync, InMemoryContextStore, remember, type ContextClock, type ContextService } from '@ops/context';
 import { createDistruMcpConnector } from '@ops/connector-mcp';
-import type { FetchLike } from '@ops/distru-client';
+import { createDistruClient, type FetchLike } from '@ops/distru-client';
 import { createMockServer } from '@ops/distru-mock';
 import { createHeadsetMock } from '@ops/headset-mock';
 import { agentPrincipal, createHarness, InMemoryAuditSink, InMemoryProposalStore, StaticPolicyRules, type PolicyRuleConfig } from '@ops/harness';
@@ -80,6 +81,30 @@ export function sequentialIds(prefix = 'e7a1'): () => string {
   return () => `${prefix}0000-0000-4000-8000-${(++n).toString(16).padStart(12, '0')}`;
 }
 
+/**
+ * The context layer for a scenario: empty unless `contextSetup` asks for it; then the Distru mock is
+ * synced (not counted as Distru writes or agent traffic), the profile computed and explicit memories
+ * stored, all on the fixed eval clock so tool outputs (and so the recordings) are deterministic.
+ */
+async function contextFor(scenario: Scenario, fetch: (url: string, init?: RequestInit) => Promise<Response>): Promise<ContextService> {
+  const clock: ContextClock = { now: () => new Date(NOW), sleep: async () => {} };
+  const store = new InMemoryContextStore();
+  const setup = scenario.contextSetup;
+  if (!setup) return { store, clock };
+  if (setup.sync) {
+    const client = createDistruClient({ baseUrl: 'http://mock.test', token: 'mock-token', fetch: (url, init) => fetch(url, init) });
+    const run = await createDistruSync({ client, store, clock }).run();
+    if (run.status !== 'ok') throw new Error(`context sync failed: ${run.error ?? run.status}`);
+    await buildProfile(store, { clock });
+  }
+  for (const m of setup.remember) {
+    const vendor = m.vendor ? (await store.list('company')).find((c) => c.name.toLowerCase().includes(m.vendor!.toLowerCase())) : null;
+    if (m.vendor && !vendor) throw new Error(`contextSetup.remember: no synced vendor matches "${m.vendor}" (set sync: true)`);
+    await remember(store, { statement: m.statement, scope: vendor ? 'vendor' : 'global', scopeId: vendor?.sourceId ?? null, by: 'user:evals-operator' }, { clock });
+  }
+  return { store, clock };
+}
+
 export async function createWorld({ scenario, models, pricing, emulators, distruWebhooks }: WorldOptions) {
   /** Where the Distru mock's webhooks go (set by the webhook flow). Default: acknowledged and dropped. */
   const distruHook: { handler: (url: string, init: RequestInit) => Promise<Response> } = { handler: async () => new Response('ok') };
@@ -109,6 +134,7 @@ export async function createWorld({ scenario, models, pricing, emulators, distru
   });
   await connectors.start();
   const outbox = new OutboxTransport({ now: () => new Date(NOW) });
+  const context = await contextFor(scenario, mcpFetch);
   const contexts = buildAppContexts({
     baseUrl: 'http://mock.test',
     token: 'mock-token',
@@ -117,6 +143,7 @@ export async function createWorld({ scenario, models, pricing, emulators, distru
     email: { transport: outbox, from: 'Golden Coast Purchasing <purchasing@goldencoastdistro.com>' },
     mcpClient: () => connectors.mcpClient(),
     ...(emu?.connectComposio ? { composioClient: () => connectors.composioClient() } : {}),
+    context,
   });
   const store = new InMemoryProposalStore();
   const audit = new InMemoryAuditSink();

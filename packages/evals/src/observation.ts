@@ -38,6 +38,10 @@ export const ObservationSchema = z
         status: z.string(),
         policyOutcome: z.string().nullable(),
         totalValue: z.number().nullable(),
+        title: z.string().nullable().default(null),
+        summary: z.string().nullable().default(null),
+        /** `meta.titleSource`: who wrote the headline (agent / template / caller). */
+        titleSource: z.string().nullable().default(null),
         ops: z.array(
           z.object({
             action: z.string(),
