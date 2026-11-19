@@ -30,6 +30,13 @@ numbers parsed from Distru's decimal strings, ISO dates, ids the agent needs, no
 | `vendor_purchase_history` | `vendor_id`, `product_ids`, `statuses`, `limit` | recent POs (lines with unit prices, statuses) + per-product price summary |
 | `open_orders` | `product_ids`, `location_ids`, `statuses`, `limit` | open sales orders with lines + `demand_by_product` |
 | `compliance_check` | `product_ids`, `batches_per_product`=3 | per product `{ status: ok \| blocked \| unknown, reasons[], batches[] }` |
+| `invoices_overdue` | `as_of`=today, `min_days_overdue`=1, `customer_ids`, `limit`=20, `invoices_per_customer`=5 | overdue customer invoices grouped by customer, worst first (most > 60 days, then total): count, total due, oldest days overdue, aging `{ d0_30, d31_60, d61_90, d90_plus }`, partial payments, last payment date, oldest invoices; plus overall totals |
+| `invoices_search` | `customer_ids`, `statuses`, `invoice_number` (contains), `order_numbers`, invoice/due date ranges, `overdue_only`, `min_remaining`, `as_of`, `limit`=25 | invoices newest first (number, customer, order, status, dates, terms, total / paid / remaining, days overdue, payments) + totals over the matches (scans at most 500; `scan_complete`) |
+
+`invoices_overdue` / `invoices_search` (accounts receivable) are exported as `DISTRU_RECEIVABLES_TOOLS`
+but not yet in `distruConnector.readTools`: registering them changes every catalog (agents, MCP) and the
+eval recordings keyed on it. Register with
+`defineConnector({ ...distruConnector, readTools: [...distruConnector.readTools, ...DISTRU_RECEIVABLES_TOOLS] })`.
 
 Action `purchases.upsert` (tool `propose_distru_purchases_upsert`, risk `medium`, scope `propose`):
 `{ vendor_id, location_id, lines: [{ product_id, quantity, unit_price }], expected_delivery_date?, notes?, purchase_id? }`.

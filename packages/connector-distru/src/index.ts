@@ -19,15 +19,33 @@ export {
   type TaskCreatePayload,
   type TaskRecord,
 } from './tasks-create';
-export { velocityReportTool, VelocityReportInput, VelocityReportOutput } from './tools/velocity';
+export { velocityReportTool, VelocityReportInput, VelocityReportOutput, VelocityRowSchema, type VelocityRow } from './tools/velocity';
 export { inventoryTool, productsGetTool, productsSearchTool, vendorsTool, estimateLeadTimes } from './tools/catalog';
 export { vendorPurchaseHistoryTool, openOrdersTool, stripIdempotencyMarkers } from './tools/orders';
+export {
+  DISTRU_RECEIVABLES_TOOLS,
+  invoicesOverdueTool,
+  invoicesSearchTool,
+  InvoicesOverdueInput,
+  InvoicesOverdueOutput,
+  InvoicesSearchInput,
+  InvoicesSearchOutput,
+  InvoiceSummarySchema,
+  agingBucket,
+  daysOverdue,
+  AGING_BUCKETS,
+  INVOICE_SCAN_MAX,
+  type AgingBucket,
+  type InvoiceSummary,
+} from './tools/receivables';
 export { complianceCheckTool, evaluateTestResult, packageProblem, ACTION_LEVELS, type ProductCompliance } from './tools/compliance';
 export {
   distruOrderCreatedTrigger,
   DistruOrderCreatedEventSchema,
   DistruWebhookSchema,
   DISTRU_ORDER_TRIGGER_ID,
+  DISTRU_SYNC_RECORD_TYPES,
+  distruWebhookKey,
   DISTRU_WEBHOOK_SECRET,
   restockScopeFor,
   signDistruBody,
