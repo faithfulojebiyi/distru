@@ -21,6 +21,8 @@
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun test",
     "dev:headset": "bun run --cwd apps/headset-mock dev",
-    "dev:emulators": "bun run --cwd apps/emulators dev"
+    "dev:emulators": "bun run --cwd apps/emulators dev",
+    "evals": "bun run --cwd packages/evals evals",
+    "evals:live": "bun run --cwd packages/evals evals:live"
   }
 }

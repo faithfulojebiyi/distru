@@ -1,0 +1,348 @@
+[
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "700df359405e50a7d2f57cfe"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": true,
+            "location_ids": [
+              "815e2932-b181-444d-af9d-bdc6cb8ba793"
+            ],
+            "lead_time_days": 14,
+            "vendor_ids": [
+              "dfc59530-9daa-4055-93b0-bcf3b589b8e3",
+              "2e5b9399-caa1-40f5-8101-92179728eb42"
+            ],
+            "product_ids": [
+              "0999923b-c0f8-4196-8699-e522a694cadf",
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": true,
+            "location_ids": [
+              "815e2932-b181-444d-af9d-bdc6cb8ba793"
+            ],
+            "lead_time_days": 10,
+            "vendor_ids": [
+              "d40c3ffe-9457-4d71-a93b-c714bc2ece99"
+            ],
+            "product_ids": [
+              "0999923b-c0f8-4196-8699-e522a694cadf",
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": true,
+            "location_ids": [
+              "815e2932-b181-444d-af9d-bdc6cb8ba793"
+            ],
+            "lead_time_days": 21,
+            "vendor_ids": [
+              "84842693-825d-4648-9f77-469d05bd2b18"
+            ],
+            "product_ids": [
+              "0999923b-c0f8-4196-8699-e522a694cadf",
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": true,
+            "location_ids": [
+              "815e2932-b181-444d-af9d-bdc6cb8ba793"
+            ],
+            "lead_time_days": 7,
+            "vendor_ids": [
+              "fda26d01-2a96-46da-8021-be5be83fc921",
+              "7baca7d4-4da5-48c9-a05b-05f1f87ba66b"
+            ],
+            "product_ids": [
+              "0999923b-c0f8-4196-8699-e522a694cadf",
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": false,
+            "location_ids": [
+              "815e2932-b181-444d-af9d-bdc6cb8ba793"
+            ],
+            "lead_time_days": 14,
+            "limit": 100,
+            "product_ids": [
+              "0999923b-c0f8-4196-8699-e522a694cadf",
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 7526,
+        "output": 1438
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "05084f858cda9f4991964e43"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "headset_retail_trends",
+          "arguments": {
+            "skus": [
+              "VAP-BD-1G",
+              "FLW-OGK-35"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 9942,
+        "output": 128
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "9a33c5f4a33b424b0f47fce9"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "headset_demand_signal",
+          "arguments": {
+            "sku": "VAP-BD-1G",
+            "wholesale_days_of_supply": 9.4,
+            "wholesale_avg_daily": 3.498,
+            "lead_time_days": 14
+          }
+        },
+        {
+          "name": "headset_demand_signal",
+          "arguments": {
+            "sku": "FLW-OGK-35",
+            "wholesale_days_of_supply": 111.2,
+            "wholesale_avg_daily": 2.563,
+            "lead_time_days": 7
+          }
+        },
+        {
+          "name": "distru_open_orders",
+          "arguments": {
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e",
+              "0999923b-c0f8-4196-8699-e522a694cadf"
+            ],
+            "location_ids": [
+              "815e2932-b181-444d-af9d-bdc6cb8ba793"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 10298,
+        "output": 506
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "777995712dc545f062880b99"
+    },
+    "reply": {
+      "text": "{\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"at_risk\":[{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"name\":\"Blue Dream Live Resin Cart 1g\",\"vendor_id\":\"2e5b9399-caa1-40f5-8101-92179728eb42\",\"vendor_name\":\"Sierra Extracts Co.\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":33,\"incoming\":0,\"avg_daily_demand\":3.498,\"days_of_supply\":9.4,\"reorder_status\":\"LATE\",\"suggested_qty\":175,\"units_per_case\":25,\"open_order_demand\":8,\"adjusted_days_of_supply\":6.2,\"adjusted_avg_daily_demand\":5.299,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":51.5,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":1,\"reason\":\"Distru: 9.4 days of supply (33 available, nothing incoming) vs 14-day lead time (LATE). Reorder point is 99 and the estimated stockout is 2026-11-28. Open order SO-1732 takes 8 units. Headset: retail surging +51.5% over 3 weeks (+14.7% WoW, 10 stores) → 6.2 adjusted days of supply (reorder_now).\"},{\"product_id\":\"0999923b-c0f8-4196-8699-e522a694cadf\",\"sku\":\"FLW-OGK-35\",\"name\":\"OG Kush 3.5g\",\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"vendor_name\":\"Humboldt Heritage Farms\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":285,\"incoming\":0,\"avg_daily_demand\":2.563,\"days_of_supply\":111.2,\"reorder_status\":\"OK\",\"suggested_qty\":0,\"units_per_case\":24,\"open_order_demand\":0,\"adjusted_days_of_supply\":73.3,\"adjusted_avg_daily_demand\":3.888,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":51.7,\"recommendation\":\"watch\",\"flagged_by\":\"retail\",\"urgency_rank\":2,\"reason\":\"Distru: 111.2 days of supply vs 7-day vendor lead time (OK), with 285 available and no open orders. Headset: retail surging +51.7% over 3 weeks (+13.9% WoW, 10 stores) → 73.3 adjusted days of supply (watch). Stock is deep, but retail demand leads wholesale orders.\"}],\"summary\":\"Two SKUs in scope are flagged, and retail demand moved both up. Blue Dream Live Resin Cart 1g (VAP-BD-1G) is the urgent one. Distru has it LATE at 9.4 days of supply against a 14-day lead time. Retail is surging +51.5%, which brings supply down to 6.2 days, so the recommendation is reorder_now. OG Kush 3.5g (FLW-OGK-35) is fine on Distru at 111 days of supply. Retail is surging +51.7% (73.3 adjusted days), so it is a watch item with no reorder needed now. Note that OG Kush here is a 3.5g flower SKU, not a cart. No OG Kush cart was in scope.\",\"suspicious_text\":[]}",
+      "usage": {
+        "input": 11795,
+        "output": 1308
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "27b3e75ec2bba5fcb0407b24"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_vendors",
+          "arguments": {
+            "vendor_ids": [
+              "2e5b9399-caa1-40f5-8101-92179728eb42"
+            ]
+          }
+        },
+        {
+          "name": "distru_vendor_purchase_history",
+          "arguments": {
+            "vendor_id": "2e5b9399-caa1-40f5-8101-92179728eb42",
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 9324,
+        "output": 212
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "1d7c2a3be1c0c76d60dcb6c1"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_vendors",
+          "arguments": {
+            "vendor_ids": [
+              "fda26d01-2a96-46da-8021-be5be83fc921"
+            ]
+          }
+        },
+        {
+          "name": "distru_vendor_purchase_history",
+          "arguments": {
+            "vendor_id": "fda26d01-2a96-46da-8021-be5be83fc921",
+            "product_ids": [
+              "0999923b-c0f8-4196-8699-e522a694cadf"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 9073,
+        "output": 208
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "3da57d7b90a5b90abd6e62cd"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "propose_distru_purchases_upsert",
+          "arguments": {
+            "vendor_id": "2e5b9399-caa1-40f5-8101-92179728eb42",
+            "location_id": "815e2932-b181-444d-af9d-bdc6cb8ba793",
+            "lines": [
+              {
+                "product_id": "be687b66-3cdc-4210-9164-1c6ad52f057e",
+                "quantity": 175,
+                "unit_price": 18.34
+              }
+            ],
+            "notes": "Restock VAP-BD-1G: retail surging +51.5%, 6.2 adjusted days of supply vs 14-day lead time (LATE). 7 cases of 25."
+          }
+        },
+        {
+          "name": "propose_distru_mcp_mutate_product",
+          "arguments": {
+            "action": "UPDATE",
+            "id": "be687b66-3cdc-4210-9164-1c6ad52f057e",
+            "maxMenuBuyerOrderQuantity": 25,
+            "intent": "Prevent stockout of VAP-BD-1G by sharing remaining stock across buyers until the PO arrives"
+          }
+        }
+      ],
+      "usage": {
+        "input": 10944,
+        "output": 548
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "237002b3ddabbfe25ad086f5"
+    },
+    "reply": {
+      "text": "{\"vendor_id\":\"fda26d01-2a96-46da-8021-be5be83fc921\",\"summary\":\"No PO proposed for Humboldt Heritage Farms. FLW-OGK-35 (OG Kush 3.5g, Oakland Warehouse) is covered, so it was skipped. suggested_qty is 0. Even with the retail-adjusted demand of 3.888/day, the formula gives 3.888 × (7 + 14) = 81.6 units against 285 available and 0 incoming, which is negative. Retail is surging (+51.7% over 3 weeks), but adjusted supply is still 73.3 days against a 7-day lead time. Last price paid was 14.84, for reference. The operator asked about Blue Dream carts, but no Blue Dream SKU was in the at-risk list for this vendor, so I did not evaluate or order it. No allocation-guard caps were listed.\",\"lines\":[{\"product_id\":\"0999923b-c0f8-4196-8699-e522a694cadf\",\"sku\":\"FLW-OGK-35\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"skipped\",\"quantity\":0,\"unit_price\":null,\"reason\":\"Covered: watch only. suggested_qty is 0. The formula using adjusted demand gives 3.888 × 21 = 81.6, minus 285 on hand, which is negative. Re-check if retail growth continues.\"}],\"suspicious_text\":[]}",
+      "usage": {
+        "input": 10672,
+        "output": 592
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "3a1a43da3000030a0419706c"
+    },
+    "reply": {
+      "text": "{\"vendor_id\":\"2e5b9399-caa1-40f5-8101-92179728eb42\",\"summary\":\"Proposed one PO to Sierra Extracts Co. for Oakland Warehouse: 175 units of VAP-BD-1G (7 cases of 25) at $18.34, total $3,209.50. The quantity is the suggested_qty, a whole number of cases and under 3× the suggestion. The price is the last price paid (PO-509). Retail is surging +51.5% over 3 weeks, leaving 6.2 adjusted days of supply against a 14-day lead time (LATE), so this is urgent. I also proposed the allocation-guard cap of 25 units per buyer order on VAP-BD-1G (no cap before). The operator also asked about OG Kush carts at Oakland. That SKU was not among the at-risk SKUs given to me, so I did not plan it.\",\"lines\":[{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":175,\"unit_price\":18.34,\"reason\":\"Used suggested_qty 175, which is 7 whole cases of 25. Retail is surging, with 6.2 adjusted days of supply against a 14-day lead time. Price is the last paid to this vendor (PO-509).\"}],\"suspicious_text\":[]}",
+      "usage": {
+        "input": 11843,
+        "output": 495
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "b143a9abe60b7c535cfa4352"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_compliance_check",
+          "arguments": {
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ]
+          }
+        },
+        {
+          "name": "distru_products_get",
+          "arguments": {
+            "product_id": "be687b66-3cdc-4210-9164-1c6ad52f057e"
+          }
+        }
+      ],
+      "usage": {
+        "input": 2756,
+        "output": 155
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "06909f5c596d221fc825283d"
+    },
+    "reply": {
+      "text": "{\"lines\":[{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok.\",\"Newest batch BD1G-2610-C has a SC Labs Full Panel COA with verdict passed, released 2026-10-17.\",\"All three of its Metrc packages are ACTIVE with lab testing state TestPassed.\",\"Older batches BD1G-2609-B and BD1G-2607-A also passed. No failures on file.\"]}],\"summary\":\"One product reviewed, Blue Dream Live Resin Cart 1g (VAP-BD-1G). It is approved: the newest batch passed its lab test and its Metrc packages are active and passed. No blocking evidence and no suspicious text found.\",\"suspicious_text\":[]}",
+      "usage": {
+        "input": 4470,
+        "output": 286
+      }
+    }
+  }
+]

@@ -13,3 +13,4 @@ apps/web/src/routeTree.gen.ts
 .claude/settings.local.json
 docs/
 .scratch
+packages/evals/reports/

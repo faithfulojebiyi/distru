@@ -1,0 +1,3 @@
+[test]
+# apps/agent's env module validates at import; give it harmless placeholders (no DB is touched).
+preload = ["./src/env-defaults.ts"]

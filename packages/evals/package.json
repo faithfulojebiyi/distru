@@ -1,0 +1,34 @@
+{
+  "name": "@ops/evals",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Eval suite for the Ops Agent: typed scenarios, deterministic assertions, LLM judge, offline record/replay via the LLM emulator, live mode, JSON reports and an eval_run sink.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "evals": "bun src/cli.ts --mode offline",
+    "evals:live": "bun src/cli.ts --mode live",
+    "evals:record": "bun src/cli.ts --mode record",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mastra/core": "~1.85.0",
+    "@mastra/evals": "~1.10.11",
+    "@ops/connector-email": "workspace:*",
+    "@ops/connector-mcp": "workspace:*",
+    "@ops/distru-client": "workspace:*",
+    "@ops/distru-mock": "workspace:*",
+    "@ops/emulators": "workspace:*",
+    "@ops/harness": "workspace:*",
+    "@ops/headset-mock": "workspace:*",
+    "postgres": "^3.4.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^6.0.3"
+  }
+}

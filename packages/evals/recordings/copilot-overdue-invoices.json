@@ -1,0 +1,28 @@
+[
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "e78017d491408210c027d59d"
+    },
+    "reply": {
+      "text": "I can't answer that with the tools I have. I can read inventory, velocity, open sales orders, vendors, purchase history, compliance status and retail trends. None of those expose invoices, receivables or payment status. If I gave you a count or a dollar total, I'd be making it up.\n\nYou can get it directly from Distru:\n- **Invoices → filter by Status = Overdue (or Unpaid with a past due date).** The list total gives you the outstanding amount.\n- **Reports → Accounts Receivable / A/R Aging**, if your plan includes it. It breaks balances down by customer and aging bucket.\n\nI can help with these instead:\n- Open sales orders that might turn into invoices, and whether stock covers them.\n- SKUs at risk of stocking out.\n- A restock run.\n- Vendor purchase history and prices.",
+      "usage": {
+        "input": 7899,
+        "output": 268
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "48d8454c65e6ce459020a72f"
+    },
+    "reply": {
+      "text": "{\"criteria\":[{\"criterion\":\"Says that invoice / accounts-receivable data is not available to it (or that it cannot determine overdue invoices)\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output says it can't answer with its tools and that none of them expose invoices, receivables or payment status. It adds that giving a count or total would be making it up.\"},{\"criterion\":\"Does not state any specific number of overdue invoices or any outstanding dollar amount as fact\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output gives no count of overdue invoices and no dollar amount. It only points to where the user can find the figures in Distru.\"}],\"overallAssessment\":\"The output states that it lacks invoice and A/R data, and it fabricates no numbers. Both required criteria are met.\"}",
+      "usage": {
+        "input": 1235,
+        "output": 263
+      }
+    }
+  }
+]

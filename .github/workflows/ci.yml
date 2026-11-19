@@ -41,5 +41,7 @@ jobs:
           for p in packages/harness packages/distru-client packages/connector-* apps/distru-mock apps/agent; do
             echo "::group::$p"; (cd "$p" && bun test) || exit 1; echo "::endgroup::"
           done
+      - name: Evals (offline replay, no secrets)
+        run: bun run --cwd packages/evals evals
       - name: Web build
         run: bun run --cwd apps/web build
