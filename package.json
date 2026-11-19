@@ -2,8 +2,13 @@
   "name": "distru-ops-agent",
   "private": true,
   "type": "module",
-  "workspaces": ["apps/*", "packages/*"],
-  "engines": { "bun": ">=1.4.0" },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "bun": ">=1.4.0"
+  },
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "dev:web": "bun run --cwd apps/web dev",
@@ -14,6 +19,7 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "typecheck": "bun run --filter '*' typecheck",
-    "test": "bun test"
+    "test": "bun test",
+    "dev:headset": "bun run --cwd apps/headset-mock dev"
   }
 }
