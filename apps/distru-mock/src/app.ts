@@ -18,10 +18,11 @@ import {
   type PdfLimitConfig,
   type RestListLimitConfig,
 } from './ratelimit';
+import { invoiceStatus, invoiceTotal } from './receivables';
 import { isScenario, SCENARIOS, seedStore, type ScenarioName } from './seed';
 import { Serializer } from './serialize';
 import type { Store } from './store';
-import type { LotRec, OrderRec, ProductRec, PurchaseRec } from './types';
+import type { InvoiceRec, LotRec, OrderRec, PaymentRec, ProductRec, PurchaseRec } from './types';
 import type { ApiErrorItem } from './upsert';
 import { inventoryVelocityReport } from './velocity';
 import { WebhookDispatcher, type WebhookType } from './webhooks';
@@ -58,6 +59,8 @@ export interface MockOptions {
   publicUrl?: string;
   /** clock for rate limiting (ms since epoch); default Date.now */
   clock?: Clock;
+  /** Seed older POs with late receipts and short shipments (see seed-year.ts). Default false. */
+  poVariation?: boolean;
 }
 
 const err = (c: Context, status: 400 | 401 | 403 | 404 | 429, errors: ApiErrorItem[]) => c.json({ errors }, status);
@@ -103,6 +106,20 @@ class Query {
     }
     return n;
   }
+  /** `min,max` inclusive decimal range; either side optional (both empty is rejected). */
+  numRange(name: string): ((n: number) => boolean) | undefined {
+    const v = this.str(name);
+    if (v === undefined) return undefined;
+    const parts = v.split(',');
+    const parse = (s: string | undefined) => (s === undefined || s.trim() === '' ? null : Number(s.trim()));
+    const min = parse(parts[0]);
+    const max = parse(parts[1]);
+    if (parts.length > 2 || (min === null && max === null) || (min !== null && Number.isNaN(min)) || (max !== null && Number.isNaN(max))) {
+      this.errors.push({ message: 'must be a decimal range "min,max" (either side optional)', pointer: [name] });
+      return undefined;
+    }
+    return (n) => (min === null || n >= min - 1e-9) && (max === null || n <= max + 1e-9);
+  }
   /** `min,max` inclusive datetime range; either side optional. */
   range(name: string): ((iso: string | null | undefined) => boolean) | undefined {
     const v = this.str(name);
@@ -139,7 +156,8 @@ export function createMockServer(opts: MockOptions = {}) {
   const mcpLimiter = new McpRateLimiter({ ...DEFAULT_MCP_LIMIT, ...opts.mcpRateLimit }, clock);
   const state = {
     scenario: (opts.scenario ?? 'default') as ScenarioName,
-    store: seedStore(opts.scenario ?? 'default', anchor()),
+    store: seedStore(opts.scenario ?? 'default', anchor(), { poVariation: opts.poVariation === true }),
+    poVariation: opts.poVariation === true,
     rateLimit: { fail_next: 0, every: 0, retry_after: 2, ...legacyRl, list: restLimiter.config, pdf: restLimiter.pdf } as RateLimitConfig,
     requests: 0,
     metrc: { fail_next: 0 },
@@ -168,6 +186,10 @@ export function createMockServer(opts: MockOptions = {}) {
         const co = s.companies.get(id);
         return co ? ser.company(co) : null;
       }
+      case 'INVOICE': {
+        const inv = s.invoices.get(id);
+        return inv ? ser.invoice(inv) : null;
+      }
       default:
         return null;
     }
@@ -183,9 +205,10 @@ export function createMockServer(opts: MockOptions = {}) {
     resolveWebhookObject,
   );
   const ops = new Ops({ store: () => state.store, ser: () => ser, webhooks, metrc: state.metrc });
-  const reset = (scenario: ScenarioName = state.scenario, now?: Date) => {
+  const reset = (scenario: ScenarioName = state.scenario, now?: Date, poVariation: boolean = state.poVariation) => {
     state.scenario = scenario;
-    state.store = seedStore(scenario, now ?? anchor());
+    state.poVariation = poVariation;
+    state.store = seedStore(scenario, now ?? anchor(), { poVariation });
     ser = new Serializer(state.store);
     restLimiter.reset();
     mcpLimiter.reset();
@@ -616,6 +639,157 @@ export function createMockServer(opts: MockOptions = {}) {
     return c.body(null, 204);
   });
 
+  // ── accounts receivable: invoices, payments, payment methods ─────────────────────────────────
+  const INVOICE_STATUSES = ['NOT_PAID', 'PARTIALLY_PAID', 'FULLY_PAID', 'OVER_PAID'] as const;
+  const byNewest = <T extends { id: string }>(at: (x: T) => string) => (a: T, b: T) => (at(a) === at(b) ? a.id.localeCompare(b.id) : at(a) < at(b) ? 1 : -1);
+
+  app.get('/public/v1/invoices', (c) => {
+    const q = new Query(c.req.url);
+    const f = {
+      ids: q.arr('ids'),
+      statuses: q.enumArr('statuses', INVOICE_STATUSES),
+      company_ids: q.arr('company_ids'),
+      order_ids: q.arr('order_ids'),
+      order_numbers: q.arr('order_numbers')?.map((x) => x.toLowerCase()),
+      order_statuses: q.enumArr('order_statuses', ORDER_STATUSES),
+      owner_ids: q.arr('owner_ids'),
+      invoice_number: q.str('invoice_number')?.toLowerCase(),
+      invoice_numbers: q.arr('invoice_numbers'),
+      is_voided: q.bool('is_voided'),
+      product_ids: q.arr('product_ids'),
+      product_skus: q.arr('product_skus')?.map((x) => x.toLowerCase()),
+      vendor_ids: q.arr('product_vendor_ids'),
+      batch_ids: q.arr('batch_ids'),
+      due: q.range('due_datetime'),
+      invoice_dt: q.range('invoice_datetime'),
+      inserted: q.range('inserted_datetime'),
+      updated: q.range('updated_datetime'),
+      voided: q.range('voided_datetime'),
+      total: q.numRange('total'),
+      remaining: q.numRange('remaining_amount'),
+    };
+    if (q.errors.length) return err(c, 400, q.errors);
+    const s = S();
+    const needsItem = f.product_ids || f.product_skus || f.vendor_ids || f.batch_ids;
+    const list = [...s.invoices.values()]
+      .filter((inv) => {
+        if (f.ids && !f.ids.includes(inv.id)) return false;
+        if (f.company_ids && !f.company_ids.includes(inv.company_id)) return false;
+        if (f.order_ids && !f.order_ids.includes(inv.order_id)) return false;
+        if (f.owner_ids && (!inv.owner_id || !f.owner_ids.includes(inv.owner_id))) return false;
+        if (f.invoice_number && !inv.invoice_number.toLowerCase().includes(f.invoice_number)) return false;
+        if (f.invoice_numbers && !f.invoice_numbers.includes(inv.invoice_number)) return false;
+        if (f.is_voided !== undefined && (inv.voided_datetime !== null) !== f.is_voided) return false;
+        if (f.due && !f.due(inv.due_datetime)) return false;
+        if (f.invoice_dt && !f.invoice_dt(inv.invoice_datetime)) return false;
+        if (f.inserted && !f.inserted(inv.inserted_datetime)) return false;
+        if (f.updated && !f.updated(inv.updated_datetime)) return false;
+        if (f.voided && !f.voided(inv.voided_datetime)) return false;
+        const o = s.orders.get(inv.order_id);
+        if (f.order_numbers && (!o || !f.order_numbers.includes(o.order_number.toLowerCase()))) return false;
+        if (f.order_statuses && (!o || !f.order_statuses.includes(o.status))) return false;
+        if (needsItem) {
+          const lines = new Map((o?.items ?? []).map((i) => [i.id, i]));
+          const hit = inv.items.some((it) => {
+            const line = lines.get(it.order_item_id);
+            const p = line ? productOf(line.product_id) : undefined;
+            if (!line || !p) return false;
+            if (f.product_ids && !f.product_ids.includes(p.id)) return false;
+            if (f.product_skus && !f.product_skus.includes(p.sku.toLowerCase())) return false;
+            if (f.vendor_ids && !f.vendor_ids.includes(p.vendor_id)) return false;
+            if (f.batch_ids && (!line.batch_id || !f.batch_ids.includes(line.batch_id))) return false;
+            return true;
+          });
+          if (!hit) return false;
+        }
+        if (f.statuses || f.total || f.remaining) {
+          const total = invoiceTotal(s, inv);
+          const paid = s.invoicePaid(inv.id);
+          if (f.statuses && !f.statuses.includes(invoiceStatus(total, paid))) return false;
+          if (f.total && !f.total(total)) return false;
+          if (f.remaining && !f.remaining(Math.round((total - paid) * 100) / 100)) return false;
+        }
+        return true;
+      })
+      .sort(byNewest<InvoiceRec>((x) => x.invoice_datetime));
+    return page(c, list, (inv) => ser.invoice(inv));
+  });
+
+  app.get('/public/v1/invoices/:id', (c) => {
+    const inv = S().invoices.get(c.req.param('id'));
+    return inv ? c.json({ data: ser.invoice(inv) }) : notFound(c, 'Invoice not found');
+  });
+
+  app.post('/public/v1/invoices/:id/payments', async (c) => {
+    const parsed = await readJson(c);
+    if (!parsed.ok) return err(c, 400, [{ message: 'Request body is not valid JSON', pointer: ['base'] }]);
+    const res = ops.recordInvoicePayment(c.req.param('id'), parsed.body, 'PUBLIC_API');
+    if (!res.ok) return err(c, res.status, res.errors);
+    return c.json({ data: ser.payment(res.payment, { created: true }) }, 200);
+  });
+
+  app.get('/public/v1/payments', (c) => {
+    const q = new Query(c.req.url);
+    const f = {
+      ids: q.arr('ids'),
+      company_ids: q.arr('company_ids'),
+      invoice_ids: q.arr('invoice_ids'),
+      purchase_ids: q.arr('purchase_ids'),
+      method_ids: q.arr('payment_method_ids'),
+      amount: q.numRange('amount'),
+      paid_at: q.range('payment_datetime'),
+      inserted: q.range('inserted_datetime'),
+      updated: q.range('updated_datetime'),
+      payment_number: q.str('payment_number')?.toLowerCase(),
+      status: q.str('payment_status'),
+      type: q.str('payment_type'),
+    };
+    if (f.status && !['POSTED', 'VOIDED'].includes(f.status)) q.errors.push({ message: 'must be one of POSTED, VOIDED', pointer: ['payment_status'] });
+    if (f.type && !['INVOICE', 'PURCHASE'].includes(f.type)) q.errors.push({ message: 'must be one of INVOICE, PURCHASE', pointer: ['payment_type'] });
+    if (q.errors.length) return err(c, 400, q.errors);
+    // the mock only records invoice payments: a purchase filter matches nothing
+    const list = [...S().payments.values()]
+      .filter((p) => {
+        if (f.purchase_ids || f.type === 'PURCHASE') return false;
+        if (f.ids && !f.ids.includes(p.id)) return false;
+        if (f.company_ids && !f.company_ids.includes(p.company_id)) return false;
+        if (f.invoice_ids && !f.invoice_ids.includes(p.invoice_id)) return false;
+        if (f.method_ids && (!p.payment_method_id || !f.method_ids.includes(p.payment_method_id))) return false;
+        if (f.amount && !f.amount(p.amount)) return false;
+        if (f.paid_at && !f.paid_at(p.payment_datetime)) return false;
+        if (f.inserted && !f.inserted(p.inserted_datetime)) return false;
+        if (f.updated && !f.updated(p.updated_datetime)) return false;
+        if (f.payment_number && !p.payment_number.toLowerCase().includes(f.payment_number)) return false;
+        if (f.status && p.status !== f.status) return false;
+        return true;
+      })
+      .sort(byNewest<PaymentRec>((x) => x.payment_datetime));
+    return page(c, list, (p) => ser.payment(p));
+  });
+
+  app.get('/public/v1/payments/:id', (c) => {
+    const p = S().payments.get(c.req.param('id'));
+    return p ? c.json({ data: ser.payment(p, { detail: true }) }) : notFound(c, 'Payment not found');
+  });
+
+  app.get('/public/v1/payment-methods', (c) => {
+    const q = new Query(c.req.url);
+    const ids = q.arr('ids');
+    const deleted = q.str('deleted') ?? 'no';
+    if (!['no', 'only', 'include'].includes(deleted)) q.errors.push({ message: 'must be one of no, only, include', pointer: ['deleted'] });
+    const inserted = q.range('inserted_datetime');
+    const updated = q.range('updated_datetime');
+    if (q.errors.length) return err(c, 400, q.errors);
+    // the mock never soft-deletes payment methods
+    const list = deleted === 'only' ? [] : [...S().paymentMethods.values()].filter((m) => (!ids || ids.includes(m.id)) && (!inserted || inserted(m.inserted_datetime)) && (!updated || updated(m.updated_datetime)));
+    return page(c, list, (m) => ser.paymentMethod(m));
+  });
+
+  app.get('/public/v1/payment-methods/:id', (c) => {
+    const m = S().paymentMethods.get(c.req.param('id'));
+    return m ? c.json({ data: ser.paymentMethod(m) }) : notFound(c, 'Payment method not found');
+  });
+
   // ── compliance: metrc packages, test results, batches ────────────────────────────────────────
   const METRC_STATUSES = ['ACTIVE', 'DISCONTINUED', 'FINISHED', 'ONHOLD', 'TRANSFERRED'] as const;
   app.get('/public/v1/metrc/packages', (c) => {
@@ -945,7 +1119,7 @@ export function createMockServer(opts: MockOptions = {}) {
 
   app.post('/__mock/reset', async (c) => {
     const text = await c.req.text();
-    let body: { scenario?: unknown; now?: unknown } = {};
+    let body: { scenario?: unknown; now?: unknown; po_variation?: unknown } = {};
     if (text.trim()) {
       try {
         body = JSON.parse(text);
@@ -958,7 +1132,8 @@ export function createMockServer(opts: MockOptions = {}) {
       return err(c, 400, [{ message: `unknown scenario; one of ${Object.keys(SCENARIOS).join(', ')}`, pointer: ['scenario'] }]);
     }
     const now = typeof body.now === 'string' && !Number.isNaN(Date.parse(body.now)) ? new Date(body.now) : undefined;
-    reset(scenario, now);
+    if (body.po_variation !== undefined && typeof body.po_variation !== 'boolean') return err(c, 400, [{ message: 'must be true or false', pointer: ['po_variation'] }]);
+    reset(scenario, now, typeof body.po_variation === 'boolean' ? body.po_variation : undefined);
     state.rateLimit.fail_next = 0;
     return c.json({ ok: true, seed: S().summary });
   });
@@ -968,6 +1143,7 @@ export function createMockServer(opts: MockOptions = {}) {
     return {
       scenario: state.scenario,
       seed: s.summary,
+      po_variation: state.poVariation,
       config: configView(),
       requests: state.requests,
       rate_limit_budget: { list: restLimiter.headers(), pdf: { minute_remaining: restLimiter.pdfMinute.remaining(), day_remaining: restLimiter.pdfDay.remaining() } },
@@ -981,6 +1157,8 @@ export function createMockServer(opts: MockOptions = {}) {
         orders: s.orders.size,
         open_orders: [...s.orders.values()].filter((o) => ['PENDING', 'PROCESSING', 'READY_TO_SHIP', 'DELIVERING'].includes(o.status)).length,
         purchases: s.purchases.size,
+        invoices: s.invoices.size,
+        payments: s.payments.size,
         users: s.users.size,
         tasks: s.tasks.size,
         custom_fields: s.customFields.size,
@@ -1167,6 +1345,9 @@ export function createMockServer(opts: MockOptions = {}) {
     },
     get scenario() {
       return state.scenario;
+    },
+    get poVariation() {
+      return state.poVariation;
     },
     get rateLimit() {
       return state.rateLimit;

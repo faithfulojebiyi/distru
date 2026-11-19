@@ -6,8 +6,9 @@
  * - webhooks: PURCHASE / ORDER for the record itself, PRODUCT when a product's company-wide active or
  *   reserved quantity changed (changes carry quantity_active / quantity_reserved / quantity_available),
  *   PACKAGE when a package (a tagged lot) was created or its quantity / status changed.
- *   The store has no invoices, so no INVOICE webhooks fire.
+ * - INVOICE UPDATE when a payment is recorded against an invoice (changes: paid_amount, remaining_amount, status).
  */
+import { recordInvoicePayment, type PaymentWrite } from './receivables';
 import { diffFields, orderRows, purchaseRows, recordActivity, taskRecordType, taskRows } from './history';
 import {
   adjustInventory as adjustInventoryRec,
@@ -124,6 +125,43 @@ export class Ops {
     recordActivity(this.s, { source, records: [{ type: 'SALES_ORDER', id: res.record.id, name: res.record.order_number, op: res.created ? 'INSERT' : 'UPDATE', rows: orderRows(this.s, res.before, res.record) }] });
     this.ctx.webhooks.emit('ORDER', res.created ? 'CREATE' : 'UPDATE', res.record.id, computeChanges(beforeApi, after));
     this.emitStock(snap);
+    return res;
+  }
+
+  /** POST /invoices/{id}/payments: the payment, an activity entry and an INVOICE UPDATE webhook. */
+  recordInvoicePayment(invoiceId: string, body: unknown, source: ActivitySource): PaymentWrite {
+    const prev = this.s.invoices.get(invoiceId);
+    const beforeApi = prev ? this.ser.invoice(prev) : null;
+    const res = recordInvoicePayment(this.s, invoiceId, body);
+    if (!res.ok) return res;
+    const after = this.ser.invoice(res.invoice);
+    recordActivity(this.s, {
+      source,
+      records: [
+        {
+          type: 'INVOICE',
+          id: res.invoice.id,
+          name: res.invoice.invoice_number,
+          op: 'UPDATE',
+          rows: [
+            {
+              entity: 'payment',
+              entity_label: 'Payment',
+              op: 'INSERT',
+              row_id: res.payment.id,
+              row_label: res.payment.payment_number,
+              fields: [
+                { field: 'amount', label: 'Amount', old_value: null, new_value: fmtNum(res.payment.amount, 2) },
+                { field: 'payment_datetime', label: 'Payment date', old_value: null, new_value: res.payment.payment_datetime },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const changes: Record<string, unknown> = {};
+    for (const k of ['paid_amount', 'remaining_amount', 'status'] as const) if (beforeApi && beforeApi[k] !== after[k]) changes[k] = { before: beforeApi[k], after: after[k] };
+    this.ctx.webhooks.emit('INVOICE', 'UPDATE', res.invoice.id, changes);
     return res;
   }
 

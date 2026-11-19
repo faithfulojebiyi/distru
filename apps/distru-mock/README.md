@@ -8,21 +8,43 @@ A mock of Distru built from Distru's own docs, with one in-memory store behind t
 A write made on either surface shows up on the other. For example, a PO created with `distru-mutate-purchase-order` is listed by `GET /public/v1/purchases`.
 
 ```bash
-bun run dev            # http://localhost:4500  (PORT, MOCK_SCENARIO, MOCK_NOW, WEBHOOK_URL, WEBHOOK_SECRET, ...)
+bun run dev            # http://localhost:4500  (PORT, MOCK_SCENARIO, MOCK_NOW, MOCK_PO_VARIATION, WEBHOOK_URL, WEBHOOK_SECRET, ...)
 bun test               # REST, schema, client integration, MCP and menu tests
 bun run gen:mcp-schemas  # regenerate src/mcp/schemas.gen.ts from docs/research/mcptools/*.md
 ```
 
 ## Seeded world
 
-`src/seed.ts` builds one deterministic distributor (3 own locations, 6 vendors, 43 products, 120 days of
-sales). Scenarios (`MOCK_SCENARIO`) only flip data; ids stay the same.
+`src/seed.ts` builds one deterministic distributor (3 own locations, 6 vendors, 6 dispensary customers,
+43 products, 12 months of sales, a year of purchase orders, accounts receivable). Scenarios
+(`MOCK_SCENARIO`) only flip data; ids stay the same.
 
 - **default**: the 8 canonical SKUs (`LOW_STOCK_SKUS`) are below their reorder point company-wide and at
   every location (Oakland shows 7–8 depending on the lead time), FLW-WC-35's newest batch failed its lab
   test (its packages are on hold everywhere), VAP-PE-1G's description carries a prompt injection.
 - **clean**: like default without the two hazards. **failed-lab-test** / **prompt-injection**: one hazard each.
 - **no-reorder-needed**: nothing is below its reorder point anywhere, for any lead time from 7 to 21 days.
+
+History (`src/seed-year.ts`, `src/receivables.ts`; each from its own PRNG, so the core seed's ids and its
+last 120 days of sales never move):
+
+- **Sales, 12 months.** The last 120 days are the core seed (SO-1001 onwards); the 245 days before them
+  (SO-<n> below 1001, oldest first) have mild seasonality: a holiday bump (late Nov–Dec), the 4/20 week, a
+  January lull and a summer dip (Jun–Aug). They feed the 365-day half of the demand rate, so stock is
+  calibrated after them and the at-risk sets above are unchanged.
+- **Purchase orders.** 8–12 COMPLETED POs per vendor over the year (the core seed's three, PO-501…, plus
+  older ones numbered below PO-501). Each vendor's most recent completed PO carries one price increase
+  (HHF +4 %, ETG +5 %, SEC +8 %, GSE +6 %, CCV +7 %, MPR +5 %; that generation's batch cost and the open GSE
+  PO follow). By default every receipt is on time and complete. `MOCK_PO_VARIATION=1` (or
+  `poVariation: true`, or `POST /__mock/reset {"po_variation": true}`) adds a few late receipts (lead time
+  above the promised one; Sierra Extracts the worst, p90 ≈ 26 days vs 14) and short shipments on the
+  older POs, without changing any id. It is opt-in because `@ops/context`'s profile test expects 100 %
+  on-time and fill rate.
+- **Accounts receivable.** One invoice per COMPLETED / DELIVERED order (`INV-1xxxx`, dated on the order
+  date, due on the customer's Net 15 / Net 30 term), and payments that follow each customer's habits
+  (ACH / check / cash). Harbor Greens is clearly the worst account (~$18.7k more than 60 days past due,
+  partial payments on its 31–60 day invoices); Canopy Club Sacramento has two invoices 31–60 days late, The
+  Herbal Cure one part-paid invoice, Sunset a few days late; Green Leaf and Elevate are current.
 
 Stock is calibrated per location against each location's own sales (about half ship from Oakland, a
 quarter each from Los Angeles and Sacramento), so a `location_ids`-filtered velocity report is as
@@ -33,14 +55,13 @@ Note on the velocity report: as in Distru, without `lead_time_days` no row has a
 
 ## REST
 
-- **Endpoints:** inventory-velocity report, inventory, products, companies, locations, orders, purchases (upsert, plus `POST /purchases/{id}/pdf`), metrc packages, test results, batches, tasks (list, get, upsert, delete), users, custom fields (list, get, create; `custom_data` on purchases is validated, returned and filterable for dropdown/checkbox fields), deleted records, activity and record history. Activity and record history are fed by both REST writes (`PUBLIC_API`) and MCP writes (`MCP`).
+- **Endpoints:** inventory-velocity report, inventory, products, companies, locations, orders (with their `invoices`), purchases (upsert, plus `POST /purchases/{id}/pdf`), invoices (list with Distru's filters incl. `statuses`, `due_datetime`, `remaining_amount`, `total`; get; `POST /invoices/{id}/payments`, capped at the balance with the excess returned as an `overpayment_credits` entry), payments (list, get), payment methods (list, get), metrc packages, test results, batches, tasks (list, get, upsert, delete), users, custom fields (list, get, create; `custom_data` on purchases is validated, returned and filterable for dropdown/checkbox fields), deleted records, activity and record history. Activity and record history are fed by both REST writes (`PUBLIC_API`) and MCP writes (`MCP`).
 - **List rate limit:** a token bucket of 3,000 calls refilling at 5 per minute. It applies to the paginated lists with an `updated_datetime` filter. A call whose `updated_datetime` lower bound is within the last 30 days is free and is never refused. `/activity` is free when it has no `changed_datetime`. Get-by-id, `/inventory`, reports and Metrc lists are unlimited. Responses carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; a refused call gets a 429 with `Retry-After`.
 - **PDF limit:** 20 successful PDFs per minute and 1,000 per day, as sliding windows.
-- **Webhooks:** ORDER, PURCHASE, PRODUCT, PACKAGE.
+- **Webhooks:** ORDER, PURCHASE, PRODUCT, PACKAGE, INVOICE (UPDATE when a payment is recorded).
   - PRODUCT fires when a company-wide active or reserved quantity changes. PACKAGE fires when a package is created or its quantity or status changes.
   - Deliveries for one record go out in order, one at a time. `object` is fetched when the webhook is sent.
   - Failed deliveries are retried about 10 times over about 4 hours (`MOCK_WEBHOOK_RETRY_DELAYS_MS` or `webhookRetryDelaysMs` to shorten).
-  - The store has no invoices, so no INVOICE webhooks fire.
 - **Control plane:**
   - `GET /__mock/state` shows counts, activity, outbox, MCP telemetry, menus and buyer caps.
   - `GET` or `POST /__mock/config` changes:
@@ -48,7 +69,7 @@ Note on the velocity report: as in Distru, without `lead_time_days` no row has a
     - `mcp_rate_limit`;
     - `webhook_url` and `webhook_retry_delays_ms`;
     - `metrc_fail_next`.
-  - `POST /__mock/reset` and `POST /__mock/simulate/order` (takes an optional `menu_id` and `placed_by: buyer|sales_rep`).
+  - `POST /__mock/reset` (`{ scenario?, now?, po_variation? }`) and `POST /__mock/simulate/order` (takes an optional `menu_id` and `placed_by: buyer|sales_rep`).
 
 ## MCP
 

@@ -14,6 +14,7 @@ const mock = createMockServer({
   webhookSecret: env.WEBHOOK_SECRET ?? 'mock-webhook-secret',
   publicUrl: env.MOCK_PUBLIC_URL || undefined,
   mcpKey: env.DISTRU_MCP_MOCK_KEY || undefined,
+  poVariation: env.MOCK_PO_VARIATION === '1' || env.MOCK_PO_VARIATION === 'true',
   webhookRetryDelaysMs: env.MOCK_WEBHOOK_RETRY_DELAYS_MS ? env.MOCK_WEBHOOK_RETRY_DELAYS_MS.split(',').map(Number) : undefined,
   rateLimit: {
     every: env.MOCK_RATE_LIMIT_EVERY ? Number(env.MOCK_RATE_LIMIT_EVERY) : 0,

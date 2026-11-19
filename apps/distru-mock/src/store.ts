@@ -5,6 +5,7 @@ import type {
   CompanyRec,
   CustomFieldDefRec,
   DeletedRecordRec,
+  InvoiceRec,
   LicenseRec,
   LocationRec,
   LotRec,
@@ -12,6 +13,8 @@ import type {
   MenuRec,
   OrderRec,
   OutboxEntry,
+  PaymentMethodRec,
+  PaymentRec,
   ProductRec,
   PurchaseRec,
   SeedSummary,
@@ -21,6 +24,8 @@ import type {
   UserRec,
   WebhookLogEntry,
 } from './types';
+
+const HEX = Array.from({ length: 256 }, (_, b) => b.toString(16).padStart(2, '0'));
 
 /** Deterministic PRNG (mulberry32). */
 export function rng(seed: number) {
@@ -37,11 +42,15 @@ export function rng(seed: number) {
     int: (min: number, max: number) => min + Math.floor(next() * (max - min + 1)),
     pick: <T>(arr: readonly T[]): T => arr[Math.floor(next() * arr.length)]!,
     uuid: () => {
-      const h = Array.from({ length: 16 }, () => Math.floor(next() * 256));
-      h[6] = (h[6]! & 0x0f) | 0x40;
-      h[8] = (h[8]! & 0x3f) | 0x80;
-      const s = h.map((b) => b.toString(16).padStart(2, '0')).join('');
-      return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
+      let s = '';
+      for (let i = 0; i < 16; i++) {
+        let b = Math.floor(next() * 256);
+        if (i === 6) b = (b & 0x0f) | 0x40;
+        else if (i === 8) b = (b & 0x3f) | 0x80;
+        s += HEX[b]!;
+        if (i === 3 || i === 5 || i === 7 || i === 9) s += '-';
+      }
+      return s;
     },
     poisson: (lambda: number) => {
       if (lambda <= 0) return 0;
@@ -74,6 +83,12 @@ export class Store {
   tasks = new Map<string, TaskRec>();
   customFields = new Map<number, CustomFieldDefRec>();
   adjustments = new Map<string, StockAdjustmentRec>();
+  /** accounts receivable: invoices (one per billed sales order), payments against them, payment methods */
+  invoices = new Map<string, InvoiceRec>();
+  payments = new Map<string, PaymentRec>();
+  paymentMethods = new Map<string, PaymentMethodRec>();
+  /** order id → its invoice ids */
+  invoiceIdsByOrder = new Map<string, string[]>();
   /** tombstones for GET /deleted-records (kept 90 days in Distru) */
   deletedRecords: DeletedRecordRec[] = [];
   /** operations, newest last: feeds GET /activity, GET /record-history and the MCP history tools */
@@ -92,7 +107,7 @@ export class Store {
   /** time the seed is anchored to */
   now: Date = new Date();
   summary: SeedSummary | null = null;
-  counters = { order: 1000, purchase: 500, metrcPackage: 900000, metrcTransfer: 70000, customField: 4820, metrcActivity: 310000 };
+  counters = { order: 1000, purchase: 500, metrcPackage: 900000, metrcTransfer: 70000, customField: 4820, metrcActivity: 310000, invoice: 10000, payment: 50000, credit: 700 };
   /** id generator for records created at runtime (random, unlike the seed's deterministic ids) */
   newId: () => string = () => crypto.randomUUID();
 
@@ -121,6 +136,28 @@ export class Store {
     }
     return s;
   }
+
+  /** Sum of an invoice's active (posted) payments. */
+  invoicePaid(invoiceId: string): number {
+    let s = 0;
+    for (const p of this.paymentsOf(invoiceId)) if (p.status === 'POSTED') s += p.amount;
+    return Math.round(s * 100) / 100;
+  }
+
+  /** An invoice's payments (posted and voided), oldest first. */
+  paymentsOf(invoiceId: string): PaymentRec[] {
+    return this.#paymentsByInvoice.get(invoiceId) ?? [];
+  }
+
+  addPayment(p: PaymentRec): void {
+    this.payments.set(p.id, p);
+    const list = this.#paymentsByInvoice.get(p.invoice_id) ?? [];
+    list.push(p);
+    list.sort((a, b) => (a.payment_datetime === b.payment_datetime ? a.payment_number.localeCompare(b.payment_number) : a.payment_datetime < b.payment_datetime ? -1 : 1));
+    this.#paymentsByInvoice.set(p.invoice_id, list);
+  }
+
+  #paymentsByInvoice = new Map<string, PaymentRec[]>();
 
   /** Units still to receive on open purchases (excluding drafts). */
   quantityIncoming(productId: string, opts: { olderThan?: Date; newerThan?: Date; locationIds?: string[] } = {}): number {

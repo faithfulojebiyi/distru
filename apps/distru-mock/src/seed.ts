@@ -1,12 +1,15 @@
 /**
  * Deterministic seed: a California cannabis distributor ("Golden Coast Distribution") with 3 licensed
- * locations, 6 vendors, 6 dispensary customers, 43 products, ~120 days of sales, purchase history,
- * batches, Metrc packages and lab results.
+ * locations, 6 vendors, 6 dispensary customers, 43 products, 12 months of sales (the last 120 days from
+ * the core PRNG, older months from seed-year.ts), purchase history, batches, Metrc packages, lab results
+ * and accounts receivable (invoices + payments, receivables.ts).
  *
  * Ids are identical across scenarios (same PRNG call sequence); scenarios only flip data afterwards.
  * Dates are anchored to `now` (UTC day), so velocity figures are stable for a given day.
  */
 import { seedMenus } from './menus';
+import { seedReceivables } from './receivables';
+import { applyPriceIncreases, seedOlderPurchases, seedOlderSales } from './seed-year';
 import { rng, Store, type Rng } from './store';
 import type {
   BatchRec,
@@ -253,7 +256,15 @@ function calibrateBranchStock(
   }
 }
 
-export function seedStore(scenario: ScenarioName = 'default', now: Date = new Date()): Store {
+export interface SeedOptions {
+  /**
+   * Older purchase orders get realistic receipt variation: a few late receipts (lead time above the
+   * vendor's promised one) and short shipments. Off by default (every PO arrives on time and complete).
+   */
+  poVariation?: boolean;
+}
+
+export function seedStore(scenario: ScenarioName = 'default', now: Date = new Date(), options: SeedOptions = {}): Store {
   const flags = SCENARIOS[scenario];
   const r: Rng = rng(20251104);
   const store = new Store();
@@ -508,6 +519,9 @@ export function seedStore(scenario: ScenarioName = 'default', now: Date = new Da
     lotsByBatchPending.push({ item, batchId: batch?.id ?? null });
   }
   for (const o of historyOrders) if (o.items.length) store.orders.set(o.id, o);
+  // months 4–12 (own PRNG): feed the 365-day half of the demand rate, so they precede the calibration
+  const demandBySku = new Map(CATALOG.map((e) => [e.sku, e.demand]));
+  seedOlderSales({ store, products, demandBySku, customerIds, customerLoc, locations: [OAK, LA, SAC], today, inactiveSku: INACTIVE_SKU });
 
   // ── open orders (today) — these reserve stock ─────────────────────────────────────────────
   const openStatuses: OrderStatus[] = ['PENDING', 'PENDING', 'PENDING', 'PROCESSING', 'PROCESSING', 'PROCESSING', 'READY_TO_SHIP', 'READY_TO_SHIP'];
@@ -650,6 +664,7 @@ export function seedStore(scenario: ScenarioName = 'default', now: Date = new Da
   if (failedTest) for (const lot of store.lots.values()) if (lot.batch_id === failedBatch.id) lot.on_hold = true;
 
   // ── purchase history ──────────────────────────────────────────────────────────────────────
+  const corePos = new Map<string, PurchaseRec[]>();
   for (const [key, vendorId] of Object.entries(vendorIds) as [VendorKey, string][]) {
     const vendor = store.companies.get(vendorId)!;
     const vProducts = products.filter((p) => p.vendor_id === vendorId);
@@ -699,6 +714,7 @@ export function seedStore(scenario: ScenarioName = 'default', now: Date = new Da
         updated_datetime: daysAgo(receivedAgo, 15),
       };
       store.purchases.set(po.id, po);
+      corePos.set(vendorId, [...(corePos.get(vendorId) ?? []), po]);
     });
   }
   // one open PO with stock still incoming (EDB-CHO-DK) and one draft
@@ -745,6 +761,9 @@ export function seedStore(scenario: ScenarioName = 'default', now: Date = new Da
     updated_datetime: daysAgo(2, 10),
   };
   store.purchases.set(draft.id, draft);
+  // a year of completed POs per vendor (own PRNG) and one price increase per vendor
+  seedOlderPurchases({ store, products, demandBySku, vendorIds, oakland: OAK, today, variation: options.poVariation === true });
+  applyPriceIncreases({ store, vendorIds, corePos, openPos: [openPo] });
 
   calibrateBranchStock(store, {
     locations: [LA, SAC],
@@ -812,6 +831,8 @@ export function seedStore(scenario: ScenarioName = 'default', now: Date = new Da
   task({ name: 'Quarterly vendor review: Humboldt Heritage Farms', due: 10, owner: 0, link: { kind: 'company', id: vendorIds.HHF } });
   task({ name: 'Cycle count Oakland Warehouse vapes', due: -1, owner: 2, link: null, status: 'COMPLETED' });
   seedMenus(store, r2, created);
+  // ── accounts receivable (own PRNG): an invoice per billed order, payments, a few overdue accounts ──
+  seedReceivables(store, { ownerId: userIds[3] ?? null, creatorId: userIds[0] ?? null });
 
   store.summary = {
     scenario,

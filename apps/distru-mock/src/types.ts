@@ -421,3 +421,64 @@ export interface MenuRec {
   inserted_datetime: string;
   updated_datetime: string;
 }
+
+// ── accounts receivable ──────────────────────────────────────────────────────────────────────
+
+export type InvoiceStatus = 'NOT_PAID' | 'PARTIALLY_PAID' | 'FULLY_PAID' | 'OVER_PAID';
+
+export interface PaymentMethodRec {
+  id: string;
+  name: string;
+  type: 'CASH' | 'CHECK' | 'CREDIT_CARD' | 'BANK_REMITTANCE' | 'BANK_TRANSFER';
+  active: boolean;
+  inserted_datetime: string;
+  updated_datetime: string;
+}
+
+export interface InvoiceItemRec {
+  id: string;
+  /** the billed sales order line */
+  order_item_id: string;
+  quantity: number;
+  inserted_datetime: string;
+}
+
+/** A customer invoice, always generated from a sales order. Money is stored in dollars. */
+export interface InvoiceRec {
+  id: string;
+  invoice_number: string;
+  order_id: string;
+  company_id: string;
+  billing_location_id: string | null;
+  invoice_datetime: string;
+  due_datetime: string;
+  payment_term_name: string | null;
+  items: InvoiceItemRec[];
+  charges: ChargeRec[];
+  owner_id: string | null;
+  creator_id: string | null;
+  internal_notes: string | null;
+  external_notes: string | null;
+  voided_datetime: string | null;
+  inserted_datetime: string;
+  updated_datetime: string;
+}
+
+/** Money received against an invoice (payment_type INVOICE). */
+export interface PaymentRec {
+  id: string;
+  payment_number: string;
+  invoice_id: string;
+  company_id: string;
+  amount: number;
+  payment_method_id: string | null;
+  payment_datetime: string;
+  description: string | null;
+  status: 'POSTED' | 'VOIDED';
+  quickbooks_deposit_account_id: string | null;
+  quickbooks_deposit_account_name: string | null;
+  /** excess over the invoice's remaining balance, turned into a customer credit */
+  overpayment_credit: { id: string; credit_number: string; amount: number } | null;
+  inserted_datetime: string;
+  updated_datetime: string;
+}

@@ -156,6 +156,8 @@ export const LIMITED_LIST_PATHS = new Set([
   '/public/v1/products',
   '/public/v1/companies',
   '/public/v1/tasks',
+  '/public/v1/invoices',
+  '/public/v1/payments',
   '/public/v1/users',
 ]);
 export const ACTIVITY_PATH = '/public/v1/activity';

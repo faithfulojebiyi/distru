@@ -7,6 +7,7 @@ import type {
   CompanyCompact,
   Inventory,
   License,
+  Invoice,
   Location,
   LocationCompact,
   LocationCompactWithCompany,
@@ -15,6 +16,8 @@ import type {
   MetrcPackage,
   Order,
   Package,
+  Payment,
+  PaymentMethod,
   Product,
   Purchase,
   PurchaseOrderItem,
@@ -25,7 +28,26 @@ import type {
 import { isOnMenu } from './menus';
 import { customDataList } from './records';
 import type { Store } from './store';
-import type { BatchRec, ChargeRec, CompanyRec, LicenseRec, LocationRec, LotRec, OrderRec, ProductRec, PurchaseRec, TaskLinkKind, TaskRec, TestResultRec, UserRec } from './types';
+import { invoiceStatus, invoiceTotal, termFor } from './receivables';
+import type {
+  BatchRec,
+  ChargeRec,
+  CompanyRec,
+  InvoiceRec,
+  LicenseRec,
+  LocationRec,
+  LotRec,
+  OrderItemRec,
+  OrderRec,
+  PaymentMethodRec,
+  PaymentRec,
+  ProductRec,
+  PurchaseRec,
+  TaskLinkKind,
+  TaskRec,
+  TestResultRec,
+  UserRec,
+} from './types';
 import { fmtNum, isoDate, money } from './util';
 
 const EACH = { id: 'unit-each', name: 'Each' };
@@ -506,6 +528,36 @@ export class Serializer {
     return sub + p.charges.reduce((a, c) => a + this.chargeAmount(c, sub), 0);
   }
 
+  /** A sales order line (also embedded in invoice items). */
+  orderItem(i: OrderItemRec): SalesOrderItem {
+    const lot = i.package_id ? this.s.lots.get(i.package_id) : undefined;
+    const b = i.batch_id ? this.s.batches.get(i.batch_id) : undefined;
+    const unitCost = b?.unit_cost ?? this.s.products.get(i.product_id)?.unit_cost ?? 0;
+    return {
+      id: i.id,
+      product: this.product(this.s.products.get(i.product_id)!),
+      batch: b ? { id: b.id, name: b.batch_number } : null,
+      package: lot ? this.package(lot) : null,
+      location: this.locationCompact(i.location_id),
+      quantity: fmtNum(i.quantity),
+      returned_quantity: '0',
+      price: money(i.price),
+      price_base: money(i.price_base),
+      price_tier_mode: 'NONE',
+      price_tier_version: null,
+      is_sample: i.is_sample,
+      note: i.note,
+      compliance_quantity: lot ? fmtNum(i.quantity) : null,
+      cost_per_unit: money(unitCost),
+      cost_per_unit_default: money(unitCost),
+      total_cost_actual: money(unitCost * i.quantity),
+      total_cost_default: money(unitCost * i.quantity),
+      thc_percentage_total: b?.thc == null ? null : fmtNum(b.thc),
+      leaflink_id: null,
+      inserted_datetime: i.inserted_datetime,
+    };
+  }
+
   order(o: OrderRec): Order {
     const sub = o.items.reduce((a, i) => a + i.quantity * i.price, 0);
     return {
@@ -524,36 +576,12 @@ export class Serializer {
       external_notes: o.external_notes,
       buyer_note: null,
       total: money(this.orderTotal(o)),
-      items: o.items.map((i): SalesOrderItem => {
-        const lot = i.package_id ? this.s.lots.get(i.package_id) : undefined;
-        const b = i.batch_id ? this.s.batches.get(i.batch_id) : undefined;
-        const unitCost = b?.unit_cost ?? this.s.products.get(i.product_id)?.unit_cost ?? 0;
-        return {
-          id: i.id,
-          product: this.product(this.s.products.get(i.product_id)!),
-          batch: b ? { id: b.id, name: b.batch_number } : null,
-          package: lot ? this.package(lot) : null,
-          location: this.locationCompact(i.location_id),
-          quantity: fmtNum(i.quantity),
-          returned_quantity: '0',
-          price: money(i.price),
-          price_base: money(i.price_base),
-          price_tier_mode: 'NONE',
-          price_tier_version: null,
-          is_sample: i.is_sample,
-          note: i.note,
-          compliance_quantity: lot ? fmtNum(i.quantity) : null,
-          cost_per_unit: money(unitCost),
-          cost_per_unit_default: money(unitCost),
-          total_cost_actual: money(unitCost * i.quantity),
-          total_cost_default: money(unitCost * i.quantity),
-          thc_percentage_total: b?.thc == null ? null : fmtNum(b.thc),
-          leaflink_id: null,
-          inserted_datetime: i.inserted_datetime,
-        };
-      }),
+      items: o.items.map((i) => this.orderItem(i)),
       charges: o.charges.map((c) => this.charge(c, sub)),
-      invoices: [],
+      invoices: (this.s.invoiceIdsByOrder.get(o.id) ?? []).flatMap((id) => {
+        const inv = this.s.invoices.get(id);
+        return inv ? [this.compactInvoice(inv)] : [];
+      }),
       returns: [],
       custom_data: customDataList(this.s, 'order', {}),
       tasks: this.tasksFor('order', o.id),
@@ -568,7 +596,7 @@ export class Serializer {
       metrc_transfer_template_id: null,
       metrc_transfer_template_status: null,
       metrc_transfer_template_error: null,
-      payment_term_name: 'Net 30',
+      payment_term_name: termFor(this.s, o.company_id).term,
       inserted_datetime: o.inserted_datetime,
       updated_datetime: o.updated_datetime,
     };
@@ -619,6 +647,88 @@ export class Serializer {
       tasks: this.tasksFor('purchase', p.id),
       inserted_datetime: p.inserted_datetime,
       updated_datetime: p.updated_datetime,
+    };
+  }
+
+  // ── accounts receivable ──────────────────────────────────────────────────────────────────
+
+  paymentMethod(m: PaymentMethodRec): PaymentMethod {
+    return { id: m.id, name: m.name, type: m.type, active: m.active, qb_payment_method_id: null, deleted_at: null, inserted_datetime: m.inserted_datetime, updated_datetime: m.updated_datetime };
+  }
+
+  compactInvoice(inv: InvoiceRec) {
+    const total = invoiceTotal(this.s, inv);
+    return { id: inv.id, invoice_number: inv.invoice_number, status: invoiceStatus(total, this.s.invoicePaid(inv.id)), total: money(total) };
+  }
+
+  /** `detail`: the show response (adds quickbooks_deposit_account_name); `created`: the creation response. */
+  payment(p: PaymentRec, opts: { detail?: boolean; created?: boolean } = {}): Payment {
+    const inv = this.s.invoices.get(p.invoice_id);
+    const method = p.payment_method_id ? this.s.paymentMethods.get(p.payment_method_id) : undefined;
+    const out: Payment = {
+      id: p.id,
+      payment_number: p.payment_number,
+      payment_type: 'INVOICE',
+      status: p.status,
+      amount: fmtNum(p.amount, 2),
+      payment_datetime: p.payment_datetime,
+      description: p.description,
+      company: this.companyCompact(p.company_id),
+      invoice: inv ? this.compactInvoice(inv) : null,
+      purchase: null,
+      payment_method: method ? this.paymentMethod(method) : null,
+      fully_paid_with_credits: false,
+      credit_uses: [],
+      overpayment_credits: p.overpayment_credit
+        ? [{ id: p.overpayment_credit.id, credit_number: p.overpayment_credit.credit_number, amount: money(p.overpayment_credit.amount), source: 'INVOICE_PAYMENT' }]
+        : [],
+      quickbooks_deposit_account_id: p.quickbooks_deposit_account_id,
+      inserted_datetime: p.inserted_datetime,
+      updated_datetime: p.updated_datetime,
+    };
+    if (opts.detail || opts.created) out.quickbooks_deposit_account_name = p.quickbooks_deposit_account_name;
+    if (opts.created) out.quickbooks_sync_enqueued = false;
+    return out;
+  }
+
+  invoice(inv: InvoiceRec): Invoice {
+    const s = this.s;
+    const o = s.orders.get(inv.order_id);
+    const total = invoiceTotal(s, inv);
+    const paid = s.invoicePaid(inv.id);
+    const sub = o ? o.items.reduce((a, i) => a + i.quantity * i.price, 0) : 0;
+    const lines = new Map((o?.items ?? []).map((i) => [i.id, i]));
+    return {
+      id: inv.id,
+      invoice_number: inv.invoice_number,
+      status: invoiceStatus(total, paid),
+      total: money(total),
+      paid_amount: money(paid),
+      remaining_amount: money(total - paid),
+      invoice_datetime: inv.invoice_datetime,
+      due_datetime: inv.due_datetime,
+      payment_term_name: inv.payment_term_name,
+      company: this.companyCompact(inv.company_id),
+      billing_location: this.locationWithLicense(inv.billing_location_id),
+      order: o ? { id: o.id, order_number: o.order_number, status: o.status, total: money(this.orderTotal(o)) } : null,
+      owner: this.user(inv.owner_id),
+      creator: this.user(inv.creator_id),
+      items: inv.items.map((it) => {
+        const line = lines.get(it.order_item_id);
+        return { id: it.id, order_item_id: it.order_item_id, order_item: line ? this.orderItem(line) : null, quantity: fmtNum(it.quantity), description: null, inserted_datetime: it.inserted_datetime };
+      }),
+      charges: inv.charges.map((c) => this.charge(c, sub)),
+      payments: s
+        .paymentsOf(inv.id)
+        .filter((p) => p.status === 'POSTED')
+        .map((p) => this.payment(p)),
+      custom_data: customDataList(s, 'invoice', {}),
+      tasks: this.tasksFor('invoice', inv.id),
+      internal_notes: inv.internal_notes,
+      external_notes: inv.external_notes,
+      voided_datetime: inv.voided_datetime,
+      inserted_datetime: inv.inserted_datetime,
+      updated_datetime: inv.updated_datetime,
     };
   }
 }

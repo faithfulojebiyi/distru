@@ -128,6 +128,12 @@ const GETS: [string, string][] = [
   ['/deleted-records', '/deleted-records?record_type=PURCHASE'],
   ['/activity', '/activity'],
   ['/record-history', `/record-history?record_type=PURCHASE&record_id=${anyId(s.purchases)}`],
+  ['/invoices', '/invoices?statuses[]=PARTIALLY_PAID&statuses[]=FULLY_PAID'],
+  ['/invoices/{id}', `/invoices/${[...s.invoices.values()].find((i) => s.paymentsOf(i.id).length)!.id}`],
+  ['/payments', '/payments'],
+  ['/payments/{id}', `/payments/${anyId(s.payments)}`],
+  ['/payment-methods', '/payment-methods'],
+  ['/payment-methods/{id}', `/payment-methods/${anyId(s.paymentMethods)}`],
 ];
 
 describe('responses match openapi.json', () => {
@@ -156,6 +162,17 @@ describe('responses match openapi.json', () => {
     const bad = await call('POST', '/purchases', { status: 'NOPE' });
     expect(bad.status).toBe(400);
     expect(check('/purchases', 'post', 400, bad.body)).toEqual([]);
+  });
+
+  test('POST /invoices/{id}/payments (200 with an overpayment credit + 400 envelope)', async () => {
+    const inv = [...s.invoices.values()].find((i) => s.invoicePaid(i.id) === 0)!;
+    const method = [...s.paymentMethods.values()].find((m) => m.active)!;
+    const ok = await call('POST', `/invoices/${inv.id}/payments`, { payment_method_id: method.id, amount: 1_000_000, payment_datetime: '2026-11-19T00:00:00Z', description: 'Wire' });
+    expect(ok.status).toBe(200);
+    expect(check('/invoices/{id}/payments', 'post', 200, ok.body)).toEqual([]);
+    const bad = await call('POST', `/invoices/${inv.id}/payments`, { payment_method_id: method.id, amount: 5, payment_datetime: '2026-11-19T00:00:00Z', description: 'again' });
+    expect(bad.status).toBe(400);
+    expect(check('/invoices/{id}/payments', 'post', 400, bad.body)).toEqual([]);
   });
 
   test('writes feed /activity, /record-history, /deleted-records (schema-checked)', async () => {
