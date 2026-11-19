@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 820" width="1280" height="820" font-family="Inter, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/>
+    </marker>
+    <style>
+      .title { font-size: 15px; font-weight: 600; fill: #111827; }
+      .label { font-size: 13px; fill: #374151; }
+      .muted { font-size: 12px; fill: #6b7280; }
+      .tiny { font-size: 11px; fill: #6b7280; }
+      .pill { font-size: 12.5px; font-weight: 500; fill: #111827; }
+      .step { font-size: 12.5px; font-weight: 600; fill: #065f46; }
+      .line { stroke: #9ca3af; stroke-width: 1.5; fill: none; }
+    </style>
+  </defs>
+
+  <!-- canvas -->
+  <rect x="0" y="0" width="1280" height="820" rx="20" fill="#ffffff"/>
+  <text x="40" y="52" font-size="22" font-weight="700" fill="#111827">How Ops Agent fits together</text>
+  <text x="40" y="76" class="muted">AI agents can only read and propose. Everything that changes a system goes through the harness, and only code executes it.</text>
+
+  <!-- ============ COLUMN 1: who starts work ============ -->
+  <text x="40" y="118" class="muted" font-weight="600" letter-spacing="0.06em">WHO STARTS WORK</text>
+  <g>
+    <rect x="40" y="132" width="220" height="56" rx="12" fill="#f3f4f6"/>
+    <text x="58" y="156" class="pill">Dashboard &amp; Copilot</text>
+    <text x="58" y="175" class="tiny">operators and approvers</text>
+
+    <rect x="40" y="198" width="220" height="56" rx="12" fill="#f3f4f6"/>
+    <text x="58" y="222" class="pill">Slack</text>
+    <text x="58" y="241" class="tiny">Approve / Reject buttons</text>
+
+    <rect x="40" y="264" width="220" height="56" rx="12" fill="#f3f4f6"/>
+    <text x="58" y="288" class="pill">Claude Code · Codex</text>
+    <text x="58" y="307" class="tiny">over MCP, with scoped tokens</text>
+
+    <rect x="40" y="330" width="220" height="56" rx="12" fill="#f3f4f6"/>
+    <text x="58" y="354" class="pill">Other agents</text>
+    <text x="58" y="373" class="tiny">over A2A</text>
+
+    <rect x="40" y="396" width="220" height="74" rx="12" fill="#f3f4f6"/>
+    <text x="58" y="420" class="pill">Triggers</text>
+    <text x="58" y="439" class="tiny">7am schedule · Distru webhooks</text>
+    <text x="58" y="456" class="tiny">vendor emails (Gmail via Composio)</text>
+  </g>
+
+  <!-- arrows col1 -> agents -->
+  <path class="line" d="M262 160 C 300 160, 300 250, 318 250" marker-end="url(#arrow)"/>
+  <path class="line" d="M262 226 C 300 226, 300 262, 318 262" marker-end="url(#arrow)"/>
+  <path class="line" d="M262 292 C 300 292, 300 274, 318 274" marker-end="url(#arrow)"/>
+  <path class="line" d="M262 358 C 300 358, 300 286, 318 286" marker-end="url(#arrow)"/>
+  <path class="line" d="M262 433 C 300 433, 300 298, 318 298" marker-end="url(#arrow)"/>
+
+  <!-- ============ COLUMN 2: agent team ============ -->
+  <text x="320" y="118" class="muted" font-weight="600" letter-spacing="0.06em">THE AGENT TEAM (MASTRA)</text>
+  <rect x="320" y="132" width="290" height="338" rx="16" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="340" y="160" class="title">Can read and propose. Never write.</text>
+  <g>
+    <rect x="340" y="176" width="250" height="38" rx="10" fill="#ffffff"/>
+    <text x="356" y="200" class="label"><tspan font-weight="600">Ops Lead</tspan> · answers, delegates</text>
+    <rect x="340" y="222" width="250" height="38" rx="10" fill="#ffffff"/>
+    <text x="356" y="246" class="label"><tspan font-weight="600">Inventory Analyst</tspan> · per warehouse</text>
+    <rect x="340" y="268" width="250" height="38" rx="10" fill="#ffffff"/>
+    <text x="356" y="292" class="label"><tspan font-weight="600">Procurement Planner</tspan> · per vendor</text>
+    <rect x="340" y="314" width="250" height="38" rx="10" fill="#ffffff"/>
+    <text x="356" y="338" class="label"><tspan font-weight="600">Compliance Reviewer</tspan> · lab tests</text>
+    <rect x="340" y="360" width="250" height="38" rx="10" fill="#ffffff"/>
+    <text x="356" y="384" class="label"><tspan font-weight="600">Policy Critic</tspan> · explains, revises</text>
+    <rect x="340" y="406" width="250" height="38" rx="10" fill="#ffffff"/>
+    <text x="356" y="430" class="label"><tspan font-weight="600">Vendor Liaison</tspan> · reads replies</text>
+  </g>
+
+  <!-- context layer under agents -->
+  <rect x="320" y="490" width="290" height="104" rx="16" fill="#f5f3ff" stroke="#ddd6fe"/>
+  <text x="340" y="518" class="title">Context layer</text>
+  <text x="340" y="540" class="label">Distru data synced into Postgres</text>
+  <text x="340" y="559" class="label">Vendor &amp; product profiles (computed)</text>
+  <text x="340" y="578" class="label">Memories learned from approvals</text>
+  <path class="line" d="M465 488 L465 474" marker-end="url(#arrow)"/>
+
+  <!-- arrow agents -> harness -->
+  <path class="line" d="M612 300 L660 300" marker-end="url(#arrow)"/>
+  <text x="614" y="290" class="tiny">proposals</text>
+
+  <!-- ============ COLUMN 3: harness ============ -->
+  <text x="662" y="118" class="muted" font-weight="600" letter-spacing="0.06em">THE HARNESS (PLAIN CODE)</text>
+  <rect x="662" y="132" width="270" height="462" rx="16" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="682" y="160" class="title">Every change, every time</text>
+  <g>
+    <rect x="682" y="176" width="230" height="44" rx="10" fill="#ffffff"/>
+    <text x="698" y="196" class="step">1 · Proposal</text>
+    <text x="698" y="212" class="tiny">the exact change, field by field</text>
+    <rect x="682" y="228" width="230" height="44" rx="10" fill="#ffffff"/>
+    <text x="698" y="248" class="step">2 · Policy rules</text>
+    <text x="698" y="264" class="tiny">caps, allowed actions, risk</text>
+    <rect x="682" y="280" width="230" height="44" rx="10" fill="#ffffff"/>
+    <text x="698" y="300" class="step">3 · A person approves</text>
+    <text x="698" y="316" class="tiny">approver scope, exactly once</text>
+    <rect x="682" y="332" width="230" height="44" rx="10" fill="#ffffff"/>
+    <text x="698" y="352" class="step">4 · Execute, step by step</text>
+    <text x="698" y="368" class="tiny">idempotent, durable (Inngest)</text>
+    <rect x="682" y="384" width="230" height="44" rx="10" fill="#ffffff"/>
+    <text x="698" y="404" class="step">5 · Read back &amp; verify</text>
+    <text x="698" y="420" class="tiny">did it say what we approved?</text>
+    <rect x="682" y="436" width="230" height="44" rx="10" fill="#ffffff"/>
+    <text x="698" y="456" class="step">6 · Audit &amp; undo</text>
+    <text x="698" y="472" class="tiny">append-only log, compensations</text>
+  </g>
+  <path class="line" d="M797 220 L797 228" marker-end="url(#arrow)"/>
+  <path class="line" d="M797 272 L797 280" marker-end="url(#arrow)"/>
+  <path class="line" d="M797 324 L797 332" marker-end="url(#arrow)"/>
+  <path class="line" d="M797 376 L797 384" marker-end="url(#arrow)"/>
+  <path class="line" d="M797 428 L797 436" marker-end="url(#arrow)"/>
+  <text x="682" y="508" class="label">Connectors plug each system in:</text>
+  <text x="682" y="527" class="tiny">what can be read, what can change,</text>
+  <text x="682" y="543" class="tiny">how risky it is, how to verify it.</text>
+  <text x="682" y="567" class="tiny">Adding a system = writing a connector,</text>
+  <text x="682" y="583" class="tiny">not new safety code.</text>
+
+  <!-- arrows harness -> systems -->
+  <path class="line" d="M934 354 C 960 354, 960 168, 982 168" marker-end="url(#arrow)"/>
+  <path class="line" d="M934 354 C 960 354, 960 230, 982 230" marker-end="url(#arrow)"/>
+  <path class="line" d="M934 354 C 960 354, 960 292, 982 292" marker-end="url(#arrow)"/>
+  <path class="line" d="M934 354 L982 354" marker-end="url(#arrow)"/>
+  <path class="line" d="M934 354 C 960 354, 960 416, 982 416" marker-end="url(#arrow)"/>
+  <path class="line" d="M934 354 C 960 354, 960 478, 982 478" marker-end="url(#arrow)"/>
+
+  <!-- ============ COLUMN 4: systems ============ -->
+  <text x="984" y="118" class="muted" font-weight="600" letter-spacing="0.06em">THE BUSINESS'S TOOLS</text>
+  <g>
+    <rect x="984" y="140" width="256" height="56" rx="12" fill="#f3f4f6"/>
+    <text x="1002" y="164" class="pill">Distru ERP (REST API)</text>
+    <text x="1002" y="183" class="tiny">POs, stock, lab results, tasks, invoices</text>
+
+    <rect x="984" y="202" width="256" height="56" rx="12" fill="#f3f4f6"/>
+    <text x="1002" y="226" class="pill">Distru MCP · Commerce</text>
+    <text x="1002" y="245" class="tiny">menu limits, its 114 tools governed</text>
+
+    <rect x="984" y="264" width="256" height="56" rx="12" fill="#f3f4f6"/>
+    <text x="1002" y="288" class="pill">Headset</text>
+    <text x="1002" y="307" class="tiny">retail sell-through (read only)</text>
+
+    <rect x="984" y="326" width="256" height="56" rx="12" fill="#f3f4f6"/>
+    <text x="1002" y="350" class="pill">Email</text>
+    <text x="1002" y="369" class="tiny">POs to vendors (Resend)</text>
+
+    <rect x="984" y="388" width="256" height="56" rx="12" fill="#f3f4f6"/>
+    <text x="1002" y="412" class="pill">Gmail &amp; Calendar</text>
+    <text x="1002" y="431" class="tiny">via Composio, plus new-mail triggers</text>
+
+    <rect x="984" y="450" width="256" height="56" rx="12" fill="#f3f4f6"/>
+    <text x="1002" y="474" class="pill">Slack</text>
+    <text x="1002" y="493" class="tiny">approval requests, notifications</text>
+  </g>
+  <rect x="984" y="522" width="256" height="72" rx="12" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="1002" y="546" class="label" font-weight="600">Locally, all of these are emulated</text>
+  <text x="1002" y="565" class="tiny">from their public docs. Real services</text>
+  <text x="1002" y="581" class="tiny">are a configuration change.</text>
+
+  <!-- ============ bottom strip: platform ============ -->
+  <rect x="40" y="640" width="1200" height="140" rx="16" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="64" y="670" class="muted" font-weight="600" letter-spacing="0.06em">UNDERNEATH</text>
+  <g>
+    <text x="64" y="700" class="label"><tspan font-weight="600">Postgres</tspan> · proposals, audit log, context, memories, Mastra storage</text>
+    <text x="64" y="724" class="label"><tspan font-weight="600">Inngest</tspan> · durable workflows: runs pause for approval and survive restarts</text>
+    <text x="64" y="748" class="label"><tspan font-weight="600">Claude</tspan> · the models behind every agent, with prompt caching</text>
+    <text x="660" y="700" class="label"><tspan font-weight="600">Evals</tspan> · ~20 scenarios replayed offline in CI</text>
+    <text x="660" y="724" class="label"><tspan font-weight="600">Emulators</tspan> · Distru, Headset, Composio, Gmail, Slack, Resend, Claude</text>
+    <text x="660" y="748" class="label"><tspan font-weight="600">bun · TypeScript</tspan> · Mastra server, TanStack dashboard</text>
+  </g>
+</svg>

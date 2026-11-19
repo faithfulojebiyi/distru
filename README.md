@@ -52,6 +52,8 @@ The core idea fits in one line: **the AI proposes, code executes.**
   write lands in an audit log. Undoing a change is itself a proposal that someone approves, and anything that
   genuinely can't be undone (an email that's already been sent) says so plainly.
 
+![How the pieces fit together: who starts work, the agent team, the harness, and the business's tools](.github/assets/architecture.svg)
+
 ## A morning with Ops Agent
 
 At 7am a restock run starts on its own.
@@ -76,6 +78,11 @@ Five agents work it like a small purchasing team:
 The run pauses there. An approver opens it, reads the changes, checks the rules, and approves it, either in
 the dashboard or from a button in Slack. The changes run one by one, each one verified, and the emails go out
 quoting the real purchase order numbers.
+
+You can watch all of this happen. Each run has a live trace showing which agent was handed what, every tool
+it called, and what it cost. The run below took 1 minute 31 seconds and about a dollar.
+
+![The trace of a restock run: an analyst, five planners working in parallel, then a compliance review](.github/assets/run-trace.png)
 
 A few days later Mojave Pre-Roll replies: *"We can only ship 200 of the 312 units; the rest will be here
 Dec 2."* That email triggers a **Vendor Liaison** agent. It reads the reply, but it treats the email as
@@ -114,11 +121,55 @@ once and replayed, so the whole suite runs in CI for free, and changing a prompt
 
 ![The audit log: who did what, when, and what changed](.github/assets/audit-log.png)
 
+## The Copilot
+
+Not everything needs a scheduled run. The Copilot is a chat with the **Ops Lead**, the agent that manages the
+others. You ask a question in plain English and it works out who to ask:
+
+- *"Which SKUs will stock out before their next PO arrives?"* It hands the question to the Inventory
+  Analyst and comes back with a table of products, days of supply and lead times.
+- *"Which invoices are overdue? Sum by customer."* It reads receivables and tells you Harbor Greens owes
+  about $18,700 that's more than 60 days late, broken down by age, without inventing a single number.
+- *"How reliable is Sierra Extracts?"* It answers from what the system has learned: on time 73% of the
+  time, deliveries that sometimes take 26 days against a promised 14.
+- *"Start a restock run for Los Angeles."* It starts one, and you can follow it on the run page.
+
+You see its working as it goes: each hand-off to another agent and each tool it calls. It remembers your
+conversation, and like every other agent it can propose changes but never approve them.
+
+## Why everything runs on emulators
+
+This project talks to six outside services, and I don't have an account with most of them. Distru only
+turns on API access for its customers, Headset's API is for partners, and you don't want a half-built agent
+sending real emails or editing a real Slack workspace while you test it. So every outside service has a local
+stand-in that behaves like the real thing:
+
+| Stand-in | What it imitates |
+|---|---|
+| `apps/distru-mock` | Distru's REST API **and** its MCP server, sharing one set of data: a distributor with three warehouses, six vendors, six dispensaries, 43 products, a year of orders, invoices, lab results and Metrc packages. Built from Distru's published OpenAPI spec and tool docs, including their quirks: pagination, rate limits, error formats, webhooks. |
+| `apps/headset-mock` | Retail sell-through for the same products, with a few deliberate trends to find. |
+| `apps/emulators` | Composio, Gmail, Slack and Resend. Vendors have mailboxes and can reply; Slack has a workspace with real Approve buttons. |
+| `packages/emulators` | The engine underneath, including an emulator for the Claude API that records and replays model calls. |
+
+The emulators come from danwo, an emulator framework I built for another project. I chose it
+over Vercel's `emulate`, a good alternative, because danwo already emulates Composio, including its
+triggers. That's what lets an email from a vendor wake up an agent locally, with no real inbox involved.
+
+Building it this way paid off in four ways:
+
+- **Anyone can run the whole thing**, on a laptop, with no accounts and no risk of touching real data.
+- **The tests can break things on purpose.** They can make Distru return rate-limit errors, make Metrc fail
+  after Distru has already saved a change, replay the same webhook twice, or slip a malicious instruction
+  into a product description, and then check the system copes.
+- **The evals are free and repeatable.** Model calls are recorded once and replayed, so CI runs every
+  scenario without an API key and gets the same answer every time.
+- **Going live is configuration, not a rewrite.** Each stand-in speaks the same protocol as the real
+  service, so pointing at the real one is a matter of changing a URL and a key (see *Using real services* below).
+
 ## Ways in
 
 - **Dashboard:** approvals, the live trace of each run, the audit log, evals, and settings.
-- **Copilot:** ask questions in plain English (*"How reliable is Sierra Extracts?"*, *"Which invoices are
-  overdue? Sum by customer."*) or start a run. It can propose changes, but it can't approve them.
+- **Copilot:** the chat described above.
 - **Slack:** approval requests with Approve and Reject buttons. Only approvers can use them.
 - **Claude Code and Codex, over MCP:** create a token in *Settings → MCP access* with exactly the
   permissions you want (read, propose, approve) and connect:
