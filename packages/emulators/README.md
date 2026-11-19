@@ -12,6 +12,7 @@ providers, each speaking the real wire protocol so the official SDKs work agains
 | `google` | OAuth (account chooser, PKCE, refresh, revoke), Gmail (messages, threads, labels, drafts, history, search, push), Calendar (events, lists, watch), Drive | `googleapis` |
 | `slack` | OAuth v2 installs, Web API with scope checks, Events API, interactivity (`block_actions`, modals), slash commands, signed deliveries | `@slack/web-api`, `@slack/bolt` |
 | `resend` | Emails, domains, API keys, signed webhooks | `resend` |
+| `llm` | Model APIs on their real hosts (Anthropic Messages, OpenAI, AI Gateway, Gemini, Perplexity, Bedrock): scripted replies, faults, token/cost accounting, and **record/replay** of real calls | `@anthropic-ai/sdk`, `openai` |
 
 Composio is connected to the Google and Slack emulators with `connectComposioBackends(composio,
 { google, slack })`: a `GMAIL_SEND_EMAIL` lands in the Google emulator's mailbox, and a mail sent
@@ -22,7 +23,7 @@ to another seeded Google account is delivered to its inbox.
 - **Kept** (unchanged apart from import tidying): core (`define`, `http`, `store`, `outbox`,
   `webhooks`, `time`, `json`, `errors`, `objects`, `poll`, `random`, `svix`, `sockets`, `net`,
   `html`), `oauth/`, `composio/`, `google/`, `slack/`, `resend/`.
-- **Trimmed**: every other provider (auth0, bachs, clerk, flutterwave, github, llm, microsoft,
+- **Trimmed**: every other provider (auth0, bachs, clerk, flutterwave, github, microsoft,
   nango, novu, nylas, paystack, pusher, s3, stripe, tiptap, twilio, unipile), the Composio GitHub and
   Microsoft backends (those toolkits now answer with seeded/sample data), `cors.ts`, `hs256.ts`,
   `oauth/upstream-profile.ts`, and their tests.
@@ -35,6 +36,11 @@ to another seeded Google account is delivered to its inbox.
     `gmailTriggerPayload`; `grantGoogleAccess(google, email)` issues a non-expiring Google token so
     a *seeded* Composio connected account can act on Gmail without the consent screen.
   - `FetchFn` type for `EmulatorOptions.fetch` (bun's `typeof fetch` has `preconnect`).
+  - `src/llm/` (added later, copied whole from danwo) with three changes, used by `@ops/evals`:
+    recordings save the provider's real token usage and replays report it (`LlmReply.usage`,
+    `usageFromAnswer`); Anthropic answers drop `citations: null` on the wire (the real API omits it and
+    the AI SDK provider bundled in Mastra rejects `null`); `LlmRecordOptions.fetch` is a `FetchFn`.
+    Tests: `llm-anthropic.test.ts`, `llm-record.test.ts` (plus an Anthropic record/usage replay case).
 
 ## Use
 

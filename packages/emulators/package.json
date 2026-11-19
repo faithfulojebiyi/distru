@@ -2,7 +2,7 @@
   "name": "@ops/emulators",
   "version": "0.0.0",
   "private": true,
-  "description": "Provider emulators (Composio, Google Gmail/Calendar, Slack, Resend). Copied from danwo/packages/emulators (Apache-2.0, same author).",
+  "description": "Provider emulators (Composio, Google Gmail/Calendar, Slack, Resend, LLM model APIs). Copied from danwo/packages/emulators (Apache-2.0, same author).",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -16,6 +16,8 @@
     "ws": "8.22.0"
   },
   "devDependencies": {
+    "@ai-sdk/provider": "4.0.38",
+    "@anthropic-ai/sdk": "0.135.0",
     "@composio/client": "2.0.0-rc.19",
     "@composio/core": "0.25.0",
     "@slack/bolt": "5.1.0",
@@ -23,6 +25,7 @@
     "@types/bun": "latest",
     "@types/ws": "8.18.2",
     "googleapis": "186.0.0",
+    "openai": "7.60.0",
     "openid-client": "6.8.8",
     "resend": "6.34.1",
     "typescript": "^6.0.3",

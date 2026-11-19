@@ -127,3 +127,24 @@ export {
   type WebhookSigner,
   describeWebhookFault,
 } from "./webhooks.ts"
+// Added in @ops/emulators: the model API emulator (scripts, record/replay), copied from danwo.
+export {
+  llm,
+  LLM_BEHAVIOURS,
+  LLM_HOSTS,
+  llmCalls,
+  llmOutboundFaults,
+  llmScripts,
+  seedLlm,
+  type LlmBehaviour,
+  type LlmCall,
+  type LlmCalls,
+  type LlmMatchInput,
+  type LlmProvider,
+  type LlmRecordOptions,
+  type LlmReply,
+  type LlmScript,
+  type LlmScripts,
+  type LlmSeedConfig,
+  type LlmToolCall,
+} from "./llm/index.ts"
