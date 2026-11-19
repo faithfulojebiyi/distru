@@ -10,7 +10,7 @@
     "bun": ">=1.4.0"
   },
   "scripts": {
-    "dev": "bun run --filter '*' dev",
+    "dev": "bun scripts/dev.ts",
     "dev:web": "bun run --cwd apps/web dev",
     "dev:agent": "bun run --cwd apps/agent dev",
     "dev:mock": "bun run --cwd apps/distru-mock dev",
@@ -23,6 +23,7 @@
     "dev:headset": "bun run --cwd apps/headset-mock dev",
     "dev:emulators": "bun run --cwd apps/emulators dev",
     "evals": "bun run --cwd packages/evals evals",
-    "evals:live": "bun run --cwd packages/evals evals:live"
+    "evals:live": "bun run --cwd packages/evals evals:live",
+    "dev:apps": "bun run --filter './apps/*' dev"
   }
 }

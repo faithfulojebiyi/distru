@@ -180,6 +180,33 @@ others. You ask a question in plain English and it works out who to ask:
 You see its working as it goes: each hand-off to another agent and each tool it calls. It remembers your
 conversation, and like every other agent it can propose changes but never approve them.
 
+### What you can ask it
+
+The Copilot only knows what its tools can reach, so here's exactly what that is today. Anything outside this
+list it should tell you it can't see, rather than guess.
+
+| Topic | Try asking | Where the answer comes from |
+|---|---|---|
+| Stock at risk | *"Which SKUs will stock out before their next PO arrives?"* · *"What's at risk at Oakland?"* | Distru's inventory-velocity report and stock levels, per warehouse |
+| Retail demand | *"What is retail sell-through telling us about Blue Dream?"* · *"What's moving fastest at retail this week?"* | Headset sell-through trends and top movers |
+| Products | *"Tell me about VAP-BD-1G"* · *"Which vapes do we carry from Coastal Cloud?"* | Distru product catalogue |
+| Vendors | *"Which vendor has the longest lead time?"* · *"How reliable is Sierra Extracts?"* · *"What did we last pay Mojave for pre-rolls?"* | Vendor list, purchase history, and the reliability profiles the context layer computes |
+| Vendor history | *"Has Sierra Extracts mentioned supply problems before?"* | Search over past vendor emails and PO notes, with dates |
+| Lab results and compliance | *"Can we reorder Wedding Cake 3.5g?"* · *"Any products on hold?"* | Distru lab results and Metrc package status |
+| Open orders | *"What do customers have on order for Blue Dream?"* | Open sales orders in Distru |
+| Money owed to us | *"Which invoices are overdue? Sum by customer."* · *"Who should we chase first?"* | Distru invoices and payments, with aging |
+| What the team has learned | *"How does the approver usually treat Mojave orders?"* | Memories learned from past approvals, with their evidence |
+| Getting work done | *"Start a restock run for Los Angeles."* | Starts a restock run; any changes still go to Approvals |
+
+**What it can't do in this demo:**
+
+- **Approve, reject or write anything itself.** It can start a run or propose a change; a person approves.
+- **Answer from data it has no tool for:** sales reps' performance, cultivation and harvests, manufacturing
+  (assemblies), DistruCommerce menu settings, QuickBooks, payroll, or anything about other companies.
+- **Know about today's real world.** All the data is the emulated distributor, *Golden Coast Distribution*,
+  with three warehouses, six vendors and six dispensaries. Questions about real Distru customers won't work.
+- **Read the internet** or any document you haven't connected.
+
 ## Why everything runs on emulators
 
 This project talks to six outside services, and I don't have an account with most of them. Distru only
@@ -239,7 +266,14 @@ bun run --cwd apps/agent db:seed:history              # optional: past decisions
 bun run --cwd apps/agent recall:index                 # optional: index vendor emails (needs dev:emulators)
 ```
 
-Then start each piece in its own terminal:
+Then start everything with one command:
+
+```bash
+bun run dev
+```
+
+That runs every app and the Inngest dev server together, and prints where each one is. Ctrl+C stops them all.
+If you'd rather run the pieces in separate terminals, these are the individual commands:
 
 | Command | What it runs | Port |
 |---|---|---|
