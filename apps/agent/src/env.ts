@@ -32,15 +32,33 @@ const EnvSchema = z.object({
         .filter(Boolean),
     ),
   ANTHROPIC_API_KEY: z.string().optional(),
+  /** Default model (Mastra model router id) for every agent; each agent can override it below. */
   OPS_AGENT_MODEL: z.string().default('anthropic/claude-sonnet-5-5'),
+  OPS_LEAD_MODEL: z.string().optional(),
+  INVENTORY_ANALYST_MODEL: z.string().optional(),
+  PROCUREMENT_PLANNER_MODEL: z.string().optional(),
+  COMPLIANCE_REVIEWER_MODEL: z.string().optional(),
+  POLICY_CRITIC_MODEL: z.string().optional(),
+  /** Cost estimate for run budgets/timelines (USD per million tokens). Not billing data. */
+  LLM_INPUT_USD_PER_MTOK: z.coerce.number().nonnegative().default(3),
+  LLM_OUTPUT_USD_PER_MTOK: z.coerce.number().nonnegative().default(15),
   DISTRU_BASE_URL: z.url().default('http://localhost:4500/public/v1'),
   DISTRU_API_TOKEN: z.string().default('mock-token'),
+  /** HMAC secret for `x-distru-signature` on POST /api/webhooks/distru (the mock's default in dev). */
+  DISTRU_WEBHOOK_SECRET: z.string().min(1).optional(),
+  /** `1` registers the morning restock cron (Inngest). Off by default. */
+  RESTOCK_CRON_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => v === '1' || v === 'true'),
+  /** Inngest cron expression; `TZ=` prefix supported by Inngest (e.g. `TZ=America/Los_Angeles 0 7 * * *`). */
+  RESTOCK_CRON: z.string().default('TZ=America/Los_Angeles 0 7 * * *'),
   INNGEST_DEV: z.string().optional(),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
 });
 
-export type Env = z.infer<typeof EnvSchema>;
+export type Env = Omit<z.infer<typeof EnvSchema>, 'DISTRU_WEBHOOK_SECRET'> & { DISTRU_WEBHOOK_SECRET: string };
 
 function loadEnv(): Env {
   const parsed = EnvSchema.safeParse(process.env);
@@ -57,7 +75,11 @@ function loadEnv(): Env {
     console.error('INNGEST_EVENT_KEY and INNGEST_SIGNING_KEY are required in production.');
     process.exit(1);
   }
-  return env;
+  if (env.NODE_ENV === 'production' && !env.DISTRU_WEBHOOK_SECRET) {
+    console.error('DISTRU_WEBHOOK_SECRET is required in production.');
+    process.exit(1);
+  }
+  return { ...env, DISTRU_WEBHOOK_SECRET: env.DISTRU_WEBHOOK_SECRET ?? 'mock-webhook-secret' };
 }
 
 export const env = loadEnv();

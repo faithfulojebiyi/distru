@@ -6,7 +6,7 @@
  * the role is then set server-side because clients can never set it.
  * Also ensures the default policy rules (harness rule configs).
  */
-import { BUILTIN_POLICY_RULES, RULE_KEYS, type PolicyRuleConfig } from '@ops/harness';
+import { BUILTIN_POLICY_RULES, deepEqual, RULE_KEYS, type PolicyRuleConfig } from '@ops/harness';
 import { eq } from 'drizzle-orm';
 import { auth } from '../auth/auth';
 import { db, sql } from './client';
@@ -31,9 +31,9 @@ const DEFAULT_POLICY: Array<PolicyRuleConfig & { description: string }> = [
   },
   {
     key: RULE_KEYS.autoApproveBelow,
-    params: { maxValue: 500, currency: 'USD' },
+    params: { amount: 500, max_risk: 'medium', currency: 'USD' },
     enabled: true,
-    description: 'Auto-approve low-risk proposals under $500',
+    description: 'Auto-approve proposals under $500 whose ops are at most medium risk (never high)',
   },
   {
     key: RULE_KEYS.highRiskRequiresApproval,
@@ -43,9 +43,9 @@ const DEFAULT_POLICY: Array<PolicyRuleConfig & { description: string }> = [
   },
   {
     key: RULE_KEYS.allowedActions,
-    params: { actions: ['purchases.upsert'] },
+    params: { actions: ['distru.purchases.upsert'] },
     enabled: true,
-    description: 'Actions agents may propose',
+    description: 'Actions agents may propose (registry names are namespaced by connector)',
   },
   {
     key: RULE_KEYS.vendorAllowlist,
@@ -68,6 +68,28 @@ for (const demo of DEMO_USERS) {
   }
   await db.update(user).set({ role: demo.role, emailVerified: true }).where(eq(user.email, demo.email));
   console.log(`${existing ? 'updated' : 'created'} ${demo.email} (${demo.role})`);
+}
+
+/**
+ * One-off upgrade of seeded defaults that were never edited: the old `auto_approve_below` default
+ * (`{ maxValue: 500 }`, low risk only) becomes `{ amount: 500, max_risk: 'medium' }` so small Distru
+ * POs (medium risk) can auto-approve. Rows edited on the Settings page are left alone.
+ */
+const SUPERSEDED_DEFAULTS: Array<{ key: string; params: Record<string, unknown> }> = [
+  { key: RULE_KEYS.autoApproveBelow, params: { maxValue: 500, currency: 'USD' } },
+  // Before connectors, the action was registered as `purchases.upsert`; it is now `distru.purchases.upsert`.
+  { key: RULE_KEYS.allowedActions, params: { actions: ['purchases.upsert'] } },
+];
+for (const old of SUPERSEDED_DEFAULTS) {
+  const next = DEFAULT_POLICY.find((r) => r.key === old.key)!;
+  const [row] = await db.select().from(policyRule).where(eq(policyRule.key, old.key));
+  if (row && deepEqual(row.params, old.params)) {
+    await db
+      .update(policyRule)
+      .set({ params: next.params ?? {}, description: next.description })
+      .where(eq(policyRule.key, old.key));
+    console.log(`upgraded default policy rule ${old.key} → ${JSON.stringify(next.params)}`);
+  }
 }
 
 for (const { key, params, enabled, description } of DEFAULT_POLICY) {

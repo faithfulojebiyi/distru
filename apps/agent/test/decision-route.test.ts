@@ -11,6 +11,7 @@ import { createApiRoutes } from '../src/api/routes';
 import type { ProposalDetail } from '../src/api/schemas';
 import type { ApiServices } from '../src/api/services';
 import type { SessionUser } from '../src/auth/session';
+import { stubServices } from './fixtures/stub-services';
 
 const PROPOSAL_ID = '6f1c8a52-3f1e-4c55-9a43-2f4b7a1d9e10';
 const now = new Date('2026-11-19T12:00:00Z').toISOString();
@@ -53,7 +54,7 @@ function setup(outcome: ProposalDetail | Error = detail) {
     checkDatabase: async () => true,
     proposals: { list: async () => [], get: async () => null, decide },
     audit: { list: async () => [] },
-    runs: { list: async () => [] },
+    ...stubServices(),
   };
   const api = createApiRoutes(services);
   const post = (body: unknown, as?: string, id = PROPOSAL_ID) =>

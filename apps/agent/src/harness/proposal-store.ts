@@ -179,3 +179,9 @@ export class DrizzleProposalStore implements ProposalStore {
     });
   }
 }
+
+/** The proposal a workflow run created (restock `propose` step idempotency, run ↔ proposal links). */
+export async function findProposalByRunId(db: Executor, workflowRunId: string): Promise<Proposal | null> {
+  const [row] = await db.select({ id: proposal.id }).from(proposal).where(eq(proposal.workflowRunId, workflowRunId)).limit(1);
+  return row ? loadProposal(db, row.id) : null;
+}

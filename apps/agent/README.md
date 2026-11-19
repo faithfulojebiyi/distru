@@ -70,11 +70,29 @@ ports against Postgres (`src/harness/`):
 | `audit-sink.ts` | `AuditSink` | INSERT-only into `audit_event`; `seq` (bigserial) gives total order |
 | `policy-rules.ts` | `PolicyRuleSource` | `policy_rule` rows → `{ key, params, enabled }`, read per evaluation |
 | `harness.ts` | factory | `createAppHarness({ registry })`: Drizzle ports + system clock + inline steps. `inngestStepRunner(step)` adapts Inngest step tools for one durable step per op; inside a Mastra workflow step keep the inline runner (the Mastra step is the durable boundary, nested `step.run` isn't allowed) |
-| `registry.ts` | `Registry<AppCtx>` | empty until `packages/distru-client` lands (`purchases.upsert`, read tools) |
+| `registry.ts` | `Registry<DistruCtx>` | `Registry.fromConnectors([distruConnector])`; `appContexts()` builds the read ctx (client retries) and the execute ctx (`maxRetries: 0`, so 429s reach the harness) from `DISTRU_BASE_URL`/`DISTRU_API_TOKEN` |
+| `app.ts` | singletons | `appHarness` (with `distruErrorClassifier`) and `appPolicyRules`, shared by routes and the restock workflow |
+| `dry-run.ts` | — | `previewOp` / `dryRunPolicy`: what `harness.propose` would compute, without persisting (propose tools + review loop) |
 
-Default policy (seeded): `max_total_value` $25,000 (deny above), `auto_approve_below` $500 (low risk
-only), `high_risk_requires_approval`, `allowed_actions: [purchases.upsert]`, and `vendor_allowlist`
+Default policy (seeded): `max_total_value` $25,000 (deny above), `auto_approve_below` `{ amount: 500, max_risk: 'medium' }`
+(so small Distru POs, which are medium risk, auto-approve; high risk never does), `high_risk_requires_approval`, `allowed_actions: [distru.purchases.upsert]`, and `vendor_allowlist`
 present but disabled.
+
+## Agents and the restock workflow
+
+- Agents (`src/mastra/agents/`): Ops Lead (supervisor via Mastra `agents` subagents, Memory, read-only +
+  `start_restock_run`), Inventory Analyst, Procurement Planner (only one with `propose_*`), Compliance Reviewer,
+  Policy Critic. Scopes, tool allowlists and budgets in `roster.ts`; models per agent from env (`*_MODEL`, default
+  `OPS_AGENT_MODEL`). Tools are generated from `registry.catalog(principal)` (`src/mastra/tools/harness-tools.ts`).
+- `propose_*` tools never write: inside a workflow run they add an op to the run's draft (same vendor + location
+  replaces), outside one they call `harness.propose` (pending proposal).
+- `src/mastra/workflows/restock.ts` (Inngest): prepare → foreach location Analyst → group by vendor → foreach
+  vendor Planner → review loop (Compliance veto + deterministic `compliance_check`, plan guard, policy dry-run,
+  deny → Critic → Planner revision with per-vendor budgets; max 2 revisions) → one proposal → suspend unless
+  auto-approved → execute → finalize. Cron (`RESTOCK_CRON_ENABLED=1`) and webhook triggers are Inngest
+  functions in `src/mastra/functions.ts`.
+- `bun run restock:demo [-- --location "Los Angeles"]`: live demo through the API (needs ANTHROPIC_API_KEY, the
+  mock on :4500, the server and `bun run inngest:dev`).
 
 ## Layout
 
@@ -122,9 +140,13 @@ apps/agent/
 | `GET /api/me` | session | `{ id, email, name, role }` |
 | `GET /api/proposals?status=&limit=` | session | summaries (status, version, policy outcome, total, actions) |
 | `GET /api/proposals/:id` | session | harness shape: ops with diff/payload/before/result, policy evaluation with reasons, status, version, decision, execution |
-| `POST /api/proposals/:id/decision` | **approver** | `{ decision: 'approve'\|'reject', reason?, edits? }` → `harness.decide` with `userPrincipal(user.id, role)`. Errors: 400 `InputValidationError`, 403 `ForbiddenError` (scope, separation of duties), 404 `NotFoundError`, 409 `decision_conflict` / `concurrent_modification` / `policy_denied` (+ `evaluation`). Resuming the workflow comes on day 3 |
+| `POST /api/proposals/:id/decision` | **approver** | `{ decision: 'approve'\|'reject', reason?, edits? }` → `harness.decide` with `userPrincipal(user.id, role)`. Errors: 400 `InputValidationError`, 403 `ForbiddenError` (scope, separation of duties), 404 `NotFoundError`, 409 `decision_conflict` / `concurrent_modification` / `policy_denied` (+ `evaluation`). After the decision, the suspended restock run (`meta.workflowRunId`) is resumed (idempotent no-op unless suspended) |
 | `GET /api/audit-events?proposalId=&type=&order=&limit=` | session | newest first by default; `order=asc` for a timeline |
-| `GET /api/runs` | session | placeholder (empty list) until the run timeline lands |
+| `GET /api/runs?limit=` | session | restock runs from Mastra run storage, each with its linked proposal |
+| `GET /api/runs/:id` | session | status, input/result, step timeline with agent calls (tokens, cost estimate, tool calls), suspend payload, linked proposal |
+| `POST /api/runs` | operator/approver | `{ scenarioNote?, locationIds?, vendorIds?, productIds? }` → 202 `{ runId }` (503 if Inngest is down) |
+| `GET /api/connectors` | session | connector health + tool catalogue |
+| `POST /api/webhooks/distru` | HMAC (`x-distru-signature`, `DISTRU_WEBHOOK_SECRET`) | ORDER CREATE → Inngest `ops/restock.requested` → restock run scoped to the ordered products |
 | `GET /api/openapi.json` | public | OpenAPI 3.1 for the routes above (Orval input) |
 | `/api/auth/*` | Better Auth | `sign-in/email`, `sign-up/email` (sign-up is disabled in production), `get-session`, ... |
 | `/api/inngest` | Inngest signing | serves Mastra workflows as Inngest functions |

@@ -11,12 +11,13 @@ import { createApiRoutes } from '../src/api/routes';
 import type { ProposalDetail } from '../src/api/schemas';
 import type { ApiServices } from '../src/api/services';
 import type { SessionUser } from '../src/auth/session';
+import { stubServices } from './fixtures/stub-services';
 import { db, sql } from '../src/db/client';
 import { approval, auditEvent, proposal } from '../src/db/schema';
 import { createAppHarness } from '../src/harness/harness';
 import { DrizzleProposalStore } from '../src/harness/proposal-store';
 import { createAuditService, createProposalService } from '../src/services/proposals';
-import { FakeErp, poInput, testRegistry, type TestCtx } from './fixtures/fake-erp';
+import { FAKE_PURCHASE_ACTION, FakeErp, poInput, testRegistry, type TestCtx } from './fixtures/fake-erp';
 
 async function databaseReachable(): Promise<boolean> {
   const probe = postgres(process.env.DATABASE_URL ?? 'postgres://ops:ops@127.0.0.1:5482/ops', { max: 1, connect_timeout: 2, onnotice: () => {} });
@@ -50,7 +51,7 @@ function env() {
     checkDatabase: async () => true,
     proposals: createProposalService(db, harness, () => ctx),
     audit: createAuditService(db),
-    runs: { list: async () => [] },
+    ...stubServices(),
   };
   const api = createApiRoutes(services);
   const decide = (id: string, as: string, body: unknown = { decision: 'approve', reason: 'restock is due' }) =>
@@ -63,7 +64,7 @@ function env() {
     const p = await harness.propose({
       ctx,
       principal: agentPrincipal('it-planner', 'Procurement Planner'),
-      ops: [{ action: 'purchases.upsert', input: poInput() }],
+      ops: [{ action: FAKE_PURCHASE_ACTION, input: poInput() }],
       title: 'Restock Blue Dream',
       rationale: 'Below reorder point at 2 locations',
       meta: { workflowRunId: 'run-it-1' },

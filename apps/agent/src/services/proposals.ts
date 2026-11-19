@@ -1,4 +1,4 @@
-import { totalValue, userPrincipal, type Harness, type Proposal } from '@ops/harness';
+import { DecisionConflictError, totalValue, userPrincipal, type Harness, type Proposal } from '@ops/harness';
 import { and, asc, desc, eq, inArray, type SQL } from 'drizzle-orm';
 import type { ApiServices } from '../api/services';
 import type { AuditEvent, ProposalDetail, ProposalSummary } from '../api/schemas';
@@ -54,7 +54,39 @@ export function toProposalDetail(p: Proposal): ProposalDetail {
  * decision goes through `harness.decide`, which enforces the approve scope, separation of duties,
  * exactly-once (compare-and-set on `proposal.version`), edit re-planning and audit.
  */
-export function createProposalService<TCtx>(db: DB, harness: Harness<TCtx>, ctxFor: () => TCtx): ApiServices['proposals'] {
+/**
+ * Called after a decision is recorded (or found already recorded): resumes the workflow run that
+ * created the proposal. Must be idempotent and must not throw for "nothing to resume".
+ */
+export type DecisionHook = (proposal: Proposal) => Promise<void>;
+
+/**
+ * Reads go straight to Postgres (list needs filtering/paging the harness doesn't offer); the
+ * decision goes through `harness.decide`, which enforces the approve scope, separation of duties,
+ * exactly-once (compare-and-set on `proposal.version`), edit re-planning and audit.
+ *
+ * After `harness.decide` succeeds, `onDecided` resumes the suspended restock run
+ * (`proposal.meta.workflowRunId`). Idempotent end to end: a second click gets 409 from the harness
+ * but still nudges the run (in case the first resume was lost), and the resume itself is a no-op
+ * unless the run is suspended; the workflow step re-reads the proposal, so the decision recorded by
+ * the harness (not the resume payload) is what the run acts on.
+ */
+export function createProposalService<TCtx>(
+  db: DB,
+  harness: Harness<TCtx>,
+  ctxFor: () => TCtx,
+  options: { onDecided?: DecisionHook; onHookError?: (err: unknown, proposalId: string) => void } = {},
+): ApiServices['proposals'] {
+  const nudge = async (p: Proposal) => {
+    if (!options.onDecided) return;
+    try {
+      await options.onDecided(p);
+    } catch (err) {
+      // The decision is recorded; a failed resume is retried by the next decision call or an operator.
+      options.onHookError?.(err, p.id);
+    }
+  };
+
   return {
     async list({ status, limit }) {
       const rows = await db
@@ -85,15 +117,25 @@ export function createProposalService<TCtx>(db: DB, harness: Harness<TCtx>, ctxF
     },
 
     async decide(id, user, input) {
-      const decided = await harness.decide({
-        ctx: ctxFor(),
-        // Role → scopes (operator: read+propose, approver: +approve). The harness re-checks the scope.
-        principal: userPrincipal(user.id, user.role, user.name),
-        proposalId: id,
-        decision: input.decision,
-        ...(input.reason !== undefined ? { reason: input.reason } : {}),
-        ...(input.edits ? { edits: input.edits } : {}),
-      });
+      let decided: Proposal;
+      try {
+        decided = await harness.decide({
+          ctx: ctxFor(),
+          // Role → scopes (operator: read+propose, approver: +approve). The harness re-checks the scope.
+          principal: userPrincipal(user.id, user.role, user.name),
+          proposalId: id,
+          decision: input.decision,
+          ...(input.reason !== undefined ? { reason: input.reason } : {}),
+          ...(input.edits ? { edits: input.edits } : {}),
+        });
+      } catch (err) {
+        if (err instanceof DecisionConflictError) {
+          const current = await loadProposal(db, id);
+          if (current?.decision) await nudge(current);
+        }
+        throw err;
+      }
+      await nudge(decided);
       return toProposalDetail(decided);
     },
   };

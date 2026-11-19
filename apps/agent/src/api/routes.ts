@@ -1,6 +1,13 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import { requireRole, requireUser, sessionMiddleware, type AuthVariables } from '../auth/session';
 import {
+  ConnectorListSchema,
+  DistruWebhookHeadersSchema,
+  RunDetailSchema,
+  RunIdParamsSchema,
+  StartRunRequestSchema,
+  StartRunResponseSchema,
+  WebhookResponseSchema,
   AuditEventListSchema,
   DecisionRequestSchema,
   DecisionResponseSchema,
@@ -16,12 +23,13 @@ import {
   ProposalListSchema,
   RunListSchema,
 } from './schemas';
+import { DistruWebhookSchema, restockScopeFor, verifyDistruSignature } from './distru-webhook';
 import { toHttpError } from './harness-errors';
 import type { ApiServices } from './services';
 import { z } from 'zod';
 
 export const OPENAPI_PATH = '/api/openapi.json';
-const SESSION_PATHS = ['/api/me', '/api/proposals', '/api/proposals/*', '/api/audit-events', '/api/runs'];
+const SESSION_PATHS = ['/api/me', '/api/proposals', '/api/proposals/*', '/api/audit-events', '/api/runs', '/api/runs/*', '/api/connectors'];
 
 const json = <T>(schema: T, description: string) => ({
   description,
@@ -128,11 +136,73 @@ const listRunsRoute = createRoute({
   path: '/api/runs',
   operationId: 'listRuns',
   tags: ['runs'],
-  summary: 'Workflow runs (placeholder until the run timeline lands)',
+  summary: 'Restock workflow runs (newest first), each linked to the proposal it created',
   security: authed,
   middleware: [requireUser] as const,
   request: { query: ListRunsQuerySchema },
   responses: { 200: json(RunListSchema, 'Runs'), 401: errors[401] },
+});
+
+const getRunRoute = createRoute({
+  method: 'get',
+  path: '/api/runs/{id}',
+  operationId: 'getRun',
+  tags: ['runs'],
+  summary: 'Run detail: status, input/result, step timeline with agent calls (tokens, cost, tool calls), linked proposal',
+  security: authed,
+  middleware: [requireUser] as const,
+  request: { params: RunIdParamsSchema },
+  responses: {
+    200: json(RunDetailSchema, 'Run'),
+    401: errors[401],
+    404: json(ErrorResponseSchema, 'Not found'),
+  },
+});
+
+const startRunRoute = createRoute({
+  method: 'post',
+  path: '/api/runs',
+  operationId: 'startRun',
+  tags: ['runs'],
+  summary: 'Start a restock run (operator or approver). Returns the run id immediately',
+  description:
+    'Queues the durable restock workflow (Inngest). The run suspends with a proposal waiting for a decision unless policy auto-approves it. Poll GET /api/runs/{id}.',
+  security: authed,
+  middleware: [requireRole('operator', 'approver')] as const,
+  request: { body: { required: false, content: { 'application/json': { schema: StartRunRequestSchema } } } },
+  responses: {
+    202: json(StartRunResponseSchema, 'Run started'),
+    400: json(ErrorResponseSchema, 'Invalid body'),
+    ...errors,
+    503: json(ErrorResponseSchema, 'Workflow engine unavailable (e.g. Inngest dev server not running)'),
+  },
+});
+
+const listConnectorsRoute = createRoute({
+  method: 'get',
+  path: '/api/connectors',
+  operationId: 'listConnectors',
+  tags: ['connectors'],
+  summary: 'Connected systems: live health + tool catalogue (read tools and propose-only actions)',
+  security: authed,
+  middleware: [requireUser] as const,
+  responses: { 200: json(ConnectorListSchema, 'Connectors'), 401: errors[401] },
+});
+
+const distruWebhookRoute = createRoute({
+  method: 'post',
+  path: '/api/webhooks/distru',
+  operationId: 'receiveDistruWebhook',
+  tags: ['webhooks'],
+  summary: 'Distru webhook receiver (HMAC-signed). ORDER CREATE starts a restock run scoped to the ordered products',
+  description:
+    'Body: Distru webhook envelope `{ type, event, id, object, changes, occurred_datetime }` (raw JSON, verified before parsing). Authenticated by `x-distru-signature: sha256=<hex HMAC-SHA256(raw body, DISTRU_WEBHOOK_SECRET)>`, not by a session.',
+  request: { headers: DistruWebhookHeadersSchema },
+  responses: {
+    200: json(WebhookResponseSchema, 'Accepted (restock requested or ignored)'),
+    400: json(ErrorResponseSchema, 'Body is not a Distru webhook'),
+    401: json(ErrorResponseSchema, 'Missing or invalid signature'),
+  },
 });
 
 // ---------------------------------------------------------------------------
@@ -213,6 +283,53 @@ export function createApiRoutes(services: ApiServices) {
   api.openapi(listRunsRoute, async (c) => {
     const items = await services.runs.list(c.req.valid('query'));
     return c.json({ items }, 200);
+  });
+
+  api.openapi(getRunRoute, async (c) => {
+    const run = await services.runs.get(c.req.valid('param').id);
+    if (!run) return c.json({ error: 'not_found', message: 'Run not found' }, 404);
+    return c.json(run, 200);
+  });
+
+  api.openapi(startRunRoute, async (c) => {
+    const body = c.req.valid('json') ?? {};
+    try {
+      const { runId, workflowId } = await services.runs.start(body, c.get('user')!);
+      return c.json({ runId, workflowId, status: 'started' as const }, 202);
+    } catch (err) {
+      return c.json({ error: 'engine_unavailable', message: err instanceof Error ? err.message : 'Could not start the run' }, 503);
+    }
+  });
+
+  api.openapi(listConnectorsRoute, async (c) => {
+    const items = await services.connectors.list();
+    return c.json({ items }, 200);
+  });
+
+  api.openapi(distruWebhookRoute, async (c) => {
+    const raw = await c.req.raw.clone().text();
+    if (!verifyDistruSignature(raw, c.req.header('x-distru-signature'), services.webhooks.distruSecret)) {
+      return c.json({ error: 'invalid_signature', message: 'Missing or invalid x-distru-signature' }, 401);
+    }
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(raw);
+    } catch {
+      return c.json({ error: 'invalid_body', message: 'Body is not JSON' }, 400);
+    }
+    const hook = DistruWebhookSchema.safeParse(parsedJson);
+    if (!hook.success) return c.json({ error: 'invalid_body', message: 'Not a Distru webhook envelope' }, 400);
+    const scope = restockScopeFor(hook.data);
+    if (!scope) {
+      return c.json({ ok: true as const, action: 'ignored' as const, reason: `${hook.data.type} ${hook.data.event} does not trigger a restock` }, 200);
+    }
+    await services.webhooks.requestRestock({
+      triggeredBy: `webhook:distru (ORDER ${hook.data.id})`,
+      productIds: scope.productIds,
+      ...(scope.locationIds.length ? { locationIds: scope.locationIds } : {}),
+      scenarioNote: `New sales order ${hook.data.id}: check whether the ordered products need restocking.`,
+    });
+    return c.json({ ok: true as const, action: 'restock_requested' as const, reason: null }, 200);
   });
 
   api.doc31(OPENAPI_PATH, {

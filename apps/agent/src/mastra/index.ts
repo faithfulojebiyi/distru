@@ -4,12 +4,42 @@ import { PostgresStore } from '@mastra/pg';
 import { auth, signInWithEmail } from '../auth/auth';
 import { BetterAuthMastraProvider } from '../auth/mastra-auth';
 import { betterAuthResolver } from '../auth/session';
+import { db } from '../db/client';
 import { env } from '../env';
-import { opsAgent } from './agents/ops-agent';
+import { appHarness, appPolicyRules } from '../harness/app';
+import { findProposalByRunId } from '../harness/proposal-store';
+import { appContexts, appRegistry } from '../harness/registry';
+import { createAgents, modelsFromEnv } from './agents';
 import { mcpServers } from './mcp';
+import { restockLauncher } from './restock-launcher';
 import { scorers } from './scorers';
 import { tools } from './tools';
 import { helloWorkflow } from './workflows/hello';
+import { createRestockWorkflow, type RestockDeps } from './workflows/restock';
+
+/** What the restock workflow runs against: the app harness (Postgres), the Distru connector, the seeded policy. */
+export const restockDeps: RestockDeps = {
+  registry: appRegistry,
+  harness: appHarness,
+  policyRules: appPolicyRules,
+  contexts: appContexts,
+  pricing: { inputUsdPerMTok: env.LLM_INPUT_USD_PER_MTOK, outputUsdPerMTok: env.LLM_OUTPUT_USD_PER_MTOK },
+  findProposalByRunId: (runId) => findProposalByRunId(db, runId),
+};
+
+/**
+ * Ops Lead (supervisor) + Inventory Analyst, Procurement Planner, Compliance Reviewer, Policy Critic.
+ * Model ids come from env per agent; ANTHROPIC_API_KEY is only needed when an agent is called.
+ */
+export const agents = createAgents({
+  registry: appRegistry,
+  harness: appHarness,
+  readCtx: () => appContexts().read,
+  models: modelsFromEnv(env),
+  launcher: restockLauncher,
+});
+
+export const restockWorkflow = createRestockWorkflow(restockDeps);
 
 /**
  * The Mastra instance — the central registration point (https://mastra.ai/reference/project-structure):
@@ -17,8 +47,8 @@ import { helloWorkflow } from './workflows/hello';
  * MastraServer, so `server.port/cors/build` options don't apply here — see src/app.ts.
  */
 export const mastra = new Mastra({
-  agents: { opsAgent },
-  workflows: { helloWorkflow },
+  agents,
+  workflows: { helloWorkflow, restockWorkflow },
   tools,
   scorers,
   mcpServers,
@@ -49,3 +79,5 @@ export const mastra = new Mastra({
   },
   environment: env.NODE_ENV,
 });
+
+restockLauncher.bind(mastra);

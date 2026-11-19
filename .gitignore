@@ -12,3 +12,4 @@ apps/web/src/routeTree.gen.ts
 .DS_Store
 .claude/settings.local.json
 docs/
+.scratch

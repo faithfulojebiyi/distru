@@ -242,25 +242,137 @@ export const ListAuditEventsQuerySchema = z.object({
 });
 
 export const RunStatusSchema = z
-  .enum(['running', 'suspended', 'success', 'failed', 'canceled', 'pending', 'waiting'])
+  .enum(['running', 'suspended', 'success', 'failed', 'canceled', 'pending', 'waiting', 'tripwire', 'bailed', 'paused', 'skipped'])
   .meta({ id: 'RunStatus' });
+
+export const RunProposalLinkSchema = z
+  .object({ id: z.uuid(), status: ProposalStatusSchema, title: z.string().nullable(), totalValue: z.number().nullable() })
+  .meta({ id: 'RunProposalLink' });
 
 export const RunSummarySchema = z
   .object({
     runId: z.string(),
     workflowId: z.string(),
     status: RunStatusSchema,
+    triggeredBy: z.string().nullable(),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
+    /** The proposal the run created (null before the propose step, or when nothing needed ordering). */
+    proposal: RunProposalLinkSchema.nullable(),
   })
   .meta({ id: 'RunSummary' });
 
 export const RunListSchema = z.object({ items: z.array(RunSummarySchema) }).meta({ id: 'RunList' });
 
 export const ListRunsQuerySchema = z.object({
-  workflowId: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
+
+export const RunIdParamsSchema = z.object({ id: z.string().min(1).max(200) });
+
+export const ToolCallTraceSchema = z
+  .object({ tool: z.string(), startedAt: z.iso.datetime(), durationMs: z.number(), ok: z.boolean(), error: z.string().nullable() })
+  .meta({ id: 'RunToolCall' });
+
+export const TokenUsageSchema = z
+  .object({ input: z.number().int(), output: z.number().int(), total: z.number().int() })
+  .meta({ id: 'RunTokenUsage' });
+
+/** One agent call on the timeline (agent, the step that called it, tokens, cost estimate, tool calls). */
+export const RunAgentCallSchema = z
+  .object({
+    agent: z.string(),
+    agentName: z.string(),
+    step: z.string(),
+    label: z.string(),
+    round: z.number().int().nullable(),
+    status: z.enum(['success', 'failed']),
+    startedAt: z.iso.datetime(),
+    endedAt: z.iso.datetime(),
+    tokens: TokenUsageSchema,
+    costUsd: z.number(),
+    toolCalls: z.array(ToolCallTraceSchema),
+    summary: z.string().nullable(),
+    error: z.string().nullable(),
+  })
+  .meta({ id: 'RunAgentCall' });
+
+export const RunStepSchema = z
+  .object({
+    stepId: z.string(),
+    /** Mastra step status: success | failed | suspended | running | waiting | paused | skipped | canceled. */
+    status: z.string(),
+    startedAt: z.iso.datetime().nullable(),
+    endedAt: z.iso.datetime().nullable(),
+    suspendedAt: z.iso.datetime().nullable(),
+    resumedAt: z.iso.datetime().nullable(),
+    /** foreach steps: number of iterations. */
+    iterations: z.number().int().nullable(),
+    agents: z.array(RunAgentCallSchema),
+    error: z.string().nullable(),
+  })
+  .meta({ id: 'RunStep' });
+
+export const RunDetailSchema = RunSummarySchema.extend({
+  input: z.record(z.string(), z.unknown()).nullable(),
+  result: z.record(z.string(), z.unknown()).nullable(),
+  error: z.string().nullable(),
+  /** Steps in execution order, each with the agent calls it made. */
+  steps: z.array(RunStepSchema),
+  totals: z.object({ tokens: TokenUsageSchema, costUsd: z.number(), agentCalls: z.number().int(), toolCalls: z.number().int() }),
+  /** Payload of the suspended step (e.g. `{ proposalId }` while waiting for a decision). */
+  suspendPayload: z.record(z.string(), z.unknown()).nullable(),
+}).meta({ id: 'RunDetail' });
+
+export const StartRunRequestSchema = z
+  .object({
+    scenarioNote: z.string().max(1000).optional(),
+    locationIds: z.array(z.string().min(1)).max(20).optional(),
+    vendorIds: z.array(z.string().min(1)).max(50).optional(),
+    productIds: z.array(z.string().min(1)).max(100).optional(),
+  })
+  .meta({ id: 'StartRunRequest' });
+
+export const StartRunResponseSchema = z
+  .object({ runId: z.string(), workflowId: z.string(), status: z.literal('started') })
+  .meta({ id: 'StartRunResponse' });
+
+export const ConnectorToolSchema = z
+  .object({
+    toolName: z.string(),
+    name: z.string(),
+    kind: z.enum(['read', 'action']),
+    requiredScope: ScopeSchema,
+    risk: RiskSchema.nullable(),
+    description: z.string(),
+  })
+  .meta({ id: 'ConnectorTool' });
+
+export const ConnectorSummarySchema = z
+  .object({
+    id: z.string(),
+    system: z.string(),
+    description: z.string(),
+    health: z.object({ ok: z.boolean(), detail: z.string().nullable() }),
+    readTools: z.number().int(),
+    actions: z.number().int(),
+    tools: z.array(ConnectorToolSchema),
+  })
+  .meta({ id: 'ConnectorSummary' });
+
+export const ConnectorListSchema = z.object({ items: z.array(ConnectorSummarySchema) }).meta({ id: 'ConnectorList' });
+
+export const DistruWebhookHeadersSchema = z.object({
+  'x-distru-signature': z.string().optional().describe('sha256=<hex HMAC-SHA256 of the raw body with DISTRU_WEBHOOK_SECRET>'),
+});
+
+export const WebhookResponseSchema = z
+  .object({
+    ok: z.literal(true),
+    action: z.enum(['restock_requested', 'ignored']),
+    reason: z.string().nullable(),
+  })
+  .meta({ id: 'WebhookResponse' });
 
 export type Me = z.infer<typeof MeSchema>;
 export type ProposalSummary = z.infer<typeof ProposalSummarySchema>;
@@ -268,3 +380,8 @@ export type ProposalDetail = z.infer<typeof ProposalDetailSchema>;
 export type DecisionRequest = z.infer<typeof DecisionRequestSchema>;
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 export type RunSummary = z.infer<typeof RunSummarySchema>;
+export type RunDetail = z.infer<typeof RunDetailSchema>;
+export type RunStep = z.infer<typeof RunStepSchema>;
+export type StartRunRequest = z.infer<typeof StartRunRequestSchema>;
+export type ConnectorSummary = z.infer<typeof ConnectorSummarySchema>;
+export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;

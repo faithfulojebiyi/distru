@@ -35,6 +35,8 @@ export class FakeErp {
   }
 }
 
+export const FAKE_PURCHASE_ACTION = 'distru.purchases.upsert';
+
 export interface TestCtx {
   erp: FakeErp;
 }
@@ -47,7 +49,8 @@ type PurchasePayload = z.infer<typeof PurchaseInput>;
 
 export function purchaseUpsertAction(risk: Risk = 'medium') {
   return defineAction({
-    name: 'purchases.upsert',
+    // Same registry name as the Distru connector's action, so the seeded `allowed_actions` rule applies.
+    name: FAKE_PURCHASE_ACTION,
     resource: 'purchases',
     description: 'Create a purchase order (fake ERP).',
     risk,

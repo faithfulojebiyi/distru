@@ -9,4 +9,8 @@ import { Inngest } from 'inngest';
 export const inngest = new Inngest({ id: 'ops-agent' });
 
 /** Inngest-backed workflow primitives: every step is memoized and retried by Inngest. */
-export const { createWorkflow, createStep } = init(inngest);
+export const inngestWorkflowKit = init(inngest);
+export const { createWorkflow, createStep } = inngestWorkflowKit;
+
+/** Event that starts a restock run (sent by the Distru webhook route; consumed by `restockOnEvent`). */
+export const RESTOCK_REQUESTED_EVENT = 'ops/restock.requested';

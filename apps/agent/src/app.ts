@@ -12,22 +12,38 @@ import { betterAuthResolver } from './auth/session';
 import { db } from './db/client';
 import { env } from './env';
 import { mastra } from './mastra';
-import { inngest } from './mastra/inngest';
-import { createAppHarness } from './harness/harness';
+import { createRestockFunctions } from './mastra/functions';
+import { inngest, RESTOCK_REQUESTED_EVENT } from './mastra/inngest';
+import { restockLauncher } from './mastra/restock-launcher';
+import { appHarness } from './harness/app';
 import { appRegistry, createAppCtx } from './harness/registry';
+import { createConnectorsService } from './services/connectors';
 import { createAuditService, createProposalService } from './services/proposals';
+import { createRunsService, dbProposalLinks, resumeRunOnDecision } from './services/runs';
 
 export function createServices(): ApiServices {
+  const logger = () => mastra.getLogger();
   return {
     resolveSession: betterAuthResolver(auth),
     checkDatabase: async () => {
       await db.execute(dsql`select 1`);
       return true;
     },
-    proposals: createProposalService(db, createAppHarness({ registry: appRegistry }), createAppCtx),
+    proposals: createProposalService(db, appHarness, createAppCtx, {
+      // Resume the restock run that is waiting on this proposal (no-op unless it is suspended).
+      onDecided: resumeRunOnDecision(restockLauncher),
+      onHookError: (err, proposalId) =>
+        logger()?.error('resume after decision failed', { proposalId, error: err instanceof Error ? err.message : String(err) }),
+    }),
     audit: createAuditService(db),
-    // Placeholder until the run timeline (day 4) reads runs + traces from Mastra storage.
-    runs: { list: async () => [] },
+    runs: createRunsService({ launcher: restockLauncher, proposalLinks: dbProposalLinks(db) }),
+    connectors: createConnectorsService(appRegistry, createAppCtx),
+    webhooks: {
+      distruSecret: env.DISTRU_WEBHOOK_SECRET,
+      requestRestock: async (data) => {
+        await inngest.send({ name: RESTOCK_REQUESTED_EVENT, data });
+      },
+    },
   };
 }
 
@@ -37,7 +53,8 @@ export function createServices(): ApiServices {
  *   CORS (credentials, WEB_ORIGIN)
  *   /api/auth/*        Better Auth
  *   /api/inngest       Inngest serve endpoint (Mastra workflows as Inngest functions)
- *   /api/health, /api/me, /api/proposals, /api/audit-events, /api/runs   custom typed routes
+ *   /api/health, /api/me, /api/proposals, /api/audit-events, /api/runs, /api/connectors,
+ *   /api/webhooks/distru   custom typed routes
  *   /api/openapi.json  OpenAPI 3.1 for the custom routes (Orval input)
  *   /api/agents, /api/workflows, /api/memory, ...   Mastra built-ins (Better Auth session required)
  */
@@ -65,7 +82,8 @@ export async function createApp(services: ApiServices = createServices()) {
   const mastraAuthPaths = new Set<string>(MASTRA_STUDIO_AUTH_PATHS);
   app.on(['GET', 'POST'], '/api/auth/*', (c, next) => (mastraAuthPaths.has(c.req.path) ? next() : auth.handler(c.req.raw)));
 
-  app.on(['GET', 'POST', 'PUT'], '/api/inngest', inngestServe({ mastra, inngest }));
+  const functions = createRestockFunctions(restockLauncher, { cronEnabled: env.RESTOCK_CRON_ENABLED, cron: env.RESTOCK_CRON });
+  app.on(['GET', 'POST', 'PUT'], '/api/inngest', inngestServe({ mastra, inngest, functions }));
 
   app.route('/', createApiRoutes(services));
 
