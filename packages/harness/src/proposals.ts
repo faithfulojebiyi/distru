@@ -91,17 +91,29 @@ async function evaluatePolicy<TCtx>(deps: HarnessDeps<TCtx>, principal: Principa
   );
 }
 
-export async function propose<TCtx>(deps: HarnessDeps<TCtx>, args: ProposeArgs<TCtx>): Promise<Proposal> {
+/** Internal knobs for harness-built proposals (undo); not part of the public `ProposeArgs`. */
+export interface ProposeOptions {
+  /** Use this id (reserved by the caller beforehand). */
+  id?: string;
+  /** Never auto-approve: an `allow` outcome becomes `needs_approval` (deny still denies). */
+  requireApproval?: { rule: string; message: string };
+}
+
+export async function propose<TCtx>(deps: HarnessDeps<TCtx>, args: ProposeArgs<TCtx>, options: ProposeOptions = {}): Promise<Proposal> {
   const { ctx, principal } = args;
   assertScope(principal, 'propose');
   if (args.ops.length === 0) throw new InputValidationError('A proposal needs at least one op');
 
-  const id = deps.ids();
+  const id = options.id ?? deps.ids();
   const ops: ProposalOp[] = [];
   for (const [index, request] of args.ops.entries()) {
     ops.push(await planOp(deps, ctx, principal, id, index, request));
   }
-  const policy = await evaluatePolicy(deps, principal, ops);
+  let policy = await evaluatePolicy(deps, principal, ops);
+  if (options.requireApproval && policy.outcome !== 'deny') {
+    const { rule, message } = options.requireApproval;
+    policy = { outcome: 'needs_approval', reasons: [...policy.reasons, { rule, outcome: 'needs_approval', severity: 'info', message }] };
+  }
   const now = nowIso(deps);
   const proposal: Proposal = {
     id,

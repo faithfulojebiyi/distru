@@ -21,7 +21,9 @@ Postgres, Inngest or HTTP imports: every side effect goes through a port.
 | Op references | A later op may use a value that only exists once an earlier op ran: `{{op:<i>.recordId}}` or `{{op:<i>.<output>}}` inside any payload string (`opRef(i, field)`). See "Op references" below. |
 | Value | `valueOf(payload)` (own hook only) gives an op's money value; `moneyless: true` makes it 0 (emails, tasks, catalog settings) so `max_total_value` still checks the proposal; otherwise null (unknown → the cap asks for a human). `opValueOf(action, payload)`. |
 | Budgets | `new Budget({ maxSteps, maxTokens, maxCostUsd, maxWallClockMs })`, `charge()`, `BudgetExceededError`, `budget.signal`, `abortable`, `anySignal`. |
+| Triggers | `defineTrigger<TEvent>({ id, source, description, eventName, event, secret?, verify, normalize, untrustedFields? })` (signed webhook) or `{ delivery: 'schedule', cron, normalize }`; `defineConnector({ triggers })` (ids `<connector>.<name>`, `connectorId` stamped); `new Registry({ triggers })`, `registry.triggers()` / `trigger(id)`; `ingestWebhook(source, id, rawBody, headers, secrets, { audit, clock })` → accepted `{ name, id, data }` / ignored / rejected (401/400) + `trigger.received` / `trigger.rejected`. See "Triggers" below. |
 | Audit | Typed `AuditEvent` union (`proposal.created`, `policy.evaluated`, `proposal.decided`, `op.executed`, `op.deduplicated`, `op.verified`, `op.verify_failed`, `op.retry`, `op.failed`, `proposal.failed`, `budget.exceeded`, …). |
+| Undo | Optional `compensate` / `planCompensation` / `canCompensate` / `irreversible` on actions; `harness.undo({ ctx, principal, proposalId, opIndexes?, reason })` → a NEW compensating proposal (`<action>.undo` ops, reverse order, `meta.undoOf`, never auto-approved); `harness.undoInfo(p)` → per-op `canUndo` + reason; `undoWindowMs`. See "Undo / rollback" below. |
 
 ## Usage
 
@@ -77,6 +79,71 @@ then create a receiving task *linked to the PO*". The PO number only exists afte
   on the `op.executed` audit event. An unresolvable reference fails the op with
   `UnresolvedReferenceError` (`code: unresolved_reference`, not retried).
 - Idempotency is unaffected: keys are per (proposal, op index), never derived from resolved values.
+
+## Triggers (inbound events)
+
+Triggers are how the outside world starts agent work: signed webhooks (a Distru ORDER CREATE, a
+Composio Gmail message, a Slack button click) and schedules (the morning restock scan). They live in
+the registry next to actions, so the catalogue, the audit trail and the app all see the same list.
+
+```ts
+import { defineTrigger, ingestWebhook, headerValue, hmacSha256Hex, timingSafeEqualString } from '@ops/harness';
+
+const orderCreated = defineTrigger<OrderEvent>({
+  id: 'shop.order_created', source: 'shop', description: 'A shop order was created',
+  eventName: 'shop/order.created', event: OrderEventSchema, secret: 'SHOP_SECRET', untrustedFields: ['note'],
+  // Over the RAW body; never throw for a bad request.
+  verify: async (rawBody, headers, secrets, { now }) => (await validSignature(rawBody, headers, secrets.SHOP_SECRET, now))
+    ? { ok: true, webhookId: headerValue(headers, 'x-id')!, raw: JSON.parse(rawBody) }
+    : { ok: false, reason: 'bad_signature' },
+  normalize: (raw, { eventId }) => (isCreate(raw) ? toEvent(raw, eventId) : null), // null = acknowledged, ignored
+});
+const shop = defineConnector({ id: 'shop', system: 'other', description: 'Shop', triggers: [orderCreated] });
+
+// In the route:
+const r = await ingestWebhook(registry, 'shop.order_created', await req.text(), req.headers, { SHOP_SECRET }, { audit, clock });
+if (r.status === 'rejected') return json({ error: r.reason }, r.httpStatus);   // 401 signature / 400 payload
+if (r.status === 'accepted') await inngest.send(r.event);                      // { name, id: 'shop.order_created:<webhook id>', data }
+```
+
+- `ingestWebhook` verifies, normalizes, validates the event with the trigger's zod schema and audits:
+  `trigger.received { triggerId, source, connectorId, eventName, webhookId, untrustedFields, ignored }` or
+  `trigger.rejected { triggerId, source, connectorId, reason, message }` (actor `system:trigger:<id>`,
+  `proposalId: null`). A missing secret fails closed (`missing_secret`). A throwing `verify` is a rejection.
+- The queue event `id` is `<trigger id>:<webhook id>`, so a redelivery dedupes (Inngest keeps ids 24 h).
+- `triggerSource([...])` builds a source from a plain list (e.g. one route that only knows its trigger).
+- Helpers: `headerValue` (case-insensitive, `Headers` or records), `hmacSha256Hex`, `timingSafeEqualString`.
+- Schedule triggers (`delivery: 'schedule'`, `cron`) are catalogue entries for the queue's cron; `ingestWebhook` refuses them.
+
+## Undo / rollback
+
+An undo is never a write of its own: `harness.undo()` turns executed ops into a **new proposal** of
+compensating ops, which then goes through policy, a human decision and the executor like any change.
+
+```ts
+const u = await harness.undo({ ctx, principal: userPrincipal(id, 'operator'), proposalId, reason: 'Vendor cancelled' });
+// u.status === 'pending_approval' (always: rule `undo_requires_approval`); u.meta.undoOf = { proposalId, opIndexes }
+// u.meta.notUndoable = [{ opIndex, reason: 'The email was already delivered…' }]
+const info = await harness.undoInfo(proposalId); // { available, ops: [{ opIndex, canUndo, reason, undoProposalId }], undoProposalId, until }
+```
+
+- **Action hooks** (all optional): `canCompensate(op)` (pure: can this executed op be undone?),
+  `planCompensation(ctx, op, result) → { current, target, summary?, value? }` (reads the record *now*;
+  `target: null` = delete; throw `InputValidationError` when it moved on, e.g. a received PO),
+  `compensate(ctx, op, result) → { recordId, record }` (idempotent by value: deleting twice or
+  restoring twice succeeds), `irreversible` (why an action without `compensate` can't be undone).
+  Hooks see the op with `{{op:N.field}}` references already resolved from the original proposal.
+- **Derived actions**: the registry derives `<action>.undo` for every action with `compensate`
+  (`registry.action('distru.purchases.upsert.undo')`); they are not in the catalog, so no agent gets a
+  `propose_*` tool for them. Plan → `before` = current record, payload target, diff current → target;
+  verify re-plans and checks the record equals the target (or is gone).
+- **Order and coverage**: ops are undone in reverse order (a task linked to a PO goes before the PO).
+  The original proposal records `meta.undo.proposals` (reserved by compare-and-set before the undo
+  proposal is created) and gets a `proposal.undo_proposed` audit event. An op covered by a live undo
+  proposal can't be undone twice; a rejected/denied undo frees it again. An undo can't be undone.
+- **Policy**: `allowed_actions` allows `<action>.undo` when `<action>` is allowed (or listed
+  explicitly); value rules see the compensation's own value (0 for a delete); separation of duties
+  applies to the undo's decision. Only `executed` / `failed` proposals, within `undoWindowMs`.
 
 ## Error routing and a live registry
 

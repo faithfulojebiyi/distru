@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RiskSchema } from './action';
+import { RiskSchema, undoBaseOf } from './action';
 import { PrincipalSchema } from './scopes';
 
 /** Rules are data (stored in `policy_rule`), evaluated by registered implementations. */
@@ -109,6 +109,12 @@ export const maxTotalValueRule = definePolicyRule({
   },
 });
 
+/** Undoing an allowed action (`<action>.undo`) is allowed too; it can also be listed explicitly. */
+const isAllowedUndo = (action: string, actions: readonly string[]): boolean => {
+  const base = undoBaseOf(action);
+  return base !== null && actions.includes(base);
+};
+
 export const allowedActionsRule = definePolicyRule({
   key: RULE_KEYS.allowedActions,
   description: 'Deny ops on resources/actions that are not explicitly allowed.',
@@ -118,7 +124,7 @@ export const allowedActionsRule = definePolicyRule({
     for (const op of subject.ops) {
       if (resources && !resources.includes(op.resource)) {
         findings.push({ outcome: 'deny', message: `Op #${op.index}: resource '${op.resource}' is not allowed` });
-      } else if (actions && !actions.includes(op.action)) {
+      } else if (actions && !actions.includes(op.action) && !isAllowedUndo(op.action, actions)) {
         findings.push({ outcome: 'deny', message: `Op #${op.index}: action '${op.action}' is not allowed` });
       }
     }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { ActionScope, AnyAction, AnyReadTool, Risk } from './action';
+import { undoBaseOf, type ActionScope, type AnyAction, type AnyReadTool, type Risk } from './action';
+import { compensationAction } from './compensation';
 import {
   qualifiedName,
   type AnyConnector,
@@ -11,6 +12,7 @@ import {
 } from './connector';
 import { InputValidationError, NotFoundError } from './errors';
 import { assertScope, hasScope, type Principal, type Scope } from './scopes';
+import type { AnyTrigger, TriggerSource } from './trigger';
 
 export type JsonSchema = z.core.JSONSchema.BaseSchema;
 
@@ -46,6 +48,8 @@ export interface ConnectorInfo extends ConnectorRef {
   /** Registry names (namespaced, e.g. `distru.velocity_report`). */
   readTools: string[];
   actions: string[];
+  /** Trigger ids (`composio.gmail.new_message`); present when the connector has any. */
+  triggers?: string[];
 }
 
 export interface ConnectorHealthReport extends ConnectorHealth {
@@ -58,6 +62,8 @@ export interface RegistryInit<TCtx> {
   readTools?: readonly AnyReadTool<TCtx>[];
   /** Connectors whose tools/actions are added under `<connector id>.<name>`. */
   connectors?: readonly ConnectorDefinition<TCtx>[];
+  /** Triggers not owned by a connector (e.g. a schedule, or an app-level webhook such as Slack interactions). */
+  triggers?: readonly AnyTrigger[];
 }
 
 export const toolNameFor = (kind: 'action' | 'read', name: string): string =>
@@ -71,17 +77,21 @@ export function parseWith<T>(schema: z.ZodType<T>, value: unknown, what: string)
   return result.data;
 }
 
-export class Registry<TCtx> {
+export class Registry<TCtx> implements TriggerSource {
   readonly #actions = new Map<string, AnyAction<TCtx>>();
   readonly #readTools = new Map<string, AnyReadTool<TCtx>>();
   readonly #connectors = new Map<string, ConnectorDefinition<TCtx>>();
+  readonly #triggers = new Map<string, AnyTrigger>();
   /** Registry name → contributing connector. */
   readonly #owner = new Map<string, ConnectorRef>();
+  /** Derived compensating actions (`<action>.undo`), built on first use. */
+  readonly #undo = new Map<string, AnyAction<TCtx>>();
 
   constructor(init: RegistryInit<TCtx> = {}) {
     for (const action of init.actions ?? []) this.addAction(action);
     for (const tool of init.readTools ?? []) this.addReadTool(tool);
     for (const connector of init.connectors ?? []) this.addConnector(connector);
+    for (const trigger of init.triggers ?? []) this.addTrigger(trigger);
   }
 
   /**
@@ -103,6 +113,9 @@ export class Registry<TCtx> {
     const tools = connector.readTools.map((t) => ({ ...t, name: qualifiedName(connector.id, t.name) }));
     const actions = connector.actions.map((a) => ({ ...a, name: qualifiedName(connector.id, a.name) }));
     for (const item of [...tools, ...actions]) this.#assertFree(item.name);
+    const triggers = (connector.triggers ?? []).map((t) => ({ ...t, connectorId: connector.id }));
+    for (const t of triggers) if (this.#triggers.has(t.id)) throw new Error(`Duplicate trigger '${t.id}'`);
+    for (const t of triggers) this.#triggers.set(t.id, t);
     for (const tool of tools) this.addReadTool(tool);
     for (const action of actions) this.addAction(action);
     for (const item of [...tools, ...actions]) this.#owner.set(item.name, ref);
@@ -117,12 +130,31 @@ export class Registry<TCtx> {
       description: c.description,
       readTools: c.readTools.map((t) => qualifiedName(c.id, t.name)),
       actions: c.actions.map((a) => qualifiedName(c.id, a.name)),
+      ...(c.triggers?.length ? { triggers: c.triggers.map((t) => t.id) } : {}),
     }));
+  }
+
+  /** Register a trigger that no connector owns (schedules, app-level webhooks). */
+  addTrigger(trigger: AnyTrigger): this {
+    if (this.#triggers.has(trigger.id)) throw new Error(`Duplicate trigger '${trigger.id}'`);
+    this.#triggers.set(trigger.id, trigger);
+    return this;
+  }
+
+  /** Every trigger (connector-owned and standalone). */
+  triggers(): AnyTrigger[] {
+    return [...this.#triggers.values()];
+  }
+
+  trigger(id: string): AnyTrigger {
+    const t = this.#triggers.get(id);
+    if (!t) throw new NotFoundError(`Unknown trigger '${id}'`);
+    return t;
   }
 
   /** The connector that contributed a registry name, if any. */
   connectorOf(name: string): ConnectorRef | undefined {
-    return this.#owner.get(name);
+    return this.#owner.get(name) ?? this.#owner.get(undoBaseOf(name) ?? '');
   }
 
   /** Runs every connector's `health` probe; a throwing probe is reported as not ok. */
@@ -153,9 +185,26 @@ export class Registry<TCtx> {
   }
 
   action(name: string): AnyAction<TCtx> {
-    const action = this.#actions.get(name);
+    const action = this.#actions.get(name) ?? this.#compensation(name);
     if (!action) throw new NotFoundError(`Unknown action '${name}'`);
     return action;
+  }
+
+  /**
+   * `<action>.undo` for an action with a `compensate` hook: the derived compensating action undo
+   * proposals are made of. Not listed in `actions()` or the catalog (no `propose_*` tool): an undo
+   * is only ever created by `harness.undo` from an executed op.
+   */
+  #compensation(name: string): AnyAction<TCtx> | undefined {
+    const base = undoBaseOf(name);
+    const original = base ? this.#actions.get(base) : undefined;
+    if (!original?.compensate) return undefined;
+    let derived = this.#undo.get(name);
+    if (!derived) {
+      derived = compensationAction(original);
+      this.#undo.set(name, derived);
+    }
+    return derived;
   }
 
   readTool(name: string): AnyReadTool<TCtx> {

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { AnyAction, AnyReadTool } from './action';
+import type { AnyTrigger } from './trigger';
 
 /** The kind of business system a connector plugs into the harness. */
 export const ConnectorSystemSchema = z.enum(['erp', 'crm', 'email', 'calendar', 'spreadsheet', 'analytics', 'compliance', 'other']);
@@ -39,6 +40,11 @@ export interface ConnectorDefinition<TCtx> {
   readonly description: string;
   readonly readTools: readonly AnyReadTool<TCtx>[];
   readonly actions: readonly AnyAction<TCtx>[];
+  /**
+   * Inbound events this system can start work with (signed webhooks, schedules). Ids must start with
+   * `<connector id>.`; the registry stamps `connectorId`.
+   */
+  readonly triggers?: readonly AnyTrigger[];
   /** Cheap liveness/auth probe for the Settings / integrations page. */
   health?(ctx: TCtx): Promise<ConnectorHealth>;
   /**
@@ -62,9 +68,10 @@ export type ConnectorsContext<Cs extends readonly AnyConnector[]> = [Cs[number]]
   ? unknown
   : UnionToIntersection<ContextOf<Cs[number]>>;
 
-export type ConnectorSpec<TCtx> = Omit<ConnectorDefinition<TCtx>, 'kind' | '__context' | 'readTools' | 'actions'> & {
+export type ConnectorSpec<TCtx> = Omit<ConnectorDefinition<TCtx>, 'kind' | '__context' | 'readTools' | 'actions' | 'triggers'> & {
   readTools?: readonly AnyReadTool<TCtx>[];
   actions?: readonly AnyAction<TCtx>[];
+  triggers?: readonly AnyTrigger[];
 };
 
 const CONNECTOR_ID = /^[a-z][a-z0-9_]*$/;
@@ -73,7 +80,12 @@ const CONNECTOR_ID = /^[a-z][a-z0-9_]*$/;
 export function defineConnector<TCtx>(spec: ConnectorSpec<TCtx>): ConnectorDefinition<TCtx> {
   if (!CONNECTOR_ID.test(spec.id)) throw new Error(`Invalid connector id '${spec.id}' (expected e.g. 'distru')`);
   ConnectorSystemSchema.parse(spec.system);
-  return { ...spec, readTools: spec.readTools ?? [], actions: spec.actions ?? [], kind: 'connector' };
+  const triggers = (spec.triggers ?? []).map((t) => {
+    if (!t.id.startsWith(`${spec.id}.`)) throw new Error(`Trigger '${t.id}' of connector '${spec.id}' must be namespaced '${spec.id}.<name>'`);
+    if (t.connectorId && t.connectorId !== spec.id) throw new Error(`Trigger '${t.id}' already belongs to connector '${t.connectorId}'`);
+    return { ...t, connectorId: spec.id };
+  });
+  return { ...spec, readTools: spec.readTools ?? [], actions: spec.actions ?? [], triggers, kind: 'connector' };
 }
 
 /** Fully-qualified registry name of a connector-local tool/action name. */

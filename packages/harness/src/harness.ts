@@ -8,6 +8,7 @@ import { decide, propose, type DecideArgs, type ProposeArgs } from './proposals'
 import type { Registry } from './registry';
 import { neverRetry, RetryPolicySchema, type RetryPolicy } from './retry';
 import { inlineStepRunner, randomId, systemClock } from './runtime';
+import { undo, undoInfo, type UndoArgs, type UndoInfo } from './undo';
 
 export interface HarnessConfig<TCtx> {
   /**
@@ -32,13 +33,17 @@ export interface HarnessConfig<TCtx> {
   random?: () => number;
   /** Reject decisions made by the proposal's own creator. Default true. */
   separationOfDuties?: boolean;
+  /** How long after execution a proposal may be undone (ms). Default: no limit. */
+  undoWindowMs?: number;
 }
 
 /** The action harness: propose → (policy) → decide → execute, with audit at every step. */
 export class Harness<TCtx> {
   readonly #deps: HarnessDeps<TCtx>;
+  readonly #undoWindowMs: number | null;
 
   constructor(config: HarnessConfig<TCtx>) {
+    this.#undoWindowMs = config.undoWindowMs ?? null;
     const source = config.registry;
     const current = typeof source === 'function' ? source : () => source;
     this.#deps = {
@@ -76,6 +81,19 @@ export class Harness<TCtx> {
   /** Apply an approved/auto-approved proposal; idempotent and resumable. */
   execute(args: ExecuteArgs<TCtx>): Promise<Proposal> {
     return executeProposal(this.#deps, args);
+  }
+
+  /**
+   * Propose undoing executed ops: creates a NEW proposal of compensating ops (reverse order,
+   * `meta.undoOf`) that needs policy + approval + execution like any change. Never writes.
+   */
+  undo(args: UndoArgs<TCtx>): Promise<Proposal> {
+    return undo(this.#deps, args, this.#undoWindowMs);
+  }
+
+  /** Which ops of a proposal can be undone now, and why not. */
+  undoInfo(proposal: Proposal | string): Promise<UndoInfo> {
+    return undoInfo(this.#deps, proposal, this.#undoWindowMs);
   }
 
   get(proposalId: string): Promise<Proposal> {

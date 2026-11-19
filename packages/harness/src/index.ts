@@ -4,6 +4,7 @@ export * from './diff';
 export * from './verify';
 export * from './action';
 export * from './connector';
+export * from './trigger';
 export * from './registry';
 export * from './policy';
 export * from './proposal';
@@ -16,5 +17,7 @@ export { systemClock, inlineStepRunner, randomId, idempotencyKeyFor } from './ru
 export type { OpRequest, OpEdit, ProposeArgs, DecideArgs } from './proposals';
 export { stepIds, type ExecuteArgs } from './executor';
 export { Harness, createHarness, type HarnessConfig } from './harness';
+export * from './compensation';
+export { UndoUnavailableError, UndoInfoSchema, UndoOpInfoSchema, UndoOfMetaSchema, compensableOp, type UndoArgs, type UndoInfo, type UndoOpInfo } from './undo';
 export * from './memory';
 export { deepEqual, isPlainObject } from './json';

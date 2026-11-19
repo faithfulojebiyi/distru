@@ -33,6 +33,37 @@ export const AuditEventSchema = z.discriminatedUnion('type', [
   event('proposal.executed', { opCount: z.number().int() }),
   event('proposal.failed', { failedOpIndex: z.number().int().nullable(), error: SerializedErrorSchema }),
   event('budget.exceeded', { dimension: z.string(), limit: z.number(), used: z.number() }),
+  // Undo: recorded on the *original* proposal when a compensating proposal is created for it.
+  event('proposal.undo_proposed', {
+    undoProposalId: z.string(),
+    opIndexes: z.array(z.number().int()),
+    notUndoable: z.array(z.object({ opIndex: z.number().int(), reason: z.string() })),
+    reason: z.string(),
+  }),
+  // App-level governance events (no proposal): policy edits and MCP client tokens.
+  event('policy.changed', { key: z.string(), before: z.unknown(), after: z.unknown() }),
+  event('mcp_token.created', { tokenId: z.string(), name: z.string(), scopes: z.array(z.string()) }),
+  event('mcp_token.revoked', { tokenId: z.string(), name: z.string() }),
+  // Every call to our MCP server, with the caller's stated `intent` (Distru MCP convention).
+  event('mcp.tool_called', {
+    tool: z.string(),
+    intent: z.string(),
+    tokenId: z.string(),
+    outcome: z.enum(['ok', 'error']),
+    error: z.string().nullable(),
+  }),
+  // Triggers (inbound webhooks): `proposalId` is null; the actor is `system:trigger:<id>`.
+  event('trigger.received', {
+    triggerId: z.string(),
+    source: z.string(),
+    connectorId: z.string().nullable(),
+    eventName: z.string(),
+    webhookId: z.string(),
+    untrustedFields: z.array(z.string()),
+    /** Verified but not handled by the trigger (acknowledged, nothing queued). */
+    ignored: z.boolean(),
+  }),
+  event('trigger.rejected', { triggerId: z.string(), source: z.string(), connectorId: z.string().nullable(), reason: z.string(), message: z.string() }),
 ]);
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 export type AuditEventType = AuditEvent['type'];

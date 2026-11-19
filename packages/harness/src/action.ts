@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { diff, type FieldChange } from './diff';
+import type { OpResult, ProposalOp } from './proposal';
 import type { OutputValue } from './refs';
 import type { VerifyResult } from './verify';
 
@@ -12,6 +13,29 @@ export type ActionScope = 'propose' | 'approve';
 export interface WrittenRecord<TRecord> {
   recordId: string;
   record: TRecord;
+}
+
+/** Whether one executed op can be compensated (undone), and if not, why (shown to the approver). */
+export type CompensationCheck = { ok: true } | { ok: false; reason: string };
+
+/**
+ * An executed op as compensation hooks see it. `input` and `payload` have op references
+ * (`{{op:N.field}}`) already resolved from the original proposal, so they hold the real values.
+ */
+export type CompensableOp = Pick<ProposalOp, 'index' | 'action' | 'resource' | 'input' | 'before' | 'payload' | 'diff'>;
+
+/**
+ * The compensating change for one op, planned when the undo is proposed: the record as it is now
+ * (`current`) and the sparse target state (`target`; `null` = the record will be deleted). Drives
+ * the diff the approver sees and the read-after-write check after the undo runs.
+ */
+export interface CompensationPlan {
+  current: unknown;
+  target: unknown;
+  /** One-line summary for the undo proposal ("Delete PO-1042 (PENDING, never received)"). */
+  summary?: string;
+  /** Policy value of the compensating write (0 for a delete/cancel). Unset = 0 for moneyless actions, else unknown. */
+  value?: number | null;
 }
 
 /**
@@ -42,8 +66,8 @@ export interface ActionDefinition<TCtx, TInput, TPayload, TRecord> {
   /** Lookup of a record previously written with this key (Distru: key stamped into notes/custom field). */
   findByIdempotencyKey(ctx: TCtx, idempotencyKey: string): Promise<WrittenRecord<TRecord> | null>;
 
-  /** Monetary value of the payload, used by value-based policy rules. */
-  valueOf?(payload: TPayload): number;
+  /** Monetary value of the payload, used by value-based policy rules (null = unknown). */
+  valueOf?(payload: TPayload): number | null;
   /**
    * The action never moves money (an email, a task, a catalog setting): its ops count as 0 toward
    * value rules instead of making the proposal total unknown. Without it, an op with no `valueOf`
@@ -63,6 +87,32 @@ export interface ActionDefinition<TCtx, TInput, TPayload, TRecord> {
    * and may use `ctx` / `before` (e.g. to resolve a vendor name); called at propose and edit time.
    */
   summarize?(input: TInput, payload: TPayload, ctx: TCtx, before: TRecord | null): string | Promise<string>;
+
+  // ── Rollback (optional; see README "Undo / rollback") ──────────────────────────────────────
+
+  /**
+   * Can this executed op be undone? Pure (no I/O). Default when `compensate` exists: yes. Return a
+   * reason when the system has no real undo for this op (e.g. a received purchase order).
+   */
+  canCompensate?(op: CompensableOp): CompensationCheck;
+  /**
+   * Plans the compensating change from the record's *current* state (it may have moved on since the
+   * original write). Called when the undo is proposed (and when an approver edits it) and again to
+   * verify after the undo ran. Throw `InputValidationError` when the record can no longer be undone.
+   */
+  planCompensation?(ctx: TCtx, op: CompensableOp, result: OpResult): Promise<CompensationPlan>;
+  /**
+   * Applies the undo (delete what was created, restore the `before` values). Runs in the harness
+   * executor like any write, after the undo proposal was approved. Must be idempotent by value
+   * (deleting an already-deleted record or restoring an already-restored value succeeds), because
+   * a compensation has no record to stamp an idempotency key into.
+   */
+  compensate?(ctx: TCtx, op: CompensableOp, result: OpResult): Promise<WrittenRecord<unknown>>;
+  /**
+   * Why ops of an action without `compensate` cannot be undone, for the undo preview
+   * ("An email cannot be unsent: send a correction instead").
+   */
+  readonly irreversible?: string;
 }
 
 /** Type-erased action, as stored in a registry. */
@@ -126,3 +176,9 @@ export function opValueOf<TCtx>(action: AnyAction<TCtx>, payload: unknown): numb
   if (Object.hasOwn(action, 'valueOf') && typeof action.valueOf === 'function') return action.valueOf(payload);
   return action.moneyless ? 0 : null;
 }
+
+/** Registry names of compensating actions: `<action>.undo` (derived, never in the catalog). */
+export const UNDO_SUFFIX = '.undo';
+export const undoActionName = (action: string): string => `${action}${UNDO_SUFFIX}`;
+/** The original action of a compensating action name, or null for a regular action. */
+export const undoBaseOf = (action: string): string | null => (action.endsWith(UNDO_SUFFIX) ? action.slice(0, -UNDO_SUFFIX.length) : null);
