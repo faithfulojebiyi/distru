@@ -75,7 +75,16 @@ Five agents work it like a small purchasing team:
    stock before the delivery arrives, four emails to vendors, and four "receive this PO" tasks for the
    warehouse team.
 
-![The Changes tab: every purchase order in a proposal, with its risk, whether it has been written, and its value](.github/assets/proposal-changes.png)
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/executed-changes.png" alt="An approved proposal: 14 purchase orders, each one written to Distru"></td>
+    <td width="50%"><img src=".github/assets/executed-audit-trail.png" alt="Its audit trail: proposed, checked, approved, then every write followed by its verification"></td>
+  </tr>
+  <tr>
+    <td><sub>An approved proposal: 14 purchase orders, each one written to Distru</sub></td>
+    <td><sub>Its audit trail: proposed, checked, approved, then every write followed by its verification</sub></td>
+  </tr>
+</table>
 
 The run pauses there. An approver opens it, reads the changes, checks the rules, and approves it, either in
 the dashboard or from a button in Slack. The changes run one by one, each one verified, and the emails go out
@@ -97,9 +106,16 @@ orders worth $28,082, which is over the $25,000 limit, so the rules refused it o
 until the agents revise it. The same page shows what the agents noticed along the way: the batch they vetoed
 for a failed lab test, and the product description that tried to give them orders.
 
-![A proposal the spending rule refused, with the compliance vetoes and a flagged prompt injection](.github/assets/proposal-flagged.png)
-
-![Every rule the proposal was checked against: over the cap, so denied](.github/assets/proposal-policy.png)
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/proposal-flagged.png" alt="What the agents flagged: a vetoed batch, and a product description that tried to give orders"></td>
+    <td width="50%"><img src=".github/assets/proposal-policy.png" alt="The policy checks: $28,082 is over the $25,000 cap, so it was denied"></td>
+  </tr>
+  <tr>
+    <td><sub>What the agents flagged: a vetoed batch, and a product description that tried to give orders</sub></td>
+    <td><sub>The policy checks: $28,082 is over the $25,000 cap, so it was denied</sub></td>
+  </tr>
+</table>
 
 ## Things worth knowing about how it's built
 
@@ -128,7 +144,16 @@ failed lab test, the prompt injection, the partial shipment, a storm of rate-lim
 proposal, Slack approvals, and Copilot questions like *"Which invoices are overdue?"* Model calls are recorded
 once and replayed, so the whole suite runs in CI for free, and changing a prompt shows up straight away.
 
-![The audit log: who did what, when, and what changed](.github/assets/audit-log.png)
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/connectors.png" alt="Every connected system, and what agents can read and propose there"></td>
+    <td width="50%"><img src=".github/assets/distru-mcp.png" alt="Distru's own MCP server as a connector: reads pass through, writes need approval"></td>
+  </tr>
+  <tr>
+    <td><sub>Every connected system, and what agents can read and propose there</sub></td>
+    <td><sub>Distru's own MCP server as a connector: reads pass through, writes need approval</sub></td>
+  </tr>
+</table>
 
 ## The Copilot
 
@@ -142,6 +167,8 @@ others. You ask a question in plain English and it works out who to ask:
 - *"How reliable is Sierra Extracts?"* It answers from what the system has learned: on time 73% of the
   time, deliveries that sometimes take 26 days against a promised 14.
 - *"Start a restock run for Los Angeles."* It starts one, and you can follow it on the run page.
+
+![The Copilot answering "Which SKUs will stock out before their next PO arrives?"](.github/assets/copilot.png)
 
 You see its working as it goes: each hand-off to another agent and each tool it calls. It remembers your
 conversation, and like every other agent it can propose changes but never approve them.
