@@ -12,7 +12,7 @@ It's built against [Distru](https://www.distru.com), the cannabis ERP, using the
 documentation. This is a portfolio project and **isn't affiliated with Distru**. Everything external (Distru,
 Headset, Gmail, Slack, Composio) runs locally as an emulator, so you can try the whole thing on a laptop.
 
-![A 14-change proposal across four systems, waiting for a person to review it](.github/assets/proposal-changes.png)
+![The Ops Agent dashboard: ask the agents a question, start a restock run, and see what needs a decision](.github/assets/overview.png)
 
 ---
 
@@ -70,10 +70,12 @@ Five agents work it like a small purchasing team:
    because the latest batch failed a pesticide test and is on hold.
 4. If the total breaks a spending rule, a **Policy Critic** explains why and the Planner revises the order,
    at most twice.
-5. Everything becomes **one proposal**. In the screenshot above it's 14 changes across four systems: four
+5. Everything becomes **one proposal**. In the screenshot below it's 14 changes across four systems: four
    purchase orders in Distru, two order limits on the online menu so one big customer can't take all the
    remaining stock before the delivery arrives, four emails to vendors, and four "receive this PO" tasks for
    the warehouse team.
+
+![A 14-change proposal across four systems, ready for a person to review](.github/assets/proposal-changes.png)
 
 The run pauses there. An approver opens it, reads the changes, checks the rules, and approves it, either in
 the dashboard or from a button in Slack. The changes run one by one, each one verified, and the emails go out
