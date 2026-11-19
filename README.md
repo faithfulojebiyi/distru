@@ -91,9 +91,9 @@ the dashboard or from a button in Slack. The changes run one by one, each one ve
 quoting the real purchase order numbers.
 
 You can watch all of this happen. Each run has a live trace showing which agent was handed what, every tool
-it called, and what it cost. The run below took 1 minute 31 seconds and about a dollar.
+it called, and what it cost. The run below used eight agent calls and 52 tool calls, and cost under a dollar.
 
-![The trace of a restock run: an analyst, five planners working in parallel, then a compliance review](.github/assets/run-trace.png)
+![The trace of a restock run: an analyst, six planners working in parallel, then a compliance review that vetoed one line](.github/assets/run-trace.png)
 
 A few days later Mojave Pre-Roll replies: *"We can only ship 200 of the 312 units; the rest will be here
 Dec 2."* That email triggers a **Vendor Liaison** agent. It reads the reply, but it treats the email as
