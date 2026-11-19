@@ -103,6 +103,31 @@ describe('built-in rules', () => {
     expect(engine.evaluate(subject([{ value: null }]), auto).outcome).toBe('needs_approval');
   });
 
+  test('auto_approve_below: `amount` param, max_risk medium allows medium but never high', () => {
+    const lowOnly = [rule(RULE_KEYS.autoApproveBelow, { amount: 500 })];
+    expect(engine.evaluate(subject([{ value: 100, risk: 'medium' }]), lowOnly).outcome).toBe('needs_approval');
+    expect(engine.evaluate(subject([{ value: 100, risk: 'low' }]), lowOnly).outcome).toBe('allow');
+
+    const medium = [rule(RULE_KEYS.autoApproveBelow, { amount: 500, max_risk: 'medium' })];
+    const ok = engine.evaluate(subject([{ value: 100, risk: 'medium' }, { value: 50, risk: 'low' }]), medium);
+    expect(ok.outcome).toBe('allow');
+    expect(ok.reasons[0]?.message).toContain('medium risk');
+    expect(engine.evaluate(subject([{ value: 499, risk: 'medium' }]), medium).outcome).toBe('allow');
+    expect(engine.evaluate(subject([{ value: 500, risk: 'medium' }]), medium).outcome).toBe('needs_approval');
+    const high = engine.evaluate(subject([{ value: 10, risk: 'high' }]), medium);
+    expect(high.outcome).toBe('needs_approval');
+    expect(high.reasons[0]?.message).toContain('above medium risk');
+    expect(engine.evaluate(subject([{ value: 10, risk: 'medium' }, { value: 10, risk: 'high' }]), medium).outcome).toBe('needs_approval');
+  });
+
+  test('auto_approve_below: invalid params fail closed (high max_risk, missing or conflicting amount)', () => {
+    for (const params of [{ amount: 500, max_risk: 'high' }, {}, { amount: 500, maxValue: 400 }]) {
+      const r = engine.evaluate(subject([{ value: 1, risk: 'low' }]), [rule(RULE_KEYS.autoApproveBelow, params)]);
+      expect(r.outcome).toBe('deny');
+      expect(r.reasons[0]?.message).toContain('failing closed');
+    }
+  });
+
   test('high_risk_requires_approval: one reason per high-risk op', () => {
     const r = engine.evaluate(subject([{ risk: 'high' }, { risk: 'low' }, { risk: 'high' }]), [rule(RULE_KEYS.highRiskRequiresApproval)]);
     expect(r.outcome).toBe('needs_approval');

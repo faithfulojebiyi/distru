@@ -67,7 +67,8 @@ async function planOp<TCtx>(
     payload,
     diff: action.diff(before, payload),
     summary: (await action.summarize?.(input, payload, ctx, before)) ?? null,
-    value: action.valueOf?.(payload) ?? null,
+    // Every object inherits Object.prototype.valueOf, so only an action's own hook counts.
+    value: Object.hasOwn(action, 'valueOf') ? (action.valueOf?.(payload) ?? null) : null,
     vendorIds: action.vendorIdsOf?.(payload) ?? null,
     idempotencyKey: await idempotencyKeyFor(proposalId, index),
     status: 'pending',

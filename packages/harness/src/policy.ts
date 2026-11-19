@@ -147,14 +147,40 @@ export const vendorAllowlistRule = definePolicyRule({
   },
 });
 
+/** Risks `auto_approve_below` may auto-approve up to. `high` is deliberately not an option. */
+export const AutoApproveMaxRiskSchema = z.enum(['low', 'medium']);
+export type AutoApproveMaxRisk = z.infer<typeof AutoApproveMaxRiskSchema>;
+
+const RISK_RANK: Record<z.infer<typeof RiskSchema>, number> = { low: 0, medium: 1, high: 2 };
+
+/**
+ * `{ amount, currency?, max_risk? }`. `amount` is the threshold (strictly below auto-approves);
+ * `maxValue` is accepted as a legacy alias. `max_risk` (default `low`) is the highest op risk that
+ * may be auto-approved; high-risk ops can never be.
+ */
+const AutoApproveBelowParamsSchema = z
+  .object({
+    amount: z.number().positive().optional(),
+    /** Legacy name for `amount`. */
+    maxValue: z.number().positive().optional(),
+    currency: z.string().default('USD'),
+    max_risk: AutoApproveMaxRiskSchema.default('low'),
+  })
+  .refine((p) => p.amount !== undefined || p.maxValue !== undefined, { message: "'amount' is required", path: ['amount'] })
+  .refine((p) => p.amount === undefined || p.maxValue === undefined || p.amount === p.maxValue, {
+    message: "'amount' and legacy 'maxValue' disagree",
+    path: ['amount'],
+  })
+  .transform(({ amount, maxValue, currency, max_risk }) => ({ amount: (amount ?? maxValue)!, currency, maxRisk: max_risk }));
+
 export const autoApproveBelowRule = definePolicyRule({
   key: RULE_KEYS.autoApproveBelow,
-  description: 'Allow without a human when the total is below a threshold and every op is low risk.',
-  params: z.object({ maxValue: z.number().positive(), currency: z.string().default('USD') }),
-  evaluate(subject, { maxValue, currency }) {
-    const risky = subject.ops.filter((op) => op.risk !== 'low');
+  description: 'Allow without a human when the total is below a threshold and no op is riskier than max_risk (low by default; never high).',
+  params: AutoApproveBelowParamsSchema,
+  evaluate(subject, { amount: maxValue, currency, maxRisk }) {
+    const risky = subject.ops.filter((op) => RISK_RANK[op.risk] > RISK_RANK[maxRisk]);
     if (risky.length) {
-      return [{ outcome: 'needs_approval', message: `Not auto-approvable: ${risky.length} op(s) above low risk` }];
+      return [{ outcome: 'needs_approval', message: `Not auto-approvable: ${risky.length} op(s) above ${maxRisk} risk` }];
     }
     if (subject.totalValue === null) {
       return [{ outcome: 'needs_approval', message: 'Not auto-approvable: total value unknown' }];
@@ -162,7 +188,7 @@ export const autoApproveBelowRule = definePolicyRule({
     if (subject.totalValue >= maxValue) {
       return [{ outcome: 'needs_approval', message: `Total ${money(subject.totalValue, currency)} is at or above auto-approve threshold ${money(maxValue, currency)}` }];
     }
-    return [{ outcome: 'allow', message: `Low risk and below auto-approve threshold ${money(maxValue, currency)}` }];
+    return [{ outcome: 'allow', message: `${maxRisk === 'low' ? 'Low risk' : 'At most medium risk'} and below auto-approve threshold ${money(maxValue, currency)}` }];
   },
 });
 
