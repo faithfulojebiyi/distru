@@ -12,6 +12,8 @@ const base = {
 };
 
 const opRef = { opIndex: z.number().int(), action: z.string() };
+/** Op references resolved into the payload at execute time (placeholder → value). */
+const resolvedRefs = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional();
 
 const event = <T extends string, D extends z.ZodRawShape>(type: T, data: D) =>
   z.object({ ...base, type: z.literal(type), data: z.object(data) });
@@ -22,8 +24,8 @@ export const AuditEventSchema = z.discriminatedUnion('type', [
   event('proposal.decided', { decision: z.enum(['approve', 'reject']), reason: z.string().nullable(), edited: z.boolean() }),
   event('proposal.decision_blocked', { reasons: z.array(PolicyReasonSchema) }),
   event('proposal.execution_started', { resumed: z.boolean() }),
-  event('op.executed', { ...opRef, recordId: z.string(), idempotencyKey: z.string(), attempts: z.number().int() }),
-  event('op.deduplicated', { ...opRef, recordId: z.string(), idempotencyKey: z.string(), attempts: z.number().int() }),
+  event('op.executed', { ...opRef, recordId: z.string(), idempotencyKey: z.string(), attempts: z.number().int(), resolved: resolvedRefs }),
+  event('op.deduplicated', { ...opRef, recordId: z.string(), idempotencyKey: z.string(), attempts: z.number().int(), resolved: resolvedRefs }),
   event('op.retry', { ...opRef, attempt: z.number().int(), delayMs: z.number(), error: SerializedErrorSchema }),
   event('op.verified', { ...opRef, recordId: z.string() }),
   event('op.verify_failed', { ...opRef, recordId: z.string(), mismatches: z.array(MismatchSchema) }),

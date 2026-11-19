@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { HarnessError } from './errors';
-import type { Clock, ErrorClassifier } from './ports';
+import type { Clock, ErrorClassifier, ErrorContext } from './ports';
 import { throwIfCancelled } from './budget';
 
 export const RetryPolicySchema = z.object({
@@ -12,6 +12,35 @@ export type RetryPolicy = z.infer<typeof RetryPolicySchema>;
 
 export const neverRetry: ErrorClassifier = { isRetryable: () => false };
 
+/**
+ * One classifier per connector, routed by the failing op's connector id (`ErrorContext`). Errors
+ * without a context, or from an op whose connector has no entry, go to `fallback` (default: retryable
+ * if any of the connector classifiers says so, taking the first Retry-After).
+ *
+ * ```ts
+ * errors: routeErrorClassifier({ distru: distruErrorClassifier, email: emailErrorClassifier, distru_mcp: mcpErrorClassifier })
+ * ```
+ */
+export function routeErrorClassifier(byConnector: Readonly<Record<string, ErrorClassifier>>, fallback?: ErrorClassifier): ErrorClassifier {
+  const all = Object.values(byConnector);
+  const any: ErrorClassifier = fallback ?? {
+    isRetryable: (err, ctx) => all.some((c) => c.isRetryable(err, ctx)),
+    retryAfterMs: (err, ctx) => {
+      for (const c of all) {
+        if (!c.isRetryable(err, ctx)) continue;
+        const ms = c.retryAfterMs?.(err, ctx);
+        if (ms !== undefined) return ms;
+      }
+      return undefined;
+    },
+  };
+  const pick = (ctx: ErrorContext | undefined): ErrorClassifier => (ctx?.connectorId && Object.hasOwn(byConnector, ctx.connectorId) ? byConnector[ctx.connectorId]! : any);
+  return {
+    isRetryable: (err, ctx) => pick(ctx).isRetryable(err, ctx),
+    retryAfterMs: (err, ctx) => pick(ctx).retryAfterMs?.(err, ctx),
+  };
+}
+
 /** Exponential backoff with full jitter: uniform in [0, min(max, base · 2^(attempt-1))]. */
 export function backoffDelay(attempt: number, policy: RetryPolicy, random: () => number = Math.random): number {
   const ceiling = Math.min(policy.maxDelayMs, policy.baseDelayMs * 2 ** (attempt - 1));
@@ -21,6 +50,8 @@ export function backoffDelay(attempt: number, policy: RetryPolicy, random: () =>
 export interface RetryOptions {
   policy: RetryPolicy;
   classifier: ErrorClassifier;
+  /** Passed to the classifier (which op failed). */
+  context?: ErrorContext;
   clock: Clock;
   random?: () => number;
   signal?: AbortSignal;
@@ -49,10 +80,10 @@ export async function withRetry<T>(fn: (attempt: number) => Promise<T>, opts: Re
     try {
       return { value: await fn(attempt), attempts: attempt };
     } catch (error) {
-      const retryable = !(error instanceof HarnessError) && opts.classifier.isRetryable(error);
+      const retryable = !(error instanceof HarnessError) && opts.classifier.isRetryable(error, opts.context);
       if (!retryable) throw error;
       if (attempt >= opts.policy.maxAttempts) throw new RetriesExhaustedError(attempt, error);
-      const retryAfter = opts.classifier.retryAfterMs?.(error);
+      const retryAfter = opts.classifier.retryAfterMs?.(error, opts.context);
       const delayMs = retryAfter !== undefined ? Math.max(0, retryAfter) : backoffDelay(attempt, opts.policy, opts.random);
       await opts.onRetry?.({ attempt, delayMs, error });
       await opts.clock.sleep(delayMs, opts.signal);

@@ -6,6 +6,8 @@ import { PolicyEvaluationSchema } from './policy';
 import { PrincipalSchema } from './scopes';
 import { MismatchSchema } from './verify';
 
+const OutputValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
 export const ProposalStatusSchema = z.enum([
   'draft',
   'pending_approval',
@@ -62,6 +64,10 @@ export const OpResultSchema = z.object({
   mismatches: z.array(MismatchSchema),
   error: SerializedErrorSchema.nullable(),
   finishedAt: z.string(),
+  /** Values this op's record exports to later ops (`{{op:<index>.<key>}}`), from the action's `outputs` hook. */
+  outputs: z.record(z.string(), OutputValueSchema).optional(),
+  /** Op references substituted into this op's payload at execute time (placeholder → value). */
+  resolved: z.record(z.string(), OutputValueSchema).optional(),
 });
 export type OpResult = z.infer<typeof OpResultSchema>;
 

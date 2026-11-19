@@ -12,7 +12,8 @@ export type HarnessErrorCode =
   | 'policy_denied'
   | 'budget_exceeded'
   | 'cancelled'
-  | 'infrastructure';
+  | 'infrastructure'
+  | 'unresolved_reference';
 
 export abstract class HarnessError extends Error {
   abstract readonly code: HarnessErrorCode;

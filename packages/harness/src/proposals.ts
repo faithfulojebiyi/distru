@@ -1,8 +1,10 @@
+import { opValueOf } from './action';
 import type { HarnessDeps } from './context';
 import { emit, loadProposal, nowIso } from './context';
 import { DecisionConflictError, ForbiddenError, InputValidationError, PolicyDeniedError } from './errors';
 import type { PolicyEvaluation, PolicyOutcome } from './policy';
 import { assertTransition, totalValue, type Proposal, type ProposalOp, type ProposalStatus } from './proposal';
+import { assertBackwardRefs } from './refs';
 import { parseWith } from './registry';
 import { idempotencyKeyFor } from './runtime';
 import { assertScope, type Principal } from './scopes';
@@ -57,6 +59,8 @@ async function planOp<TCtx>(
   const before = await action.loadBefore(ctx, input);
   const planned = await action.plan(ctx, input, before);
   const payload = action.payload ? parseWith(action.payload, planned, `planned payload for op #${index}`) : planned;
+  // `{{op:N.field}}` placeholders may only point at earlier ops (resolved by the executor, in order).
+  assertBackwardRefs(payload, index);
   return {
     index,
     action: action.name,
@@ -67,8 +71,7 @@ async function planOp<TCtx>(
     payload,
     diff: action.diff(before, payload),
     summary: (await action.summarize?.(input, payload, ctx, before)) ?? null,
-    // Every object inherits Object.prototype.valueOf, so only an action's own hook counts.
-    value: Object.hasOwn(action, 'valueOf') ? (action.valueOf?.(payload) ?? null) : null,
+    value: opValueOf(action, payload),
     vendorIds: action.vendorIdsOf?.(payload) ?? null,
     idempotencyKey: await idempotencyKeyFor(proposalId, index),
     status: 'pending',

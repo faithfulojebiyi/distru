@@ -10,7 +10,12 @@ import { neverRetry, RetryPolicySchema, type RetryPolicy } from './retry';
 import { inlineStepRunner, randomId, systemClock } from './runtime';
 
 export interface HarnessConfig<TCtx> {
-  registry: Registry<TCtx>;
+  /**
+   * The action registry, or a function returning the current one (read on every use). Pass a
+   * function when the registry is rebuilt at runtime, e.g. after an MCP connector's tool list
+   * changes, so one harness always sees the latest connectors.
+   */
+  registry: Registry<TCtx> | (() => Registry<TCtx>);
   store: ProposalStore;
   audit: AuditSink;
   policyRules: PolicyRuleSource;
@@ -34,8 +39,12 @@ export class Harness<TCtx> {
   readonly #deps: HarnessDeps<TCtx>;
 
   constructor(config: HarnessConfig<TCtx>) {
+    const source = config.registry;
+    const current = typeof source === 'function' ? source : () => source;
     this.#deps = {
-      registry: config.registry,
+      get registry() {
+        return current();
+      },
       store: config.store,
       audit: config.audit,
       policyRules: config.policyRules,

@@ -38,10 +38,21 @@ export interface StepRunner {
   run<T>(stepId: string, fn: () => Promise<T>): Promise<T>;
 }
 
-/** Classifies ERP/client errors. Distru: 429 and 5xx retryable, 429 `Retry-After` honoured. */
+/** Which op an error came from, so one classifier can route by connector (see `routeErrorClassifier`). */
+export interface ErrorContext {
+  /** Registry action name, e.g. `distru.purchases.upsert`. */
+  action: string;
+  /** Id of the connector that contributed the action, when it came from one. */
+  connectorId?: string;
+}
+
+/**
+ * Classifies ERP/client errors. Distru: 429 and 5xx retryable, 429 `Retry-After` honoured.
+ * The executor passes the failing op's `ErrorContext`; classifiers for a single system can ignore it.
+ */
 export interface ErrorClassifier {
-  isRetryable(err: unknown): boolean;
-  retryAfterMs?(err: unknown): number | undefined;
+  isRetryable(err: unknown, context?: ErrorContext): boolean;
+  retryAfterMs?(err: unknown, context?: ErrorContext): number | undefined;
 }
 
 export type IdGenerator = () => string;

@@ -3,6 +3,7 @@ import { emit, loadProposal, nowIso, saveProposal, type HarnessDeps } from './co
 import { CancelledError, InfrastructureError, NotFoundError } from './errors';
 import type { AuditEventInput } from './audit';
 import { assertTransition, serializeError, type OpResult, type Proposal, type ProposalOp, type SerializedError } from './proposal';
+import { resolveOpRefs, type OutputValue } from './refs';
 import { parseWith } from './registry';
 import { RetriesExhaustedError, withRetry, type RetryOptions } from './retry';
 import { EXECUTOR_ACTOR } from './scopes';
@@ -100,6 +101,7 @@ async function runOp<TCtx>(deps: HarnessDeps<TCtx>, args: ExecuteArgs<TCtx>, ind
 
   const action = deps.registry.action(op.action);
   const ref = { opIndex: index, action: op.action };
+  const connectorId = deps.registry.connectorOf(op.action)?.id;
   let attempts = 0;
   // Audit failures inside the ERP block must not be mistaken for op failures.
   const audit = async (event: AuditEventInput) => {
@@ -112,6 +114,7 @@ async function runOp<TCtx>(deps: HarnessDeps<TCtx>, args: ExecuteArgs<TCtx>, ind
   const retry: RetryOptions = {
     policy: deps.retry,
     classifier: deps.errors,
+    context: { action: op.action, ...(connectorId ? { connectorId } : {}) },
     clock: deps.clock,
     random: deps.random,
     signal,
@@ -120,25 +123,35 @@ async function runOp<TCtx>(deps: HarnessDeps<TCtx>, args: ExecuteArgs<TCtx>, ind
   };
   // ERP interaction only: anything thrown here is an op failure. Persistence happens after, so a
   // store/infra error propagates (op stays pending) and a retry deduplicates via the key.
+  let resolved: Record<string, OutputValue> = {};
+  const extras = (outputs?: Record<string, OutputValue>) => ({
+    ...(outputs ? { outputs } : {}),
+    ...(Object.keys(resolved).length ? { resolved } : {}),
+  });
   const outcome = await (async (): Promise<{ status: ProposalOp['status']; result: Omit<OpResult, 'finishedAt' | 'attempts'> }> => {
     try {
-      const payload = action.payload ? parseWith(action.payload, op.payload, `stored payload for op #${index}`) : op.payload;
+      const stored = action.payload ? parseWith(action.payload, op.payload, `stored payload for op #${index}`) : op.payload;
+      // Op references ({{op:N.field}}) are resolved from earlier ops' results; the stored payload keeps the placeholders.
+      const refs = resolveOpRefs(stored, proposal.ops);
+      resolved = refs.resolved;
+      const payload = Object.keys(resolved).length && action.payload ? parseWith(action.payload, refs.value, `resolved payload for op #${index}`) : refs.value;
 
       const write = await withRetry(async () => {
         attempts++;
         budget?.charge({ steps: 1 });
         // Dedupe on every attempt: a timed-out write may have landed on the ERP side.
         const existing = await action.findByIdempotencyKey(ctx, op.idempotencyKey);
-        if (existing) return { recordId: existing.recordId, deduplicated: true };
+        if (existing) return { recordId: existing.recordId, record: existing.record, deduplicated: true };
         const written = await action.execute(ctx, payload, op.idempotencyKey);
-        return { recordId: written.recordId, deduplicated: false };
+        return { recordId: written.recordId, record: written.record, deduplicated: false };
       }, retry);
-      const { recordId, deduplicated } = write.value;
+      const { recordId, record, deduplicated } = write.value;
+      const outputs = action.outputs?.(record, recordId);
       await audit({
         type: deduplicated ? 'op.deduplicated' : 'op.executed',
         actor: EXECUTOR_ACTOR,
         proposalId,
-        data: { ...ref, recordId, idempotencyKey: op.idempotencyKey, attempts },
+        data: { ...ref, recordId, idempotencyKey: op.idempotencyKey, attempts, ...(Object.keys(resolved).length ? { resolved } : {}) },
       });
 
       const verification = await withRetry(() => {
@@ -149,16 +162,16 @@ async function runOp<TCtx>(deps: HarnessDeps<TCtx>, args: ExecuteArgs<TCtx>, ind
         const mismatches: Mismatch[] = verification.value.mismatches;
         await audit({ type: 'op.verify_failed', actor: EXECUTOR_ACTOR, proposalId, data: { ...ref, recordId, mismatches } });
         const error = { name: 'VerificationFailed', message: `Read-after-write check found ${mismatches.length} mismatch(es)` };
-        return { status: 'failed', result: { recordId, deduplicated, mismatches, error } };
+        return { status: 'failed', result: { recordId, deduplicated, mismatches, error, ...extras(outputs) } };
       }
       await audit({ type: 'op.verified', actor: EXECUTOR_ACTOR, proposalId, data: { ...ref, recordId } });
-      return { status: 'executed', result: { recordId, deduplicated, mismatches: [], error: null } };
+      return { status: 'executed', result: { recordId, deduplicated, mismatches: [], error: null, ...extras(outputs) } };
     } catch (err) {
       if (isEscaping(err)) throw err;
       const exhausted = err instanceof RetriesExhaustedError;
       const error = { ...serializeError(exhausted ? err.cause : err), ...(exhausted ? { code: 'retries_exhausted' } : {}) };
       await audit({ type: 'op.failed', actor: EXECUTOR_ACTOR, proposalId, data: { ...ref, attempts, error } });
-      return { status: 'failed', result: { recordId: null, deduplicated: false, mismatches: [], error } };
+      return { status: 'failed', result: { recordId: null, deduplicated: false, mismatches: [], error, ...extras() } };
     }
   })();
 

@@ -18,6 +18,8 @@ Postgres, Inngest or HTTP imports: every side effect goes through a port.
 | Proposals | `draft → pending_approval \| auto_approved \| denied`, `pending_approval → approved \| rejected`, `approved \| auto_approved → executing → executed \| failed`, `failed → executing` (resume). |
 | Decisions | `decide()` needs `approve`, uses compare-and-set (losers get `DecisionConflictError`), edits re-plan + re-diff + re-run policy (deny blocks with `PolicyDeniedError`), separation of duties on by default. |
 | Executor | Per op: `findByIdempotencyKey` → `execute` → `verify`, retried with full-jitter backoff (port-supplied `Retry-After` wins), stops at first non-retryable failure with partial results. Re-running is always safe. |
+| Op references | A later op may use a value that only exists once an earlier op ran: `{{op:<i>.recordId}}` or `{{op:<i>.<output>}}` inside any payload string (`opRef(i, field)`). See "Op references" below. |
+| Value | `valueOf(payload)` (own hook only) gives an op's money value; `moneyless: true` makes it 0 (emails, tasks, catalog settings) so `max_total_value` still checks the proposal; otherwise null (unknown → the cap asks for a human). `opValueOf(action, payload)`. |
 | Budgets | `new Budget({ maxSteps, maxTokens, maxCostUsd, maxWallClockMs })`, `charge()`, `BudgetExceededError`, `budget.signal`, `abortable`, `anySignal`. |
 | Audit | Typed `AuditEvent` union (`proposal.created`, `policy.evaluated`, `proposal.decided`, `op.executed`, `op.deduplicated`, `op.verified`, `op.verify_failed`, `op.retry`, `op.failed`, `proposal.failed`, `budget.exceeded`, …). |
 
@@ -54,6 +56,35 @@ const p = await harness.propose({ ctx, principal: agentPrincipal('planner'), ops
 await harness.decide({ ctx, principal: userPrincipal(user.id, 'approver'), proposalId: p.id, decision: 'approve' });
 const done = await harness.execute({ ctx, proposalId: p.id, budget });  // 'executed' | 'failed'
 ```
+
+## Op references (cross-tool proposals)
+
+A proposal can chain writes across systems: "create the PO, then email the vendor *the PO number*,
+then create a receiving task *linked to the PO*". The PO number only exists after execute, so:
+
+- An action may export values of the record it wrote: `outputs(record, recordId) => ({ purchase_number })`.
+  The executor stores them in `op.result.outputs` (also on a deduplicated write).
+- A later op's input/payload references them with a placeholder in any string:
+  `{{op:0.purchase_number}}`, `{{op:0.recordId}}` (`opRef(0, 'purchase_number')`). A string that is
+  exactly one placeholder takes the value's own type.
+- **Propose/edit**: references may only point at an *earlier* op (`assertBackwardRefs`, else
+  `InputValidationError`). The stored payload and the diff keep the placeholder, so the approver sees
+  exactly what will be substituted, never a guess.
+- **Execute**: ops run in order and stop at the first failure, so a referenced op has always succeeded.
+  The executor resolves the placeholders from the earlier ops' persisted results (also after a resume),
+  re-validates the resolved payload against `action.payload`, runs `execute` and `verify` with it, and
+  records every substitution in `op.result.resolved` (`{ "{{op:0.purchase_number}}": "PO-1042" }`) and
+  on the `op.executed` audit event. An unresolvable reference fails the op with
+  `UnresolvedReferenceError` (`code: unresolved_reference`, not retried).
+- Idempotency is unaffected: keys are per (proposal, op index), never derived from resolved values.
+
+## Error routing and a live registry
+
+- The executor passes `ErrorContext { action, connectorId }` to the `ErrorClassifier`.
+  `routeErrorClassifier({ distru, email, distru_mcp })` picks the classifier of the failing op's
+  connector (fallback without a context: retryable if any says so).
+- `createHarness({ registry: () => current })` reads the registry on every use, so an app can rebuild
+  it (e.g. when an MCP connector's tool list changes) without rebuilding the harness.
 
 ## Connectors and per-connector context
 

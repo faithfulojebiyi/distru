@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { diff, type FieldChange } from './diff';
+import type { OutputValue } from './refs';
 import type { VerifyResult } from './verify';
 
 export const RiskSchema = z.enum(['low', 'medium', 'high']);
@@ -43,8 +44,20 @@ export interface ActionDefinition<TCtx, TInput, TPayload, TRecord> {
 
   /** Monetary value of the payload, used by value-based policy rules. */
   valueOf?(payload: TPayload): number;
+  /**
+   * The action never moves money (an email, a task, a catalog setting): its ops count as 0 toward
+   * value rules instead of making the proposal total unknown. Without it, an op with no `valueOf`
+   * has value `null`, so `max_total_value` cannot be checked and asks for a human (fail closed).
+   */
+  readonly moneyless?: boolean;
   /** Vendor ids referenced by the payload, used by the vendor allowlist rule. */
   vendorIdsOf?(payload: TPayload): string[];
+  /**
+   * Values of the written record that later ops in the same proposal may reference as
+   * `{{op:<index>.<key>}}` (e.g. `{ purchase_number: 'PO-1042' }`). Recorded in the op result.
+   * The record id is always available as `{{op:<index>.recordId}}`.
+   */
+  outputs?(record: TRecord, recordId: string): Record<string, OutputValue>;
   /**
    * One-line human summary for inboxes ("PO for 120 × Blue Dream 3.5g from Acme"). May be async
    * and may use `ctx` / `before` (e.g. to resolve a vendor name); called at propose and edit time.
@@ -103,4 +116,13 @@ export function defineReadTool<TCtx, TInput, TOutput>(
 ): ReadToolDefinition<TCtx, TInput, TOutput> {
   assertName(spec.name);
   return { ...spec, kind: 'read', requiredScope: 'read' };
+}
+
+/**
+ * The policy value of a planned payload: the action's own `valueOf` hook (an inherited
+ * `Object.prototype.valueOf` never counts), 0 for `moneyless` actions, else null (unknown).
+ */
+export function opValueOf<TCtx>(action: AnyAction<TCtx>, payload: unknown): number | null {
+  if (Object.hasOwn(action, 'valueOf') && typeof action.valueOf === 'function') return action.valueOf(payload);
+  return action.moneyless ? 0 : null;
 }
