@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ops
+          POSTGRES_PASSWORD: ops
+          POSTGRES_DB: ops
+        ports: ['5482:5432']
+        options: >-
+          --health-cmd "pg_isready -U ops -d ops"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://ops:ops@127.0.0.1:5482/ops
+      BETTER_AUTH_SECRET: ci-only-secret-not-used-anywhere-else
+      VITE_API_URL: http://localhost:4111
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: |
+          for p in packages/harness packages/distru-client packages/connector-* apps/distru-mock apps/agent; do
+            echo "::group::$p"; (cd "$p" && bunx tsc --noEmit) || exit 1; echo "::endgroup::"
+          done
+      - name: Prepare database
+        run: bun run --cwd apps/agent db:push && bun run --cwd apps/agent db:seed
+      - name: Test
+        run: |
+          for p in packages/harness packages/distru-client packages/connector-* apps/distru-mock apps/agent; do
+            echo "::group::$p"; (cd "$p" && bun test) || exit 1; echo "::endgroup::"
+          done
+      - name: Web build
+        run: bun run --cwd apps/web build
