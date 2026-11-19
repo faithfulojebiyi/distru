@@ -3980,6 +3980,1470 @@
           "Batch"
         ]
       }
+    },
+    "/public/v1/purchases/{id}/pdf": {
+      "post": {
+        "description": "Generate the PDF for a single purchase order and download it directly, get a signed link to it,\nor email it (see `format`).\n\nThe same permissions that govern downloading this PDF in the Distru web app apply to this endpoint; when `format` is `email`, the web app's permission for emailing it applies instead (documents the web app cannot email keep the download permission).\n\n`format` selects how the generated PDF is delivered and has three modes: `binary` returns the raw PDF bytes as the response body (`Content-Type: application/pdf`); `url` returns a JSON envelope `{\"data\": {\"url\": ..., \"expires_datetime\": ...}}` with a temporary signed download URL; `email` sends the PDF to the addresses in `email_addresses` and returns a JSON envelope `{\"data\": {\"emailed_to\": [...]}}`. `format` is required, but for backward compatibility omitting it defaults to `binary`.\n\nAll PDF download endpoints share a single, combined rate limit for your account: 20 requests per minute and 1000 per day in total across every PDF endpoint (not per endpoint). Requests over the limit return 429 with a Retry-After header, and only successful downloads count toward it.\n",
+        "operationId": "generatePurchasePdf",
+        "parameters": [
+          {
+            "description": "The ID of the purchase order to render. Draft purchases and purchases outside your company are treated as not found.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DistruPublic.V1.AssemblyController.download_pdfBody"
+        },
+        "responses": {
+          "200": {
+            "description": "When `format` is `binary` (or omitted), the raw PDF file (`Content-Type: application/pdf`). When `format` is `url`, a JSON body with a temporary signed download URL; when `format` is `email`, a JSON body listing the addresses the PDF was emailed to (see the PdfResponse schema).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PdfResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the required permission, or team restrictions hide the record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests — the account's shared PDF download rate limit (20/minute, 1000/day across all PDF endpoints) was exceeded. Retry after the period in the Retry-After header.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Generate a purchase order PDF",
+        "tags": [
+          "Purchase"
+        ]
+      }
+    },
+    "/public/v1/tasks": {
+      "get": {
+        "description": "Lists the tasks belonging to the authenticated company, oldest-first (by creation time). Results\nnever cross company boundaries and are paginated: `next_page` holds the URL of the following\npage, or null on the last page.\n\nA task may be linked to exactly one other entity. The linked entity is returned as the matching\nrelation field (`order`, `invoice`, `purchase`, `contact`, `product`, `batch`, `assembly`,\n`return`, or `company`); every other relation field is null. Tasks linked to an internal-only\nentity that has no public API model return every relation field as null. The relation field is\nalso null when the authenticated user lacks the permission the linked entity's own list endpoint\nrequires, or can't see it under their team restrictions.\n\nRequired permission: `tasks_permissions_view`. Only tasks the authenticated user can access\nunder their team restrictions are returned.\n",
+        "operationId": "listTasks",
+        "parameters": [
+          {
+            "description": "Restrict the result to specific tasks by ID. Repeat the bracketed key once per ID. Unknown IDs match nothing; an empty list is treated as no filter. At most 200 IDs.",
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "Restrict to tasks owned by specific users, by user ID. Repeat the bracketed key once per ID. At most 200 IDs.",
+            "in": "query",
+            "name": "owner_ids",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "Filter to tasks with any of these statuses. Repeat the bracketed key once per status. At most 200.",
+            "in": "query",
+            "name": "statuses",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "ACTIVE",
+                  "COMPLETED"
+                ],
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "Filter to tasks linked to any of these entity kinds. Repeat the bracketed key once per kind. At most 200.",
+            "in": "query",
+            "name": "related_types",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "ASSEMBLY",
+                  "BATCH",
+                  "COMPANY",
+                  "CONTACT",
+                  "INVOICE",
+                  "ORDER",
+                  "PRODUCT",
+                  "PURCHASE",
+                  "RETURN"
+                ],
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "Filter by due datetime, a comma-separated `start,end` pair of ISO8601 datetimes (inclusive). Either bound may be omitted for an open-ended range.",
+            "in": "query",
+            "name": "due_datetime",
+            "required": false,
+            "example": "?due_datetime=2022-07-10T00:00:00Z,2022-07-31T00:00:00Z",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by creation datetime, a comma-separated `start,end` pair of ISO8601 datetimes (inclusive). Either bound may be omitted.",
+            "in": "query",
+            "name": "inserted_datetime",
+            "required": false,
+            "example": "?inserted_datetime=2022-07-10T00:00:00Z,2022-07-31T00:00:00Z",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by last-updated datetime, a comma-separated `start,end` pair of ISO8601 datetimes (inclusive). Either bound may be omitted.",
+            "in": "query",
+            "name": "updated_datetime",
+            "required": false,
+            "example": "?updated_datetime=2022-07-10T00:00:00Z,2022-07-31T00:00:00Z",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tasks"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the required permission, or team restrictions hide the record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests — the account's list rate limit (3000 calls, refilling at 5 per minute, one per page) was exceeded. Retry after the period in the Retry-After header. Calls with an `updated_datetime` lower bound within the last 30 days are free and never refused; see [Incremental Sync](#incremental-sync).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get tasks",
+        "tags": [
+          "Task"
+        ]
+      },
+      "post": {
+        "description": "Creates or updates a single task in one call. Omit `id` to create a new task; pass the `id` of\nan existing task to update it. Responds 201 on create and 200 on update, with the full saved\ntask as the body. The task's creator is always the API key's user; it cannot be set.\n\nOn create, `name`, `status`, and `due_datetime` are required. On update every field is optional:\nthis is a sparse update, so only the fields you send are changed and any field you omit keeps its\nstored value. Sending a nullable optional field (`description`, `owner_id`, `location_id`) as null\nclears it; sending a required field as null is rejected with a 400. `color` sent as null, or\nomitted on create, is set to your company's default task color.\n\nLinking to another entity: set exactly one of `order_id`, `invoice_id`, `purchase_id`,\n`contact_id`, `product_id`, `batch_id`, `assembly_id`, `return_id`, or `company_id`. Sending more\nthan one is a 400. The authenticated user must have the view permission for that kind of entity,\nchecked before the ID is looked up, and the entity must exist in your company and be visible to\nthem; otherwise 400. The link is set-once: once a task is linked, it cannot be changed or\nremoved. Re-sending the task's current link is accepted; sending any other is a 400. The linked\nentity is returned as in [GET /public/v1/tasks](#get-tasks).\n\nRequired permission: `tasks_permissions_create` to create, `tasks_permissions_edit` to update.\nCreating also requires the authenticated user's team restrictions to allow some access to tasks.\nUpdating requires access to the task under those restrictions; a hidden task returns 403.\n",
+        "operationId": "upsertTask",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "ID of the task to update. Omit to create. When present but not matching a task in your company, the request fails.",
+                    "nullable": true
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "The task's name. Required on create. On update, omit to leave unchanged.",
+                    "nullable": true
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Free-form description. Optional. On update, send null to clear.",
+                    "nullable": true
+                  },
+                  "status": {
+                    "enum": [
+                      "ACTIVE",
+                      "COMPLETED"
+                    ],
+                    "type": "string",
+                    "description": "The task's status. Required on create.",
+                    "nullable": true
+                  },
+                  "due_datetime": {
+                    "type": "string",
+                    "description": "When the task is due, as a UTC ISO8601 datetime. Required on create.",
+                    "nullable": true
+                  },
+                  "color": {
+                    "type": "string",
+                    "description": "The task's calendar color: one of the hex codes the Distru app's color picker offers, without the `#` (for example `CE2B2B`). Null, or omitted on create, sets your company's default task color.",
+                    "nullable": true
+                  },
+                  "owner_id": {
+                    "type": "string",
+                    "description": "ID of the user the task is assigned to. Optional; send null to unassign. Must be a user you are allowed to assign.",
+                    "nullable": true
+                  },
+                  "location_id": {
+                    "type": "string",
+                    "description": "ID of the location the task is at. Optional; send null to clear.",
+                    "nullable": true
+                  },
+                  "custom_data": {
+                    "type": "object",
+                    "description": "Custom field values as an object keyed by custom field ID. Replaces the stored custom data when sent; omit to leave unchanged. Use `GET /public/v1/custom-fields` to find Task field IDs and their value formats.",
+                    "nullable": true
+                  },
+                  "order_id": {
+                    "type": "string",
+                    "description": "Link this task to an order. Set-once; at most one relation field.",
+                    "nullable": true
+                  },
+                  "invoice_id": {
+                    "type": "string",
+                    "description": "Link this task to an invoice. Set-once; at most one relation field.",
+                    "nullable": true
+                  },
+                  "purchase_id": {
+                    "type": "string",
+                    "description": "Link this task to a purchase. Set-once; at most one relation field.",
+                    "nullable": true
+                  },
+                  "contact_id": {
+                    "type": "string",
+                    "description": "Link this task to a contact. Set-once; at most one relation field.",
+                    "nullable": true
+                  },
+                  "product_id": {
+                    "type": "string",
+                    "description": "Link this task to a product. Set-once; at most one relation field.",
+                    "nullable": true
+                  },
+                  "batch_id": {
+                    "type": "string",
+                    "description": "Link this task to a batch. Set-once; at most one relation field.",
+                    "nullable": true
+                  },
+                  "assembly_id": {
+                    "type": "string",
+                    "description": "Link this task to an assembly. Set-once; at most one relation field.",
+                    "nullable": true
+                  },
+                  "return_id": {
+                    "type": "string",
+                    "description": "Link this task to a return. Set-once; at most one relation field.",
+                    "nullable": true
+                  },
+                  "company_id": {
+                    "type": "string",
+                    "description": "Link this task to a company relationship, by its ID. Set-once; at most one relation field.",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The created task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the required permission, or team restrictions hide the record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Upsert a task",
+        "tags": [
+          "Task"
+        ]
+      }
+    },
+    "/public/v1/tasks/{id}": {
+      "delete": {
+        "description": "Permanently deletes a task. This is a hard delete: the task is removed and cannot be recovered.\nReturns 404 if no matching task exists in your company, and 403 if the authenticated user can't\naccess it under their team restrictions. Responds 204 with no body on success.\n\nRequired permission: `tasks_permissions_delete`.\n",
+        "operationId": "deleteTask",
+        "parameters": [
+          {
+            "description": "ID of the task to delete. An ID that doesn't exist for your company returns 404.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the required permission, or team restrictions hide the record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a task",
+        "tags": [
+          "Task"
+        ]
+      },
+      "get": {
+        "description": "Fetches a single task by its ID, scoped to the authenticated company. Returns 404 if no task\nwith that ID exists in your company, and 403 if the authenticated user can't access it under\ntheir team restrictions. The linked entity is returned as in [GET /public/v1/tasks](#get-tasks), so it is\nnull when the authenticated user can't view it.\n\nRequired permission: `tasks_permissions_view`.\n",
+        "operationId": "getTask",
+        "parameters": [
+          {
+            "description": "ID of the task to fetch, as returned by the list and upsert endpoints. An ID that doesn't exist for your company returns 404.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A single task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the required permission, or team restrictions hide the record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a task",
+        "tags": [
+          "Task"
+        ]
+      }
+    },
+    "/public/v1/users": {
+      "get": {
+        "description": "Get a paginated list of the team members (users) in your company, sorted oldest-first by their creation datetime.\n\nUse this to enumerate everyone on your team along with their email, role, and full name, or to keep an external system in sync with your Distru user list. Results are always scoped to your own company; users in other companies are never returned. By default soft-deleted users are excluded — use the `deleted` filter to include or isolate them.\n\nThis is a read-only endpoint and does not change anything in the system. Its data is eventually consistent: a user that was just created, modified, or deleted may take up to ~1 second to appear or reflect the change here.\n\nThe response is an envelope of `{ data: [...], next_page: ... }`. When more pages remain, `next_page` is a ready-to-follow URL for the next page, and it is null on the last page. Page size is fixed by the server and is not client-controllable.\n\nRequired permission: `settings_permissions_manage_team`.\n",
+        "operationId": "listUsers",
+        "parameters": [
+          {
+            "description": "Restrict the result to specific users by ID (the same ID returned as each user's `id`). Repeat the bracketed key once per ID. Unknown IDs simply match nothing; an empty list is treated as no filter. At most 200 IDs may be given.",
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "Filter to users created within a datetime window. Supply a comma-separated `after,before` pair of ISO8601 UTC datetimes; both bounds are inclusive and either side may be omitted to leave that end open. `2022-07-10T00:00:00Z,` matches users created on or after that instant; `,2022-07-10T00:00:00Z` matches users created on or before it; `2022-07-01T00:00:00Z,2022-07-31T00:00:00Z` matches users created within that closed range. An empty pair (`,`) is rejected.",
+            "in": "query",
+            "name": "inserted_datetime",
+            "required": false,
+            "example": "2022-07-10T00:00:00Z,",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Which users to include based on soft-delete state. `no` (the default when omitted) returns only active users; `only` returns only soft-deleted users; `include` returns both. Soft-deleted users carry a non-null `deleted_at` in the response.",
+            "in": "query",
+            "name": "deleted",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "no",
+                "include",
+                "only"
+              ],
+              "default": "no"
+            }
+          },
+          {
+            "description": "Filter to users last modified (their `updated_datetime`) within a datetime window. Same format as `inserted_datetime`: a comma-separated `after,before` pair of ISO8601 UTC datetimes, both bounds inclusive, either side optional. `,2022-07-10T00:00:00Z` matches users last modified on or before that instant. To keep a copy of your users in sync, see [Incremental Sync](#incremental-sync).",
+            "in": "query",
+            "name": "updated_datetime",
+            "required": false,
+            "example": ",2022-07-10T00:00:00Z",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Users"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the required permission, or team restrictions hide the record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests — the account's list rate limit (3000 calls, refilling at 5 per minute, one per page) was exceeded. Retry after the period in the Retry-After header. Calls with an `updated_datetime` lower bound within the last 30 days are free and never refused; see [Incremental Sync](#incremental-sync).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get users",
+        "tags": [
+          "User"
+        ]
+      }
+    },
+    "/public/v1/users/{id}": {
+      "get": {
+        "description": "Get a single team member (user) by their Distru user ID, scoped to your company.\n\nThis is a read-only endpoint and does not change anything in the system. Returns 404 if no user with that ID exists within your company — including a user that belongs to a different company, whose ID is treated as not found rather than leaked across companies. Soft-deleted users are still returned here (unlike the list endpoint, which hides them by default); a soft-deleted user comes back with a non-null `deleted_at`.\n\nLike the list endpoint, this data is eventually consistent and may lag a recent create, update, or delete by up to ~1 second.\n\nRequired permission: `settings_permissions_manage_team`.\n",
+        "operationId": "getUser",
+        "parameters": [
+          {
+            "description": "The user's Distru ID, as returned in the `id` field of the users list.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A single user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the required permission, or team restrictions hide the record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a user",
+        "tags": [
+          "User"
+        ]
+      }
+    },
+    "/public/v1/custom-fields": {
+      "get": {
+        "description": "List every custom field definition owned by the authenticated company.\n\nA custom field is a user-defined attribute attached to one entity type (its `parent_object`) — for example an extra `Batch #` text field on orders or a `Lab` dropdown on packages. Once defined, the field becomes available on every record of that entity type, and callers populate it per-record through that entity's `custom_data` map on its own create/update endpoint (the numeric `id` returned here is the key used inside `custom_data`).\n\nPass `parent_object` to return only the fields for one entity type; omit it to return the company's fields across all entity types. Fields come sorted by `id`, oldest first. This is a read-only settings lookup and changes nothing in inventory or compliance.\n\nRequired permission: `settings_permissions_custom_fields`.\n",
+        "operationId": "listCustomFields",
+        "parameters": [
+          {
+            "description": "Return only the fields attached to this entity type. Exact match against the parent object identifier; an unknown value returns an empty list. One of: `assembly`, `batch`, `company`, `contact`, `invoice`, `order`, `package`, `product`, `purchase`, `request`, `return`, `shipment`, `stock_transfer`, `task`. Omit to return the company's custom fields across all entity types. Example: `?parent_object=order`",
+            "in": "query",
+            "name": "parent_object",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of custom field definitions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomFieldDefinitions"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the required permission, or team restrictions hide the record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List custom field definitions",
+        "tags": [
+          "CustomField"
+        ]
+      },
+      "post": {
+        "description": "Create a new custom field on one entity type (`parent_object`).\n\nOnce created, the field is immediately available on every record of that entity type. Callers then set a per-record value by putting `\"<id>\": <value>` into that record's `custom_data` map on its own create/update endpoint, where `<id>` is the numeric id returned here. Creating a field does not touch existing records — they simply carry no value for it until one is written — and has no effect on inventory, Metrc, or BioTrack.\n\nThis endpoint only creates. It never updates: there is no upsert here, and `field_type`, `parent_object`, and `filterable` are fixed at creation and cannot be changed afterward. To edit a field's `name`, `description`, `required` flag, or option list later, use `POST /public/v1/custom-fields/{id}`.\n\nField-type rules the request must satisfy:\n• `dropdown` and `checkbox` fields require a non-empty `field_options` list (the selectable values); each option must be unique, non-empty, and free of commas.\n• `text` and `date` fields must not carry `field_options`, and are always non-filterable regardless of what `filterable` is sent.\n\nRequired permission: `settings_permissions_custom_fields`.\n",
+        "operationId": "createCustomField",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Display name of the field, e.g. `Lab Name`. Required. Must be unique among the fields on the same `parent_object` for this company; uniqueness is case-insensitive, so `Lab` and `lab` collide. At most 70 characters. May not use a reserved name (such as `category`, `strain`, or `owner_id`) or contain certain special characters."
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Optional free-text note describing the field's purpose. At most 100 characters. Omit or send null for no description.",
+                    "nullable": true
+                  },
+                  "parent_object": {
+                    "type": "string",
+                    "description": "The entity type this field is attached to. Required and immutable after creation. One of: `assembly`, `batch`, `company`, `contact`, `invoice`, `order`, `package`, `product`, `purchase`, `request`, `return`, `shipment`, `stock_transfer`, `task`."
+                  },
+                  "field_type": {
+                    "enum": [
+                      "checkbox",
+                      "date",
+                      "dropdown",
+                      "text"
+                    ],
+                    "type": "string",
+                    "description": "The kind of value this field stores. Required and immutable after creation. One of: `text` (free text), `date` (a calendar date), `dropdown` (a single choice from `field_options`), `checkbox` (one or more choices from `field_options`). `dropdown` and `checkbox` require `field_options`; `text` and `date` must not have them."
+                  },
+                  "filterable": {
+                    "type": "boolean",
+                    "description": "Whether records of this entity type can be filtered by this field's value. Defaults to false when omitted. Applies only to `dropdown` and `checkbox` fields; for `text` and `date` it is forced to false no matter what is sent. Immutable after creation, so this is the only chance to enable it.",
+                    "nullable": true
+                  },
+                  "required": {
+                    "type": "boolean",
+                    "description": "Whether a value for this field must be supplied when a record of this entity type is saved in the Distru app. Defaults to false when omitted. Editable later via the update endpoint.",
+                    "nullable": true
+                  },
+                  "field_options": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array",
+                    "description": "The selectable values for `dropdown` and `checkbox` fields, e.g. `[\"Lab A\", \"Lab B\"]`. Required and non-empty for those two types; each value must be unique, non-empty, at most 255 characters, and contain no commas. Must be omitted (or empty) for `text` and `date` fields.",
+                    "nullable": true
+                  },
+                  "disabled_field_options": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array",
+                    "description": "The subset of `field_options` to turn off. A disabled option can no longer be selected on new or edited records, but it stays in `field_options` so records already holding the value keep displaying it. Every value must also be present in `field_options`. Applies only to `dropdown` and `checkbox` fields; must be omitted (or empty) for `text` and `date`. Defaults to empty when omitted.",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "name",
+                  "parent_object",
+                  "field_type"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Custom field created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomFieldDefinitionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the required permission, or team restrictions hide the record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create a custom field",
+        "tags": [
+          "CustomField"
+        ]
+      }
+    },
+    "/public/v1/custom-fields/{id}": {
+      "get": {
+        "description": "Get one custom field definition by its numeric id, scoped to the authenticated company.\n\nUse this to resolve a field's current type, options, and settings — for example before writing a value into an entity's `custom_data`, where this same id is the map key. Returns 404 when no field with that id belongs to the company (a field owned by another company is indistinguishable from one that does not exist). Read-only; touches nothing in inventory or compliance.\n\nRequired permission: `settings_permissions_custom_fields`.\n",
+        "operationId": "getCustomField",
+        "parameters": [
+          {
+            "description": "The numeric id of the custom field, as returned by the list endpoint and used as the key inside each record's `custom_data`. Example: `482`",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A single custom field definition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomFieldDefinitionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the required permission, or team restrictions hide the record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a custom field definition",
+        "tags": [
+          "CustomField"
+        ]
+      }
+    },
+    "/public/v1/deleted-records": {
+      "get": {
+        "description": "List the records of one type that were deleted from your company, oldest deletion first. Use it alongside the `updated_datetime` filter of that type's list endpoint to keep a copy of your data in sync ([Incremental Sync](#incremental-sync)): list endpoints leave deleted records out by default, so a copy synced from them never learns of a deletion on its own. Each `record_type` is the type of one endpoint, such as `ORDER` for [GET /public/v1/orders](#get-orders) or `COMPANY_GROUP` for [GET /public/v1/company-groups](#get-company-groups).\n\nEvery deletion is listed, including the ones caused by deleting something else, such as an order's invoices or a product's batches; each is listed under its own type. A voided invoice or payment is not deleted; it stays on its list endpoint with its new status. A record that is restored after it was deleted leaves this list and comes back on its list endpoint with a new `updated_datetime`.\n\nDeletions are kept for 90 days. If your copy was last synced longer ago than that, reconcile it as in [Incremental Sync](#incremental-sync) step 7 before resuming.\n\nA deletion becomes visible here once its change is committed, which can be shortly after its `deleted_datetime`, and this endpoint is eventually consistent: a deletion can take up to 1 second to appear. When you poll with `deleted_datetime`, use the same lower bound as your list calls ([Incremental Sync](#incremental-sync)) and ignore records you already removed.\n\nResults are paginated. Follow the `next_page` URL in the response to fetch the following page.\n\nRequired permission: the same as the endpoint of `record_type` (for example `orders_permissions_view` for `ORDER`); tags and unit types need none. Team restrictions do not apply here: every deletion of that type in your company is listed.\n",
+        "operationId": "listDeletedRecords",
+        "parameters": [
+          {
+            "description": "Required. The kind of deleted record to list. Each request lists one kind; make one request per kind you sync.",
+            "in": "query",
+            "name": "record_type",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ADJUSTMENT",
+                "ASSEMBLY",
+                "BATCH",
+                "BIN",
+                "CHARGE_PRESET",
+                "COMPANY",
+                "COMPANY_GROUP",
+                "CONTACT",
+                "COST_TYPE",
+                "CREDIT",
+                "CUSTOM_FIELD",
+                "DRIVER",
+                "INVOICE",
+                "LICENSE",
+                "LOCATION",
+                "MENU",
+                "ORDER",
+                "PACKAGE",
+                "PAYMENT",
+                "PAYMENT_METHOD",
+                "PAYMENT_TERM",
+                "PRICE_TIER",
+                "PRODUCT",
+                "PRODUCT_CATEGORY",
+                "PRODUCT_GROUP",
+                "PRODUCT_POS_MAPPING",
+                "PRODUCT_SUBCATEGORY",
+                "PURCHASE",
+                "RETURN",
+                "STRAIN",
+                "TAG",
+                "TASK",
+                "TAX",
+                "TEST_RESULT",
+                "UNIT_TYPE",
+                "USER",
+                "VEHICLE"
+              ]
+            }
+          },
+          {
+            "description": "Filter by deletion datetime, given as an inclusive `after,before` range of ISO 8601 timestamps separated by a comma. Either bound may be left empty: `after,` keeps only records deleted on or after `after`; `,before` only those deleted on or before `before`; `after,before` keeps those inside the closed range. A range with both bounds empty is rejected.",
+            "in": "query",
+            "name": "deleted_datetime",
+            "required": false,
+            "example": "?deleted_datetime=2022-07-10T00:00:00Z,",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of deleted records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedRecords"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the required permission, or team restrictions hide the record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get deleted records",
+        "tags": [
+          "DeletedRecord"
+        ]
+      }
+    },
+    "/public/v1/activity": {
+      "get": {
+        "description": "Everything that changed in your company, newest first, one entry per operation (a save in Distru, an API call, a sync, an automation run, a job) however many records it changed, as the Activity page in Distru shows it. Each entry groups its rows by record. An operation that saved many rows shows its first 50, with `truncated` and the counts telling what was left out; the history of each record ([GET /public/v1/record-history](#get-record-history)) has all of that record's rows. Plant additives, plant additive types and plant wastes have no history of their own, and nor do older shipment signatures (`ORDER_SHIPMENT`): their rows show only here.\n\nBy default this reads the last 7 days. `changed_datetime` reads another range, up to 366 days per call. `ids[]` reads the operations with those IDs whenever they ran: an entry's `id` is the same as in each record history it shows in, so `ids[]=<id>` gives the whole operation behind a record history entry.\n\nNotes logged by hand show only in each record's history, as do some older entries read from the old activity log.\n\nThis is not for keeping a copy of your data in sync: use each type's list endpoint with `updated_datetime` ([Incremental Sync](#incremental-sync)). Entries sort by when their operation started, so one still running when you read a page can later appear behind it.\n\nEntries are read from a copy of the database that can lag a few seconds behind, so a change made a moment ago may not show yet.\n\nResults are paginated, 100 entries per page. A page can hold fewer entries, even none, while `next_page` is set: what you may not see is left out after the page is cut. Keep following `next_page` until it is null.\n\nRequired permission: none of its own. You see the records you may view in Distru, within your team restrictions, and only the fields you may see. API keys, MCP keys, webhooks, integrations, QuickBooks Online settings, company settings and scheduled reports never show.\n",
+        "operationId": "listActivity",
+        "parameters": [
+          {
+            "description": "When the operations started, as an inclusive `min,max` range of ISO 8601 timestamps separated by a comma. Either bound may be left empty: `min,` reads from `min` until now, `,max` the 365 days before `max`. A range can span at most 366 days; with an empty `max`, `min` may be up to 367 days ago, so a walk started a year back keeps working for a day. A `min` after `max` is a 400. Without it, the last 7 days, or with `ids[]`, whenever those operations ran.",
+            "in": "query",
+            "name": "changed_datetime",
+            "required": false,
+            "example": "?changed_datetime=2026-11-01T00:00:00Z,2026-11-08T00:00:00Z",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only these operations, by an entry's `id`. Repeat the bracketed key once per ID. At most 200 IDs; an empty list is rejected. An ID of another company's operation, or of one you may see nothing of, matches nothing.",
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "Only operations by these users, by user ID. Repeat the bracketed key once per ID. At most 200 IDs.",
+            "in": "query",
+            "name": "user_ids",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "Only operations from these sources. Repeat the bracketed key once per value. At most 200 values.",
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "AI_AGENT",
+                  "AUTOMATION",
+                  "BIOTRACK",
+                  "IMPORT",
+                  "JOB",
+                  "LEGACY",
+                  "MCP",
+                  "METRC",
+                  "MIGRATION",
+                  "MOBILE",
+                  "PARTNER_API",
+                  "PUBLIC_API",
+                  "QUICKBOOKS",
+                  "STAFF_SQL",
+                  "UNKNOWN",
+                  "WEB"
+                ],
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "Only operations that added (INSERT), removed (DELETE) or otherwise changed (UPDATE) a record. A record counts as added or removed only when its own row was; a change to its lines alone is an UPDATE. Repeat the bracketed key once per value. At most 200 values.",
+            "in": "query",
+            "name": "ops",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "DELETE",
+                  "INSERT",
+                  "UPDATE"
+                ],
+                "type": "string"
+              }
+            }
+          },
+          {
+            "description": "Only operations on these kinds of record; each entry then shows only their rows. Repeat the bracketed key once per value. At most 200 values.",
+            "in": "query",
+            "name": "record_types",
+            "required": false,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "ASSEMBLY",
+                  "AUTOMATION",
+                  "BATCH",
+                  "BIN",
+                  "CHARGE_PRESET",
+                  "COMPANY",
+                  "COMPANY_GROUP",
+                  "COMPLIANCE_TRANSFER",
+                  "COST_TYPE",
+                  "CREDIT",
+                  "CUSTOM_VALIDATION",
+                  "DATASET",
+                  "DRIVER",
+                  "HARVEST",
+                  "INVITATION",
+                  "INVOICE",
+                  "LABEL_TEMPLATE",
+                  "MENU",
+                  "ORDER_SHIPMENT",
+                  "PACKAGE",
+                  "PAYMENT_METHOD",
+                  "PAYMENT_TERM",
+                  "PLANT",
+                  "PLANT_ADDITIVE",
+                  "PLANT_ADDITIVE_TYPE",
+                  "PLANT_GROUP",
+                  "PLANT_WASTE",
+                  "PRICE_TIER",
+                  "PRODUCT",
+                  "PRODUCT_CATEGORY",
+                  "PRODUCT_GROUP",
+                  "PURCHASE",
+                  "RELATIONSHIP_TYPE",
+                  "RETURN",
+                  "ROLE",
+                  "SALES_ORDER",
+                  "SCHEDULED_ALERT",
+                  "STOCK_TRANSFER",
+                  "STRAIN",
+                  "TAG",
+                  "TAX",
+                  "TEAM",
+                  "TEARDOWN",
+                  "TEST_RESULT",
+                  "UNIT_TYPE",
+                  "USER",
+                  "VEHICLE"
+                ],
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of activity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityEntries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks a required permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests — the account's list rate limit (3000 calls, refilling at 5 per minute, one per page) was exceeded. Retry after the period in the Retry-After header. Calls with a `changed_datetime` lower bound within the last 30 days, and calls without it, are free and never refused; see [Incremental Sync](#incremental-sync).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get activity",
+        "tags": [
+          "Activity"
+        ]
+      }
+    },
+    "/public/v1/record-history": {
+      "get": {
+        "description": "The history of one record, newest first: who changed what and when, field by field, as the record's History tab in Distru shows it. Each entry is one operation (a save in Distru, an API call, a sync, an automation run, a job) with the record's rows it changed (the record itself and its lines, such as an order's items), and, for invoices, purchases, orders, returns, batches, assemblies, stock transfers and companies, the notes, calls, meetings and emails logged on the record or, except for companies, on its invoices, returns, payments, shipments, credits and tasks.\n\nA record's history shows only that record's part of an operation. An operation that changed an order and its invoice shows the order's rows here and the invoice's in the invoice's history, under the same `id`. The whole operation, across every record it changed, is at [GET /public/v1/activity](#get-activity) with `ids[]=<id>`; `LEGACY` entries copied from the old activity log are not always there.\n\nField names and the entities of `rows` are listed per record type in [Record history fields](#record-history-fields).\n\nThis is not for keeping a copy of your data in sync: use each type's list endpoint with `updated_datetime` ([Incremental Sync](#incremental-sync)). Entries sort by when their operation started, so one still running when you read a page can later appear behind it.\n\nHistory is read from a copy of the database that can lag a few seconds behind: a change, or a record, made a moment ago may not show yet (a record created that recently can return 404).\n\nResults are paginated, 100 entries per page. A page can hold fewer entries, even none, while `next_page` is set: what you may not see is left out after the page is cut. Keep following `next_page` until it is null.\n\nRequired permission: the same as viewing the record in Distru, for example `invoices_permissions_view` for an `INVOICE`; you see the history of the records your team restrictions let you see (another one returns 403), and only the fields you may see. The history of API keys, MCP keys, webhooks, integrations (`PARTNER_CONNECTION`), QuickBooks Online settings, company settings and scheduled reports can't be read with an API key: those types return 403.\n",
+        "operationId": "getRecordHistory",
+        "parameters": [
+          {
+            "description": "Required. The kind of record.",
+            "in": "query",
+            "name": "record_type",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ASSEMBLY",
+                "AUTOMATION",
+                "BATCH",
+                "BIN",
+                "CHARGE_PRESET",
+                "COMPANY",
+                "COMPANY_GROUP",
+                "COMPANY_SETTINGS",
+                "COMPLIANCE_TRANSFER",
+                "COST_TYPE",
+                "CREDIT",
+                "CUSTOM_VALIDATION",
+                "DATASET",
+                "DRIVER",
+                "HARVEST",
+                "INVITATION",
+                "INVOICE",
+                "LABEL_TEMPLATE",
+                "MCP_API_KEY",
+                "MENU",
+                "PACKAGE",
+                "PARTNER_CONNECTION",
+                "PAYMENT_METHOD",
+                "PAYMENT_TERM",
+                "PLANT",
+                "PLANT_GROUP",
+                "PRICE_TIER",
+                "PRODUCT",
+                "PRODUCT_CATEGORY",
+                "PRODUCT_GROUP",
+                "PUBLIC_API_KEY",
+                "PURCHASE",
+                "QUICKBOOKS_SETTINGS",
+                "RELATIONSHIP_TYPE",
+                "RETURN",
+                "ROLE",
+                "SALES_ORDER",
+                "SCHEDULED_ALERT",
+                "SCHEDULED_REPORT",
+                "STOCK_TRANSFER",
+                "STRAIN",
+                "TAG",
+                "TAX",
+                "TEAM",
+                "TEARDOWN",
+                "TEST_RESULT",
+                "UNIT_TYPE",
+                "USER",
+                "VEHICLE",
+                "WEBHOOK_CONFIGURATION"
+              ]
+            }
+          },
+          {
+            "description": "Required. The record's ID, as its type's endpoints return it, or as `records[].id` in [GET /public/v1/activity](#get-activity) gives it for a type with no endpoint. An ID that doesn't exist for your company returns 404; one your team restrictions hide returns 403. A type an API key can't read returns 403 for any well-formed ID.",
+            "in": "query",
+            "name": "record_id",
+            "required": true,
+            "example": "?record_id=00000000-0000-0000-0000-000000000062",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the record's history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordHistoryEntries"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API token lacks the permission to view the record type, the type can't be read with an API token, or the record is hidden by team restrictions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get record history",
+        "tags": [
+          "RecordHistory"
+        ]
+      }
     }
   },
   "security": [
@@ -4540,6 +6004,1135 @@
         "title": "Batch Response",
         "type": "object"
       },
+      "PdfResponse": {
+        "description": "The JSON envelope a PDF endpoint returns for the non-binary formats: `format=url` returns `url` + `expires_datetime`, `format=email` returns `emailed_to`.",
+        "properties": {
+          "data": {
+            "description": "The response payload; which fields are present depends on the requested `format`.",
+            "properties": {
+              "emailed_to": {
+                "description": "The recipient email addresses the PDF was emailed to, present only when `format=email`.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "nullable": true
+              },
+              "expires_datetime": {
+                "description": "ISO 8601 datetime when the signed `url` expires (e.g. \"2026-08-20T00:00:00Z\"), present only when `format=url`.",
+                "type": "string",
+                "nullable": true
+              },
+              "url": {
+                "description": "Temporary signed URL to download the PDF, present only when `format=url`. Stops working once `expires_datetime` passes; request the endpoint again for a fresh URL.",
+                "type": "string",
+                "nullable": true
+              }
+            },
+            "type": "object",
+            "nullable": true
+          }
+        },
+        "title": "PdfResponse",
+        "type": "object"
+      },
+      "Tasks": {
+        "description": "A collection of tasks",
+        "properties": {
+          "data": {
+            "description": "Tasks",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            },
+            "type": "array",
+            "nullable": true
+          },
+          "next_page": {
+            "description": "URL for the next page of results; null when there is no next page",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "title": "Tasks",
+        "type": "object"
+      },
+      "TaskResponse": {
+        "description": "A single task",
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Task"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "title": "Task Response",
+        "type": "object"
+      },
+      "Users": {
+        "description": "A collection of Users",
+        "properties": {
+          "data": {
+            "description": "Users",
+            "items": {
+              "$ref": "#/components/schemas/User"
+            },
+            "type": "array",
+            "nullable": true
+          },
+          "next_page": {
+            "description": "URL for the next page of results; null when there is no next page",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "title": "Users",
+        "type": "object"
+      },
+      "UserResponse": {
+        "description": "A single user envelope",
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "title": "User Response",
+        "type": "object"
+      },
+      "CustomFieldDefinitions": {
+        "description": "A collection of custom field definitions",
+        "properties": {
+          "data": {
+            "description": "CustomFieldDefinitions",
+            "items": {
+              "$ref": "#/components/schemas/CustomFieldDefinition"
+            },
+            "type": "array",
+            "nullable": true
+          },
+          "next_page": {
+            "description": "URL for the next page of results; null when there is no next page",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "title": "CustomFieldDefinitions",
+        "type": "object"
+      },
+      "CustomFieldDefinitionResponse": {
+        "description": "A single custom field definition wrapped in a data envelope",
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CustomFieldDefinition"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "title": "CustomFieldDefinition Response",
+        "type": "object"
+      },
+      "DeletedRecords": {
+        "description": "A collection of deleted records",
+        "properties": {
+          "data": {
+            "description": "Deleted Records",
+            "items": {
+              "$ref": "#/components/schemas/DeletedRecord"
+            },
+            "type": "array",
+            "nullable": true
+          },
+          "next_page": {
+            "description": "URL for the next page of results; null when there is no next page",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "title": "Deleted Records",
+        "type": "object"
+      },
+      "ActivityEntries": {
+        "description": "A page of activity",
+        "properties": {
+          "data": {
+            "description": "Activity Entries",
+            "items": {
+              "$ref": "#/components/schemas/ActivityEntry"
+            },
+            "type": "array",
+            "nullable": true
+          },
+          "next_page": {
+            "description": "URL for the next page of results; null when there is no next page",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "title": "Activity Entries",
+        "type": "object"
+      },
+      "RecordHistoryEntries": {
+        "description": "A page of a record's history",
+        "properties": {
+          "data": {
+            "description": "Record History Entries",
+            "items": {
+              "$ref": "#/components/schemas/RecordHistoryEntry"
+            },
+            "type": "array",
+            "nullable": true
+          },
+          "next_page": {
+            "description": "URL for the next page of results; null when there is no next page",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "title": "Record History Entries",
+        "type": "object"
+      },
+      "RecordHistoryEntry": {
+        "description": "A change (`type` CHANGE): one operation's changes to the record, or a note (`type` NOTE) logged by hand.",
+        "properties": {
+          "actor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RecordHistoryActor"
+              }
+            ],
+            "nullable": true
+          },
+          "changed_datetime": {
+            "description": "When the operation started, which every change it made shares; for a note, when it was logged.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Changes only: what happened to the record that no field change shows.",
+            "items": {
+              "$ref": "#/components/schemas/RecordHistoryEvent"
+            },
+            "type": "array",
+            "nullable": true
+          },
+          "id": {
+            "description": "A change's ID is its operation's, the same in every history it shows in and at [GET /public/v1/activity](#get-activity); a `LEGACY` entry copied from the old activity log has one per record type and may not be at /activity. A note's ID is the note's.",
+            "type": "string"
+          },
+          "impersonator": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RecordHistoryActor"
+              }
+            ],
+            "nullable": true
+          },
+          "logged_on": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RecordHistoryLoggedOn"
+              }
+            ],
+            "nullable": true
+          },
+          "note_type": {
+            "description": "Notes only: what was logged.",
+            "enum": [
+              "EMAIL",
+              "MEETING",
+              "NOTE",
+              "PHONE"
+            ],
+            "type": "string",
+            "nullable": true
+          },
+          "rows": {
+            "description": "Changes only: the rows of this record the operation changed.",
+            "items": {
+              "$ref": "#/components/schemas/RecordHistoryRow"
+            },
+            "type": "array",
+            "nullable": true
+          },
+          "source": {
+            "description": "Changes only: where the change came from, such as WEB, PUBLIC_API, METRC or QUICKBOOKS. LEGACY marks an entry copied from an older log; only those from the old activity log hold `legacy_text` instead of values.",
+            "enum": [
+              "AI_AGENT",
+              "AUTOMATION",
+              "BIOTRACK",
+              "IMPORT",
+              "JOB",
+              "LEGACY",
+              "MCP",
+              "METRC",
+              "MIGRATION",
+              "MOBILE",
+              "PARTNER_API",
+              "PUBLIC_API",
+              "QUICKBOOKS",
+              "STAFF_SQL",
+              "UNKNOWN",
+              "WEB"
+            ],
+            "type": "string",
+            "nullable": true
+          },
+          "source_detail": {
+            "description": "Changes only: more about the source, such as the API key's or automation's name. Often null.",
+            "type": "string",
+            "nullable": true
+          },
+          "text": {
+            "description": "Notes only: the note's text.",
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "description": "Whether this is a change or a note.",
+            "enum": [
+              "CHANGE",
+              "NOTE"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "changed_datetime",
+          "type",
+          "id"
+        ],
+        "title": "RecordHistoryEntry",
+        "type": "object"
+      },
+      "RecordHistoryActor": {
+        "description": "Who made a change or wrote a note. Distru staff show as `Distru Support`, with no ID.",
+        "properties": {
+          "company_name": {
+            "description": "The user's company, when it isn't yours: a customer who placed an order on your menu, for example. Null for your own users.",
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "description": "The user's ID, as GET /public/v1/users returns it. Null for Distru staff and for another company's user (`company_name` set).",
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "description": "The user's name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RecordHistoryActor",
+        "type": "object"
+      },
+      "RecordHistoryEvent": {
+        "description": "Something that happened to the record that no field change shows.",
+        "properties": {
+          "message": {
+            "description": "What happened, in words, as Distru shows it.",
+            "type": "string",
+            "nullable": true
+          },
+          "type": {
+            "description": "What happened.",
+            "enum": [
+              "CREDIT_USED",
+              "CREDIT_USE_DELETED",
+              "LEGACY_NOTE",
+              "QUICKBOOKS_CUSTOMER_DELETED",
+              "QUICKBOOKS_PAYMENT_MERGED",
+              "QUICKBOOKS_VENDOR_DELETED"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "RecordHistoryEvent",
+        "type": "object"
+      },
+      "RecordHistoryLoggedOn": {
+        "description": "The record a note was logged on, when it isn't the record itself.",
+        "properties": {
+          "id": {
+            "description": "Its ID, null when `type` is; an `INVOICE_PAYMENT`'s or `PURCHASE_PAYMENT`'s is its payment's ID, as [GET /public/v1/payments](#get-payments) returns it (a deleted payment's too), null once no payment row is left.",
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "description": "Its kind and name, such as `Payment $10.00`, or its kind alone, such as `Batch`.",
+            "type": "string"
+          },
+          "type": {
+            "description": "The kind of record; null for a kind named only in `name`, such as a batch.",
+            "enum": [
+              "CREDIT",
+              "INVOICE",
+              "INVOICE_PAYMENT",
+              "ORDER_SHIPMENT",
+              "PURCHASE_PAYMENT",
+              "RETURN",
+              "TASK"
+            ],
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RecordHistoryLoggedOn",
+        "type": "object"
+      },
+      "RecordHistoryRow": {
+        "description": "One row the operation added, changed or removed, with its net change.",
+        "properties": {
+          "entity": {
+            "description": "The kind of row, such as `INVOICE`, `ORDER_ITEM` or `SALES_ORDER`: each record type's are listed in [Record history fields](#record-history-fields).",
+            "type": "string"
+          },
+          "entity_label": {
+            "description": "The kind of row as Distru names it.",
+            "type": "string"
+          },
+          "fields": {
+            "description": "The fields that changed; for an added or removed row, the fields it had set. Fields that ended where they started are left out.",
+            "items": {
+              "$ref": "#/components/schemas/RecordHistoryFieldChange"
+            },
+            "type": "array"
+          },
+          "op": {
+            "description": "Whether the row was added, changed or removed.",
+            "enum": [
+              "DELETE",
+              "INSERT",
+              "UPDATE"
+            ],
+            "type": "string"
+          },
+          "row_id": {
+            "description": "The row's ID, as the endpoint of its kind returns it, where one does. An `INVOICE_PAYMENT` or `PURCHASE_PAYMENT` row's is its payment's ID, as [GET /public/v1/payments](#get-payments) returns it (a deleted payment's too), null once no payment row is left.",
+            "type": "string",
+            "nullable": true
+          },
+          "row_label": {
+            "description": "Names a line, such as an invoice line's product, price and quantity; in a `LEGACY` entry copied from the old activity log, the row it changed. Usually null for the record's own row.",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "fields",
+          "op",
+          "entity_label",
+          "entity"
+        ],
+        "title": "RecordHistoryRow",
+        "type": "object"
+      },
+      "RecordHistoryFieldChange": {
+        "description": "A field's value before and after the operation.",
+        "properties": {
+          "field": {
+            "description": "The field's name: each record type's are listed in [Record history fields](#record-history-fields). Most fields of an order, purchase, invoice, assembly, return, company, product or package have the name their endpoints and webhooks give them. A field holding one value per key shows one change per key that changed, as `<field>.<key>` (`custom_data.12` for the custom field with ID 12). In a `LEGACY` entry copied from the old activity log, the name that log gave it, such as `amount paid`.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The field's name as Distru shows it.",
+            "type": "string"
+          },
+          "legacy_text": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RecordHistoryLegacyText"
+              }
+            ],
+            "nullable": true
+          },
+          "new_value": {
+            "description": "The value after, as `old_value`; null when the field was cleared or the row removed.",
+            "nullable": true
+          },
+          "old_value": {
+            "description": "The value before: a string, number, boolean, list or object, or null when the field was empty or the row was added. A field pointing at another record holds `{id, name}`: the record's ID and its current name, null once it is gone or archived (`{id: null, name}` for a menu buyer's user or locations, or a payment with no payment row left); a list of such records holds an `{id, name}` for each. A pricing tier's `conditions.<condition>` (named as the pricing tier endpoint names it, such as `one_of_products`) holds a list of the IDs you may see that still exist (null when none), `{quantity, unit_type_id}` for `min_quantity` and `{min, max}` for `total_thc_percentage_range` (quantity and bounds as decimal strings). Null in a `LEGACY` entry copied from the old activity log, whose `legacy_text` has its text.",
+            "nullable": true
+          }
+        },
+        "required": [
+          "label",
+          "field"
+        ],
+        "title": "RecordHistoryFieldChange",
+        "type": "object"
+      },
+      "RecordHistoryLegacyText": {
+        "description": "A field change as the old activity log wrote it.",
+        "properties": {
+          "new": {
+            "description": "The text after, or null.",
+            "type": "string",
+            "nullable": true
+          },
+          "old": {
+            "description": "The text before, or null.",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "title": "RecordHistoryLegacyText",
+        "type": "object"
+      },
+      "ActivityEntry": {
+        "description": "One operation, with the records it changed that you may see. What it holds depends on your filters and permissions.",
+        "properties": {
+          "actor": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RecordHistoryActor"
+              }
+            ],
+            "nullable": true
+          },
+          "changed_datetime": {
+            "description": "When the operation started.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The operation's ID, the same as the entry's in each record's history.",
+            "type": "string"
+          },
+          "impersonator": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RecordHistoryActor"
+              }
+            ],
+            "nullable": true
+          },
+          "record_counts": {
+            "description": "How many records of each kind the operation changed, including any `records` leaves out past the row cap.",
+            "items": {
+              "$ref": "#/components/schemas/ActivityRecordCount"
+            },
+            "type": "array"
+          },
+          "records": {
+            "description": "The records the operation changed, by type and ID.",
+            "items": {
+              "$ref": "#/components/schemas/ActivityRecord"
+            },
+            "type": "array"
+          },
+          "row_count": {
+            "description": "How many rows the operation wrote, counted before rows that ended where they started are left out.",
+            "type": "integer"
+          },
+          "source": {
+            "description": "Where the change came from, such as WEB, PUBLIC_API, METRC or QUICKBOOKS.",
+            "enum": [
+              "AI_AGENT",
+              "AUTOMATION",
+              "BIOTRACK",
+              "IMPORT",
+              "JOB",
+              "LEGACY",
+              "MCP",
+              "METRC",
+              "MIGRATION",
+              "MOBILE",
+              "PARTNER_API",
+              "PUBLIC_API",
+              "QUICKBOOKS",
+              "STAFF_SQL",
+              "UNKNOWN",
+              "WEB"
+            ],
+            "type": "string"
+          },
+          "source_detail": {
+            "description": "More about the source, such as the API key's or automation's name. Often null.",
+            "type": "string",
+            "nullable": true
+          },
+          "truncated": {
+            "description": "Whether the 50-row cap left out some of the operation's rows.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "truncated",
+          "row_count",
+          "record_counts",
+          "records",
+          "source",
+          "changed_datetime",
+          "id"
+        ],
+        "title": "ActivityEntry",
+        "type": "object"
+      },
+      "ActivityRecordCount": {
+        "description": "How many records of one kind the operation changed.",
+        "properties": {
+          "count": {
+            "description": "How many.",
+            "type": "integer"
+          },
+          "type": {
+            "description": "The kind of record.",
+            "enum": [
+              "ASSEMBLY",
+              "AUTOMATION",
+              "BATCH",
+              "BIN",
+              "CHARGE_PRESET",
+              "COMPANY",
+              "COMPANY_GROUP",
+              "COMPLIANCE_TRANSFER",
+              "COST_TYPE",
+              "CREDIT",
+              "CUSTOM_VALIDATION",
+              "DATASET",
+              "DRIVER",
+              "HARVEST",
+              "INVITATION",
+              "INVOICE",
+              "LABEL_TEMPLATE",
+              "MENU",
+              "ORDER_SHIPMENT",
+              "PACKAGE",
+              "PAYMENT_METHOD",
+              "PAYMENT_TERM",
+              "PLANT",
+              "PLANT_ADDITIVE",
+              "PLANT_ADDITIVE_TYPE",
+              "PLANT_GROUP",
+              "PLANT_WASTE",
+              "PRICE_TIER",
+              "PRODUCT",
+              "PRODUCT_CATEGORY",
+              "PRODUCT_GROUP",
+              "PURCHASE",
+              "RELATIONSHIP_TYPE",
+              "RETURN",
+              "ROLE",
+              "SALES_ORDER",
+              "SCHEDULED_ALERT",
+              "STOCK_TRANSFER",
+              "STRAIN",
+              "TAG",
+              "TAX",
+              "TEAM",
+              "TEARDOWN",
+              "TEST_RESULT",
+              "UNIT_TYPE",
+              "USER",
+              "VEHICLE"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "type"
+        ],
+        "title": "ActivityRecordCount",
+        "type": "object"
+      },
+      "ActivityRecord": {
+        "description": "A record the operation changed, with its rows.",
+        "properties": {
+          "events": {
+            "description": "What happened to the record that no field change shows.",
+            "items": {
+              "$ref": "#/components/schemas/RecordHistoryEvent"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "The record's ID. Null when `type` is.",
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "description": "The record's number or name, when it has one.",
+            "type": "string",
+            "nullable": true
+          },
+          "row_count": {
+            "description": "How many of the record's rows the operation wrote, counted before rows that ended where they started are left out.",
+            "type": "integer"
+          },
+          "rows": {
+            "description": "The record's rows the operation changed, as in its history; only the first ones when `truncated`.",
+            "items": {
+              "$ref": "#/components/schemas/RecordHistoryRow"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "description": "Whether the entry's 50-row cap left out some of this record's rows; its history has them all, for the types [GET /public/v1/record-history](#get-record-history) serves.",
+            "type": "boolean"
+          },
+          "type": {
+            "description": "The kind of record. Null for rows whose record was deleted with them.",
+            "enum": [
+              "ASSEMBLY",
+              "AUTOMATION",
+              "BATCH",
+              "BIN",
+              "CHARGE_PRESET",
+              "COMPANY",
+              "COMPANY_GROUP",
+              "COMPLIANCE_TRANSFER",
+              "COST_TYPE",
+              "CREDIT",
+              "CUSTOM_VALIDATION",
+              "DATASET",
+              "DRIVER",
+              "HARVEST",
+              "INVITATION",
+              "INVOICE",
+              "LABEL_TEMPLATE",
+              "MENU",
+              "ORDER_SHIPMENT",
+              "PACKAGE",
+              "PAYMENT_METHOD",
+              "PAYMENT_TERM",
+              "PLANT",
+              "PLANT_ADDITIVE",
+              "PLANT_ADDITIVE_TYPE",
+              "PLANT_GROUP",
+              "PLANT_WASTE",
+              "PRICE_TIER",
+              "PRODUCT",
+              "PRODUCT_CATEGORY",
+              "PRODUCT_GROUP",
+              "PURCHASE",
+              "RELATIONSHIP_TYPE",
+              "RETURN",
+              "ROLE",
+              "SALES_ORDER",
+              "SCHEDULED_ALERT",
+              "STOCK_TRANSFER",
+              "STRAIN",
+              "TAG",
+              "TAX",
+              "TEAM",
+              "TEARDOWN",
+              "TEST_RESULT",
+              "UNIT_TYPE",
+              "USER",
+              "VEHICLE"
+            ],
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "truncated",
+          "row_count",
+          "events",
+          "rows"
+        ],
+        "title": "ActivityRecord",
+        "type": "object"
+      },
+      "DeletedRecord": {
+        "description": "A record that was deleted.",
+        "properties": {
+          "deleted_datetime": {
+            "description": "When the record was deleted. Each record gets its own time, so records deleted together, like an order and its invoices, can differ by a few milliseconds.",
+            "type": "string"
+          },
+          "record_id": {
+            "description": "ID the record had before it was deleted, the same as its `id` on its type's endpoints (for `CUSTOM_FIELD`, the field's numeric id as a string). IDs are never reused.",
+            "type": "string"
+          },
+          "record_type": {
+            "description": "The kind of record that was deleted.",
+            "enum": [
+              "ADJUSTMENT",
+              "ASSEMBLY",
+              "BATCH",
+              "BIN",
+              "CHARGE_PRESET",
+              "COMPANY",
+              "COMPANY_GROUP",
+              "CONTACT",
+              "COST_TYPE",
+              "CREDIT",
+              "CUSTOM_FIELD",
+              "DRIVER",
+              "INVOICE",
+              "LICENSE",
+              "LOCATION",
+              "MENU",
+              "ORDER",
+              "PACKAGE",
+              "PAYMENT",
+              "PAYMENT_METHOD",
+              "PAYMENT_TERM",
+              "PRICE_TIER",
+              "PRODUCT",
+              "PRODUCT_CATEGORY",
+              "PRODUCT_GROUP",
+              "PRODUCT_POS_MAPPING",
+              "PRODUCT_SUBCATEGORY",
+              "PURCHASE",
+              "RETURN",
+              "STRAIN",
+              "TAG",
+              "TASK",
+              "TAX",
+              "TEST_RESULT",
+              "UNIT_TYPE",
+              "USER",
+              "VEHICLE"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted_datetime",
+          "record_type",
+          "record_id"
+        ],
+        "title": "DeletedRecord",
+        "type": "object"
+      },
+      "CustomFieldDefinition": {
+        "description": "A custom field definition",
+        "properties": {
+          "description": {
+            "description": "Free-text note describing the field, or null when none was set.",
+            "type": "string",
+            "nullable": true
+          },
+          "disabled_field_options": {
+            "description": "The subset of `field_options` that have been turned off. Applies only to `dropdown` and `checkbox` fields; always empty for `text` and `date` fields. A disabled option can no longer be selected on new or edited records, but it stays in `field_options` and is listed here so that historical records already holding the value continue to display it. Every value here also appears in `field_options`. Example: a dropdown with `field_options` `[\"Small\", \"Medium\", \"Large\"]` and `disabled_field_options` `[\"Medium\"]` keeps showing \"Medium\" on records saved with it, but \"Medium\" is no longer offered when picking a value. Always present (an empty array when nothing is disabled). Set it on create or update via the `disabled_field_options` request field.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "field_options": {
+            "description": "The selectable values for `dropdown` and `checkbox` fields, in display order; an empty array for `text` and `date` fields. For a `checkbox` field a record may hold several of these; for a `dropdown` at most one.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "nullable": true
+          },
+          "field_type": {
+            "description": "The kind of value this field stores: `text` (free text), `date` (a calendar date), `dropdown` (a single choice from `field_options`), or `checkbox` (one or more choices from `field_options`). Fixed at creation. Always present.",
+            "type": "string"
+          },
+          "filterable": {
+            "description": "Whether records of this entity type can be filtered by this field's value. Always false for `text` and `date` fields. Always present.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The field's numeric id. This is the key used to read and write the field's value inside a record's `custom_data` map. Always present.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Display name of the field. Unique (case-insensitively) among the fields on the same `parent_object` for the company. Always present.",
+            "type": "string"
+          },
+          "parent_object": {
+            "description": "The entity type this field is attached to. One of: `assembly`, `batch`, `company`, `contact`, `invoice`, `order`, `package`, `product`, `purchase`, `request`, `return`, `shipment`, `stock_transfer`, `task`.",
+            "type": "string",
+            "nullable": true
+          },
+          "required": {
+            "description": "Whether a value must be supplied when a record of this entity type is saved in the Distru app. Always present.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "disabled_field_options",
+          "required",
+          "filterable",
+          "field_type",
+          "name",
+          "id"
+        ],
+        "title": "CustomFieldDefinition",
+        "type": "object"
+      },
+      "User": {
+        "description": "A member of your Distru team — the account behind actions like owning or creating records.",
+        "properties": {
+          "banned": {
+            "description": "True when this user has been banned and can no longer sign in",
+            "type": "boolean",
+            "nullable": true
+          },
+          "deleted_at": {
+            "description": "ISO 8601 datetime this user was deleted at, or null when the user is not deleted",
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "description": "The email address of this user",
+            "type": "string"
+          },
+          "full_name": {
+            "description": "The full name of this user, or null when not set",
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "description": "ID for this user",
+            "type": "string"
+          },
+          "inserted_datetime": {
+            "description": "ISO 8601 datetime this user was created at",
+            "type": "string"
+          },
+          "role": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              }
+            ],
+            "nullable": true
+          },
+          "updated_datetime": {
+            "description": "ISO 8601 datetime this user was last updated at. It also moves on changes not shown here, such as the user signing in.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "updated_datetime",
+          "inserted_datetime",
+          "email",
+          "id"
+        ],
+        "title": "User",
+        "type": "object"
+      },
+      "Role": {
+        "description": "A permission role that determines what a [user](#model-user) can do in Distru.",
+        "properties": {
+          "id": {
+            "description": "ID for this role",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name of the role (e.g. Admin, Sales)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "id"
+        ],
+        "title": "Role",
+        "type": "object"
+      },
+      "Task": {
+        "description": "A task",
+        "properties": {
+          "assembly": {
+            "description": "The linked assembly, or null.",
+            "type": "object",
+            "nullable": true
+          },
+          "batch": {
+            "description": "The linked batch, or null.",
+            "type": "object",
+            "nullable": true
+          },
+          "color": {
+            "description": "The task's calendar color as a hex code without the `#`. Null only on a task saved without one before 2026-11-16 that no update has given one since; it shows your company's default task color.",
+            "type": "string",
+            "nullable": true
+          },
+          "company": {
+            "description": "The linked company relationship, or null.",
+            "type": "object",
+            "nullable": true
+          },
+          "contact": {
+            "description": "The linked contact, or null.",
+            "type": "object",
+            "nullable": true
+          },
+          "creator": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "nullable": true
+          },
+          "custom_data": {
+            "description": "Custom field values for the task.",
+            "items": {
+              "$ref": "#/components/schemas/CustomField"
+            },
+            "type": "array"
+          },
+          "description": {
+            "description": "Free-form description, or null.",
+            "type": "string",
+            "nullable": true
+          },
+          "due_datetime": {
+            "description": "When the task is due, as a UTC ISO8601 datetime.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID of this task.",
+            "type": "string"
+          },
+          "inserted_datetime": {
+            "description": "When the task was created, as a UTC ISO8601 timestamp.",
+            "type": "string"
+          },
+          "invoice": {
+            "description": "The linked invoice, or null.",
+            "type": "object",
+            "nullable": true
+          },
+          "location": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LocationCompact"
+              }
+            ],
+            "nullable": true
+          },
+          "name": {
+            "description": "The task's name.",
+            "type": "string"
+          },
+          "order": {
+            "description": "The linked order, or null. At most one relation field is non-null. Each relation field is also null when the authenticated user can't view the linked record: they lack its view permission, or their team restrictions hide it.",
+            "type": "object",
+            "nullable": true
+          },
+          "owner": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ],
+            "nullable": true
+          },
+          "product": {
+            "description": "The linked product, or null.",
+            "type": "object",
+            "nullable": true
+          },
+          "purchase": {
+            "description": "The linked purchase, or null.",
+            "type": "object",
+            "nullable": true
+          },
+          "return": {
+            "description": "The linked return, or null.",
+            "type": "object",
+            "nullable": true
+          },
+          "status": {
+            "description": "The task's status.",
+            "enum": [
+              "ACTIVE",
+              "COMPLETED"
+            ],
+            "type": "string"
+          },
+          "updated_datetime": {
+            "description": "When the task was last updated, as a UTC ISO8601 timestamp.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "updated_datetime",
+          "inserted_datetime",
+          "custom_data",
+          "due_datetime",
+          "status",
+          "name",
+          "id"
+        ],
+        "title": "Task",
+        "type": "object"
+      },
+      "CustomField": {
+        "description": "A user-defined field attached to a record, with the value set for this particular record. Which custom fields exist is configured in Distru; use `GET /public/v1/custom-fields` to list the definitions and their IDs.",
+        "properties": {
+          "id": {
+            "description": "The ID of this custom field's definition (matches an `id` from `GET /public/v1/custom-fields`). An integer.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "The name of this custom field",
+            "type": "string"
+          },
+          "value": {
+            "description": "This record's value for the custom field, as a string, or null when no value has been set for this record",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name",
+          "id"
+        ],
+        "title": "CustomField",
+        "type": "object"
+      },
+      "LocationCompact": {
+        "description": "A compact reference to a [location](#model-location) as nested inside another entity in Distru. Use its `id` to fetch the full location from the locations endpoint.",
+        "properties": {
+          "address": {
+            "description": "The full address as a single formatted line, built from the street, apt, city, state, zip, and country fields",
+            "example": "1234 Warehouse Street, Oakland, CA",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID for this location",
+            "example": "02c88a3f-d759-4973-88f9-60049d682524",
+            "type": "string"
+          },
+          "license_id": {
+            "description": "ID of the [license](#model-license) this location is associated with, or null when the location has no license",
+            "example": "02c88a3f-d759-4973-88f9-60049d682524",
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "description": "Human readable name for this location",
+            "example": "Warehouse 1",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "address",
+          "id"
+        ],
+        "title": "LocationCompact",
+        "type": "object"
+      },
       "BatchFull": {
         "description": "A lot of a product with all its details — a group of inventory sharing a harvest/production run, expiration date, potency, lab results, and cost. Used for batch-tracked products.",
         "properties": {
@@ -4713,82 +7306,6 @@
           "id"
         ],
         "title": "BinCompact",
-        "type": "object"
-      },
-      "User": {
-        "description": "A member of your Distru team — the account behind actions like owning or creating records.",
-        "properties": {
-          "banned": {
-            "description": "True when this user has been banned and can no longer sign in",
-            "type": "boolean",
-            "nullable": true
-          },
-          "deleted_at": {
-            "description": "ISO 8601 datetime this user was deleted at, or null when the user is not deleted",
-            "type": "string",
-            "nullable": true
-          },
-          "email": {
-            "description": "The email address of this user",
-            "type": "string"
-          },
-          "full_name": {
-            "description": "The full name of this user, or null when not set",
-            "type": "string",
-            "nullable": true
-          },
-          "id": {
-            "description": "ID for this user",
-            "type": "string"
-          },
-          "inserted_datetime": {
-            "description": "ISO 8601 datetime this user was created at",
-            "type": "string"
-          },
-          "role": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/Role"
-              }
-            ],
-            "nullable": true
-          },
-          "updated_datetime": {
-            "description": "ISO 8601 datetime this user was last updated at. It also moves on changes not shown here, such as the user signing in.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "updated_datetime",
-          "inserted_datetime",
-          "email",
-          "id"
-        ],
-        "title": "User",
-        "type": "object"
-      },
-      "CustomField": {
-        "description": "A user-defined field attached to a record, with the value set for this particular record. Which custom fields exist is configured in Distru; use `GET /public/v1/custom-fields` to list the definitions and their IDs.",
-        "properties": {
-          "id": {
-            "description": "The ID of this custom field's definition (matches an `id` from `GET /public/v1/custom-fields`). An integer.",
-            "type": "integer"
-          },
-          "name": {
-            "description": "The name of this custom field",
-            "type": "string"
-          },
-          "value": {
-            "description": "This record's value for the custom field, as a string, or null when no value has been set for this record",
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "required": [
-          "name",
-          "id"
-        ],
-        "title": "CustomField",
         "type": "object"
       },
       "PrimaryTestResult": {
@@ -5243,39 +7760,6 @@
           "id"
         ],
         "title": "Task (compact)",
-        "type": "object"
-      },
-      "LocationCompact": {
-        "description": "A compact reference to a [location](#model-location) as nested inside another entity in Distru. Use its `id` to fetch the full location from the locations endpoint.",
-        "properties": {
-          "address": {
-            "description": "The full address as a single formatted line, built from the street, apt, city, state, zip, and country fields",
-            "example": "1234 Warehouse Street, Oakland, CA",
-            "type": "string"
-          },
-          "id": {
-            "description": "ID for this location",
-            "example": "02c88a3f-d759-4973-88f9-60049d682524",
-            "type": "string"
-          },
-          "license_id": {
-            "description": "ID of the [license](#model-license) this location is associated with, or null when the location has no license",
-            "example": "02c88a3f-d759-4973-88f9-60049d682524",
-            "type": "string",
-            "nullable": true
-          },
-          "name": {
-            "description": "Human readable name for this location",
-            "example": "Warehouse 1",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "address",
-          "id"
-        ],
-        "title": "LocationCompact",
         "type": "object"
       },
       "BatchesWithActiveQuantityByLocation": {
@@ -5843,25 +8327,6 @@
           "id"
         ],
         "title": "BatchCompactWithQuantityActive",
-        "type": "object"
-      },
-      "Role": {
-        "description": "A permission role that determines what a [user](#model-user) can do in Distru.",
-        "properties": {
-          "id": {
-            "description": "ID for this role",
-            "type": "string"
-          },
-          "name": {
-            "description": "Name of the role (e.g. Admin, Sales)",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "id"
-        ],
-        "title": "Role",
         "type": "object"
       },
       "TestResult": {
@@ -10048,6 +12513,39 @@
         ],
         "title": "InventoryVelocityReportColumn",
         "type": "object"
+      }
+    },
+    "requestBodies": {
+      "DistruPublic.V1.AssemblyController.download_pdfBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "format": {
+                  "enum": [
+                    "binary",
+                    "url",
+                    "email"
+                  ],
+                  "type": "string",
+                  "description": "How the generated PDF is delivered. One of `binary` — the raw PDF bytes as the response body (`Content-Type: application/pdf`); `url` — a JSON body with a short-lived signed download URL (see the [PdfResponse](#model-pdfresponse) response); or `email` — emails the PDF to the addresses in `email_addresses` and returns a JSON body listing who it was emailed to. Required, but omitting it defaults to `binary` for backward compatibility."
+                },
+                "email_addresses": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "description": "Recipient email addresses, used only when `format` is `email` (required in that case, ignored otherwise). An entry may hold several comma-separated addresses; spaces, blank entries and repeats are dropped, and `emailed_to` lists the addresses actually emailed. At least one address is required and every address must be valid, otherwise the request is rejected with a 400. At most 200 addresses may be given, counted after that cleanup."
+                }
+              },
+              "required": [
+                "format"
+              ]
+            }
+          }
+        },
+        "required": true
       }
     },
     "securitySchemes": {

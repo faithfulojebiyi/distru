@@ -5,6 +5,8 @@ import {
   createDistruClient,
   DistruApiError,
   extractIdempotencyKey,
+  findPurchaseByIdempotencyKey,
+  IDEMPOTENCY_LOOKBACK_MS,
   operations,
   parseRetryAfter,
   verifyPurchase,
@@ -294,5 +296,103 @@ describe('purchase helpers', () => {
       items: [{ id: 'i1', product: { id: 'p1' }, quantity: '12.000', price: '4.50', price_base: '4.50', is_sample: false }],
     } as unknown as Purchase;
     expect(verifyPurchase(sent, stored)).toEqual([{ field: 'items.0.quantity', expected: 10, actual: 12 }]);
+  });
+
+  test('verifyPurchase matches lines by id / product, not position', () => {
+    const sent = buildPurchaseOrder({
+      vendorId: 'v1',
+      locationId: 'loc1',
+      lines: [
+        { productId: 'p1', quantity: 10, unitPrice: 4.5 },
+        { productId: 'p2', quantity: 5, unitPrice: 2 },
+        { batchId: 'b1', quantity: 2, unitPrice: 1 },
+      ],
+    });
+    const base = {
+      id: 'po1',
+      status: 'PENDING',
+      company: { id: 'v1', name: 'V', tasks: [], updated_datetime: '' },
+      location: { id: 'loc1', name: 'L', address: '' },
+      billing_location: { id: 'loc1', name: 'L', address: '' },
+    };
+    const reordered = {
+      ...base,
+      items: [
+        { id: 'i3', product: { id: 'p9' }, batch: { id: 'b1', name: 'B1' }, quantity: '2', price: '1.00' },
+        { id: 'i2', product: { id: 'p2' }, quantity: '5', price: '2.00' },
+        { id: 'i1', product: { id: 'p1' }, quantity: '10', price: '4.50' },
+      ],
+    } as unknown as Purchase;
+    expect(verifyPurchase(sent, reordered)).toEqual([]);
+    const missing = { ...base, items: [{ id: 'i1', product: { id: 'p1' }, quantity: '10', price: '4.50' }] } as unknown as Purchase;
+    expect(verifyPurchase(sent, missing)).toEqual([
+      { field: 'items.length', expected: 3, actual: 1 },
+      { field: 'items.1', expected: 'p2', actual: undefined },
+      { field: 'items.2', expected: 'b1', actual: undefined },
+    ]);
+    // a kept line ({ id }) is matched by id even when another line has the same product
+    const update = { id: 'po1', items: [{ id: 'i1', quantity: 11 }, { product_id: 'p1', quantity: 3, price: 4.5 }] } as unknown as Parameters<typeof verifyPurchase>[0];
+    const stored = {
+      ...base,
+      items: [
+        { id: 'new', product: { id: 'p1' }, quantity: '3', price: '4.50' },
+        { id: 'i1', product: { id: 'p1' }, quantity: '11', price: '4.50' },
+      ],
+    } as unknown as Purchase;
+    expect(verifyPurchase(update, stored)).toEqual([]);
+  });
+
+  test('verifyPurchase compares custom_data and buildPurchaseOrder writes the idempotency field', () => {
+    const sent = buildPurchaseOrder({ vendorId: 'v1', locationId: 'loc1', lines: [{ productId: 'p1', quantity: 1, unitPrice: 1 }], idempotencyKey: 'run-9:op-1', idempotencyCustomFieldId: 4821 });
+    expect(sent.custom_data).toEqual({ '4821': 'run-9:op-1' });
+    expect(extractIdempotencyKey(sent.description)).toBe('run-9:op-1');
+    const stored = {
+      id: 'po1',
+      status: 'PENDING',
+      company: { id: 'v1' },
+      location: { id: 'loc1' },
+      billing_location: { id: 'loc1' },
+      description: sent.description,
+      custom_data: [{ id: 4821, name: 'Idempotency key', value: 'other' }],
+      items: [{ id: 'i1', product: { id: 'p1' }, quantity: '1', price: '1.00' }],
+    } as unknown as Purchase;
+    expect(verifyPurchase(sent, stored)).toEqual([{ field: 'custom_data.4821', expected: 'run-9:op-1', actual: 'other' }]);
+  });
+});
+
+describe('findPurchaseByIdempotencyKey', () => {
+  const po = (id: string, extra: Record<string, unknown>) => ({ id, purchase_number: id, status: 'PENDING', items: [], custom_data: [], ...extra });
+
+  test('lists every status incl. DRAFT with a free updated_datetime lower bound (default now − 30 days)', async () => {
+    const now = Date.parse('2026-11-19T12:00:00Z');
+    const { c, calls } = client([json({ data: [po('a', { description: 'x' }), po('b', { description: 'restock\n[ops-agent:idem=k1]' })], next_page: null })]);
+    const found = await findPurchaseByIdempotencyKey(c, 'k1', { now: () => now });
+    expect(found?.id).toBe('b');
+    const url = new URL(calls[0]!.url);
+    expect(url.searchParams.getAll('statuses[]')).toContain('DRAFT');
+    const lower = Date.parse(url.searchParams.get('updated_datetime')!.split(',')[0]!);
+    expect(lower).toBe(now - IDEMPOTENCY_LOOKBACK_MS);
+    expect(now - lower).toBeLessThan(30 * 86_400_000);
+    expect(url.searchParams.get('updated_datetime')!.endsWith(',')).toBe(true);
+  });
+
+  test('explicit since; custom field match wins over an earlier description marker', async () => {
+    const { c, calls } = client([
+      json({
+        data: [
+          po('marker', { description: '[ops-agent:idem=k2]' }),
+          po('field', { description: 'edited by a human', custom_data: [{ id: 77, name: 'Idempotency key', value: 'k2' }] }),
+        ],
+        next_page: null,
+      }),
+      json({ data: [po('marker', { description: '[ops-agent:idem=k2]' })], next_page: null }),
+    ]);
+    const found = await findPurchaseByIdempotencyKey(c, 'k2', { since: '2026-01-01T00:00:00Z', idempotencyCustomFieldId: 77, companyId: 'v1' });
+    expect(found?.id).toBe('field');
+    const url = new URL(calls[0]!.url);
+    expect(url.searchParams.get('updated_datetime')).toBe('2026-01-01T00:00:00.000Z,');
+    expect(url.searchParams.getAll('company_ids[]')).toEqual(['v1']);
+    // no custom-field match: falls back to the marker
+    expect((await findPurchaseByIdempotencyKey(c, 'k2', { idempotencyCustomFieldId: 77 }))?.id).toBe('marker');
   });
 });

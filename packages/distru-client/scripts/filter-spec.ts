@@ -32,6 +32,17 @@ export const KEEP: Record<string, Record<string, string>> = {
   '/public/v1/test-results/{id}': { get: 'getTestResult' },
   '/public/v1/batches': { get: 'listBatches' },
   '/public/v1/batches/{id}': { get: 'getBatch' },
+  // hand-off, sync and audit (added 2026-11-19)
+  '/public/v1/purchases/{id}/pdf': { post: 'generatePurchasePdf' },
+  '/public/v1/tasks': { get: 'listTasks', post: 'upsertTask' },
+  '/public/v1/tasks/{id}': { get: 'getTask', delete: 'deleteTask' },
+  '/public/v1/users': { get: 'listUsers' },
+  '/public/v1/users/{id}': { get: 'getUser' },
+  '/public/v1/custom-fields': { get: 'listCustomFields', post: 'createCustomField' },
+  '/public/v1/custom-fields/{id}': { get: 'getCustomField' },
+  '/public/v1/deleted-records': { get: 'listDeletedRecords' },
+  '/public/v1/activity': { get: 'listActivity' },
+  '/public/v1/record-history': { get: 'getRecordHistory' },
 };
 
 /**
@@ -83,6 +94,9 @@ function normalizeOperation(op: JsonObject, operationId: string): JsonObject {
     if (isObject(res) && isObject(res.content) && res.content['*/*']) {
       const { ['*/*']: body, ...rest } = res.content;
       responses[status] = { ...res, content: { ...rest, 'application/json': body ?? null } };
+    } else if (isObject(res) && isObject(res.content) && res.content['application/pdf,application/json']) {
+      // PDF endpoints: binary for format=binary, JSON (PdfResponse) for url/email; type the JSON side
+      responses[status] = { ...res, content: { 'application/json': res.content['application/pdf,application/json'] ?? null } };
     } else responses[status] = res;
   }
   return { ...op, operationId, ...(params ? { parameters: params } : {}), responses };

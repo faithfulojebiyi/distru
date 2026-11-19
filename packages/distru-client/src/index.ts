@@ -20,8 +20,9 @@ export {
   findPurchaseByIdempotencyKey,
   idempotencyMarker,
   extractIdempotencyKey,
+  IDEMPOTENCY_LOOKBACK_MS,
 } from './purchases';
-export type { NewPurchaseOrderInput, PurchaseLineInput, PurchaseMismatch } from './purchases';
+export type { NewPurchaseOrderInput, PurchaseLineInput, PurchaseMismatch, FindPurchaseByIdempotencyKeyOptions } from './purchases';
 /** Unbound generated operations (need `{ distru: config }` in options) and their URL builders. */
 export * as operations from './generated/distru';
 export * from './generated/model';

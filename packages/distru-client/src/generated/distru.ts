@@ -5,35 +5,54 @@
  * OpenAPI spec version: 1.0
  */
 import type {
+  ActivityEntries,
   BatchFullResponse,
   Batches,
   Companies,
   CompanyResponse,
+  CreateCustomFieldBody,
+  CustomFieldDefinitionResponse,
+  CustomFieldDefinitions,
+  DeletedRecords,
+  DistruPublicV1AssemblyControllerDownloadPdfBodyBody,
   GetInventoryVelocityReportParams,
   GetProductParams,
+  GetRecordHistoryParams,
   Inventories,
   InventoryVelocityReport,
+  ListActivityParams,
   ListBatchesParams,
   ListCompaniesParams,
+  ListCustomFieldsParams,
+  ListDeletedRecordsParams,
   ListInventoryParams,
   ListLocationsParams,
   ListMetrcPackagesParams,
   ListOrdersParams,
   ListProductsParams,
   ListPurchasesParams,
+  ListTasksParams,
   ListTestResultsParams,
+  ListUsersParams,
   Locations,
   MetrcPackages,
   OrderResponse,
   Orders,
+  PdfResponse,
   ProductResponse,
   Products,
   PurchaseResponse,
   Purchases,
+  RecordHistoryEntries,
+  TaskResponse,
+  Tasks,
   TestResultResponse,
   TestResults,
   UpsertOrderBody,
-  UpsertPurchaseBody
+  UpsertPurchaseBody,
+  UpsertTaskBody,
+  UserResponse,
+  Users
 } from './model';
 
 import { distruFetch } from '../mutator';
@@ -770,6 +789,514 @@ export const getGetBatchUrl = (id: string,) => {
 export const getBatch = async (id: string, options?: Parameters<typeof distruFetch>[1]): Promise<BatchFullResponse> => {
 
   return distruFetch<BatchFullResponse>(getGetBatchUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGeneratePurchasePdfUrl = (id: string,) => {
+
+
+
+
+  return `/public/v1/purchases/${id}/pdf`
+}
+
+/**
+ * Generate the PDF for a single purchase order and download it directly, get a signed link to it,
+ * or email it (see `format`).
+ *
+ * The same permissions that govern downloading this PDF in the Distru web app apply to this endpoint; when `format` is `email`, the web app's permission for emailing it applies instead (documents the web app cannot email keep the download permission).
+ *
+ * `format` selects how the generated PDF is delivered and has three modes: `binary` returns the raw PDF bytes as the response body (`Content-Type: application/pdf`); `url` returns a JSON envelope `{"data": {"url": ..., "expires_datetime": ...}}` with a temporary signed download URL; `email` sends the PDF to the addresses in `email_addresses` and returns a JSON envelope `{"data": {"emailed_to": [...]}}`. `format` is required, but for backward compatibility omitting it defaults to `binary`.
+ *
+ * All PDF download endpoints share a single, combined rate limit for your account: 20 requests per minute and 1000 per day in total across every PDF endpoint (not per endpoint). Requests over the limit return 429 with a Retry-After header, and only successful downloads count toward it.
+ * @summary Generate a purchase order PDF
+ */
+export const generatePurchasePdf = async (id: string,
+    distruPublicV1AssemblyControllerDownloadPdfBodyBody: DistruPublicV1AssemblyControllerDownloadPdfBodyBody, options?: Parameters<typeof distruFetch>[1]): Promise<PdfResponse> => {
+
+  return distruFetch<PdfResponse>(getGeneratePurchasePdfUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(distruPublicV1AssemblyControllerDownloadPdfBodyBody)
+  }
+);}
+
+
+
+export const getListTasksUrl = (params?: ListTasksParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["ids","owner_ids","statuses","related_types"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/public/v1/tasks?${stringifiedParams}` : `/public/v1/tasks`
+}
+
+/**
+ * Lists the tasks belonging to the authenticated company, oldest-first (by creation time). Results
+ * never cross company boundaries and are paginated: `next_page` holds the URL of the following
+ * page, or null on the last page.
+ *
+ * A task may be linked to exactly one other entity. The linked entity is returned as the matching
+ * relation field (`order`, `invoice`, `purchase`, `contact`, `product`, `batch`, `assembly`,
+ * `return`, or `company`); every other relation field is null. Tasks linked to an internal-only
+ * entity that has no public API model return every relation field as null. The relation field is
+ * also null when the authenticated user lacks the permission the linked entity's own list endpoint
+ * requires, or can't see it under their team restrictions.
+ *
+ * Required permission: `tasks_permissions_view`. Only tasks the authenticated user can access
+ * under their team restrictions are returned.
+ * @summary Get tasks
+ */
+export const listTasks = async (params?: ListTasksParams, options?: Parameters<typeof distruFetch>[1]): Promise<Tasks> => {
+
+  return distruFetch<Tasks>(getListTasksUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getUpsertTaskUrl = () => {
+
+
+
+
+  return `/public/v1/tasks`
+}
+
+/**
+ * Creates or updates a single task in one call. Omit `id` to create a new task; pass the `id` of
+ * an existing task to update it. Responds 201 on create and 200 on update, with the full saved
+ * task as the body. The task's creator is always the API key's user; it cannot be set.
+ *
+ * On create, `name`, `status`, and `due_datetime` are required. On update every field is optional:
+ * this is a sparse update, so only the fields you send are changed and any field you omit keeps its
+ * stored value. Sending a nullable optional field (`description`, `owner_id`, `location_id`) as null
+ * clears it; sending a required field as null is rejected with a 400. `color` sent as null, or
+ * omitted on create, is set to your company's default task color.
+ *
+ * Linking to another entity: set exactly one of `order_id`, `invoice_id`, `purchase_id`,
+ * `contact_id`, `product_id`, `batch_id`, `assembly_id`, `return_id`, or `company_id`. Sending more
+ * than one is a 400. The authenticated user must have the view permission for that kind of entity,
+ * checked before the ID is looked up, and the entity must exist in your company and be visible to
+ * them; otherwise 400. The link is set-once: once a task is linked, it cannot be changed or
+ * removed. Re-sending the task's current link is accepted; sending any other is a 400. The linked
+ * entity is returned as in [GET /public/v1/tasks](#get-tasks).
+ *
+ * Required permission: `tasks_permissions_create` to create, `tasks_permissions_edit` to update.
+ * Creating also requires the authenticated user's team restrictions to allow some access to tasks.
+ * Updating requires access to the task under those restrictions; a hidden task returns 403.
+ * @summary Upsert a task
+ */
+export const upsertTask = async (upsertTaskBody?: UpsertTaskBody, options?: Parameters<typeof distruFetch>[1]): Promise<TaskResponse> => {
+
+  return distruFetch<TaskResponse>(getUpsertTaskUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(upsertTaskBody)
+  }
+);}
+
+
+
+export const getDeleteTaskUrl = (id: string,) => {
+
+
+
+
+  return `/public/v1/tasks/${id}`
+}
+
+/**
+ * Permanently deletes a task. This is a hard delete: the task is removed and cannot be recovered.
+ * Returns 404 if no matching task exists in your company, and 403 if the authenticated user can't
+ * access it under their team restrictions. Responds 204 with no body on success.
+ *
+ * Required permission: `tasks_permissions_delete`.
+ * @summary Delete a task
+ */
+export const deleteTask = async (id: string, options?: Parameters<typeof distruFetch>[1]): Promise<void> => {
+
+  return distruFetch<void>(getDeleteTaskUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export const getGetTaskUrl = (id: string,) => {
+
+
+
+
+  return `/public/v1/tasks/${id}`
+}
+
+/**
+ * Fetches a single task by its ID, scoped to the authenticated company. Returns 404 if no task
+ * with that ID exists in your company, and 403 if the authenticated user can't access it under
+ * their team restrictions. The linked entity is returned as in [GET /public/v1/tasks](#get-tasks), so it is
+ * null when the authenticated user can't view it.
+ *
+ * Required permission: `tasks_permissions_view`.
+ * @summary Get a task
+ */
+export const getTask = async (id: string, options?: Parameters<typeof distruFetch>[1]): Promise<TaskResponse> => {
+
+  return distruFetch<TaskResponse>(getGetTaskUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListUsersUrl = (params?: ListUsersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["ids"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/public/v1/users?${stringifiedParams}` : `/public/v1/users`
+}
+
+/**
+ * Get a paginated list of the team members (users) in your company, sorted oldest-first by their creation datetime.
+ *
+ * Use this to enumerate everyone on your team along with their email, role, and full name, or to keep an external system in sync with your Distru user list. Results are always scoped to your own company; users in other companies are never returned. By default soft-deleted users are excluded — use the `deleted` filter to include or isolate them.
+ *
+ * This is a read-only endpoint and does not change anything in the system. Its data is eventually consistent: a user that was just created, modified, or deleted may take up to ~1 second to appear or reflect the change here.
+ *
+ * The response is an envelope of `{ data: [...], next_page: ... }`. When more pages remain, `next_page` is a ready-to-follow URL for the next page, and it is null on the last page. Page size is fixed by the server and is not client-controllable.
+ *
+ * Required permission: `settings_permissions_manage_team`.
+ * @summary Get users
+ */
+export const listUsers = async (params?: ListUsersParams, options?: Parameters<typeof distruFetch>[1]): Promise<Users> => {
+
+  return distruFetch<Users>(getListUsersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetUserUrl = (id: string,) => {
+
+
+
+
+  return `/public/v1/users/${id}`
+}
+
+/**
+ * Get a single team member (user) by their Distru user ID, scoped to your company.
+ *
+ * This is a read-only endpoint and does not change anything in the system. Returns 404 if no user with that ID exists within your company — including a user that belongs to a different company, whose ID is treated as not found rather than leaked across companies. Soft-deleted users are still returned here (unlike the list endpoint, which hides them by default); a soft-deleted user comes back with a non-null `deleted_at`.
+ *
+ * Like the list endpoint, this data is eventually consistent and may lag a recent create, update, or delete by up to ~1 second.
+ *
+ * Required permission: `settings_permissions_manage_team`.
+ * @summary Get a user
+ */
+export const getUser = async (id: string, options?: Parameters<typeof distruFetch>[1]): Promise<UserResponse> => {
+
+  return distruFetch<UserResponse>(getGetUserUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListCustomFieldsUrl = (params?: ListCustomFieldsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/public/v1/custom-fields?${stringifiedParams}` : `/public/v1/custom-fields`
+}
+
+/**
+ * List every custom field definition owned by the authenticated company.
+ *
+ * A custom field is a user-defined attribute attached to one entity type (its `parent_object`) — for example an extra `Batch #` text field on orders or a `Lab` dropdown on packages. Once defined, the field becomes available on every record of that entity type, and callers populate it per-record through that entity's `custom_data` map on its own create/update endpoint (the numeric `id` returned here is the key used inside `custom_data`).
+ *
+ * Pass `parent_object` to return only the fields for one entity type; omit it to return the company's fields across all entity types. Fields come sorted by `id`, oldest first. This is a read-only settings lookup and changes nothing in inventory or compliance.
+ *
+ * Required permission: `settings_permissions_custom_fields`.
+ * @summary List custom field definitions
+ */
+export const listCustomFields = async (params?: ListCustomFieldsParams, options?: Parameters<typeof distruFetch>[1]): Promise<CustomFieldDefinitions> => {
+
+  return distruFetch<CustomFieldDefinitions>(getListCustomFieldsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getCreateCustomFieldUrl = () => {
+
+
+
+
+  return `/public/v1/custom-fields`
+}
+
+/**
+ * Create a new custom field on one entity type (`parent_object`).
+ *
+ * Once created, the field is immediately available on every record of that entity type. Callers then set a per-record value by putting `"<id>": <value>` into that record's `custom_data` map on its own create/update endpoint, where `<id>` is the numeric id returned here. Creating a field does not touch existing records — they simply carry no value for it until one is written — and has no effect on inventory, Metrc, or BioTrack.
+ *
+ * This endpoint only creates. It never updates: there is no upsert here, and `field_type`, `parent_object`, and `filterable` are fixed at creation and cannot be changed afterward. To edit a field's `name`, `description`, `required` flag, or option list later, use `POST /public/v1/custom-fields/{id}`.
+ *
+ * Field-type rules the request must satisfy:
+ * • `dropdown` and `checkbox` fields require a non-empty `field_options` list (the selectable values); each option must be unique, non-empty, and free of commas.
+ * • `text` and `date` fields must not carry `field_options`, and are always non-filterable regardless of what `filterable` is sent.
+ *
+ * Required permission: `settings_permissions_custom_fields`.
+ * @summary Create a custom field
+ */
+export const createCustomField = async (createCustomFieldBody: CreateCustomFieldBody, options?: Parameters<typeof distruFetch>[1]): Promise<CustomFieldDefinitionResponse> => {
+
+  return distruFetch<CustomFieldDefinitionResponse>(getCreateCustomFieldUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createCustomFieldBody)
+  }
+);}
+
+
+
+export const getGetCustomFieldUrl = (id: number,) => {
+
+
+
+
+  return `/public/v1/custom-fields/${id}`
+}
+
+/**
+ * Get one custom field definition by its numeric id, scoped to the authenticated company.
+ *
+ * Use this to resolve a field's current type, options, and settings — for example before writing a value into an entity's `custom_data`, where this same id is the map key. Returns 404 when no field with that id belongs to the company (a field owned by another company is indistinguishable from one that does not exist). Read-only; touches nothing in inventory or compliance.
+ *
+ * Required permission: `settings_permissions_custom_fields`.
+ * @summary Get a custom field definition
+ */
+export const getCustomField = async (id: number, options?: Parameters<typeof distruFetch>[1]): Promise<CustomFieldDefinitionResponse> => {
+
+  return distruFetch<CustomFieldDefinitionResponse>(getGetCustomFieldUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListDeletedRecordsUrl = (params: ListDeletedRecordsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/public/v1/deleted-records?${stringifiedParams}` : `/public/v1/deleted-records`
+}
+
+/**
+ * List the records of one type that were deleted from your company, oldest deletion first. Use it alongside the `updated_datetime` filter of that type's list endpoint to keep a copy of your data in sync ([Incremental Sync](#incremental-sync)): list endpoints leave deleted records out by default, so a copy synced from them never learns of a deletion on its own. Each `record_type` is the type of one endpoint, such as `ORDER` for [GET /public/v1/orders](#get-orders) or `COMPANY_GROUP` for [GET /public/v1/company-groups](#get-company-groups).
+ *
+ * Every deletion is listed, including the ones caused by deleting something else, such as an order's invoices or a product's batches; each is listed under its own type. A voided invoice or payment is not deleted; it stays on its list endpoint with its new status. A record that is restored after it was deleted leaves this list and comes back on its list endpoint with a new `updated_datetime`.
+ *
+ * Deletions are kept for 90 days. If your copy was last synced longer ago than that, reconcile it as in [Incremental Sync](#incremental-sync) step 7 before resuming.
+ *
+ * A deletion becomes visible here once its change is committed, which can be shortly after its `deleted_datetime`, and this endpoint is eventually consistent: a deletion can take up to 1 second to appear. When you poll with `deleted_datetime`, use the same lower bound as your list calls ([Incremental Sync](#incremental-sync)) and ignore records you already removed.
+ *
+ * Results are paginated. Follow the `next_page` URL in the response to fetch the following page.
+ *
+ * Required permission: the same as the endpoint of `record_type` (for example `orders_permissions_view` for `ORDER`); tags and unit types need none. Team restrictions do not apply here: every deletion of that type in your company is listed.
+ * @summary Get deleted records
+ */
+export const listDeletedRecords = async (params: ListDeletedRecordsParams, options?: Parameters<typeof distruFetch>[1]): Promise<DeletedRecords> => {
+
+  return distruFetch<DeletedRecords>(getListDeletedRecordsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListActivityUrl = (params?: ListActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["ids","user_ids","sources","ops","record_types"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/public/v1/activity?${stringifiedParams}` : `/public/v1/activity`
+}
+
+/**
+ * Everything that changed in your company, newest first, one entry per operation (a save in Distru, an API call, a sync, an automation run, a job) however many records it changed, as the Activity page in Distru shows it. Each entry groups its rows by record. An operation that saved many rows shows its first 50, with `truncated` and the counts telling what was left out; the history of each record ([GET /public/v1/record-history](#get-record-history)) has all of that record's rows. Plant additives, plant additive types and plant wastes have no history of their own, and nor do older shipment signatures (`ORDER_SHIPMENT`): their rows show only here.
+ *
+ * By default this reads the last 7 days. `changed_datetime` reads another range, up to 366 days per call. `ids[]` reads the operations with those IDs whenever they ran: an entry's `id` is the same as in each record history it shows in, so `ids[]=<id>` gives the whole operation behind a record history entry.
+ *
+ * Notes logged by hand show only in each record's history, as do some older entries read from the old activity log.
+ *
+ * This is not for keeping a copy of your data in sync: use each type's list endpoint with `updated_datetime` ([Incremental Sync](#incremental-sync)). Entries sort by when their operation started, so one still running when you read a page can later appear behind it.
+ *
+ * Entries are read from a copy of the database that can lag a few seconds behind, so a change made a moment ago may not show yet.
+ *
+ * Results are paginated, 100 entries per page. A page can hold fewer entries, even none, while `next_page` is set: what you may not see is left out after the page is cut. Keep following `next_page` until it is null.
+ *
+ * Required permission: none of its own. You see the records you may view in Distru, within your team restrictions, and only the fields you may see. API keys, MCP keys, webhooks, integrations, QuickBooks Online settings, company settings and scheduled reports never show.
+ * @summary Get activity
+ */
+export const listActivity = async (params?: ListActivityParams, options?: Parameters<typeof distruFetch>[1]): Promise<ActivityEntries> => {
+
+  return distruFetch<ActivityEntries>(getListActivityUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetRecordHistoryUrl = (params: GetRecordHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/public/v1/record-history?${stringifiedParams}` : `/public/v1/record-history`
+}
+
+/**
+ * The history of one record, newest first: who changed what and when, field by field, as the record's History tab in Distru shows it. Each entry is one operation (a save in Distru, an API call, a sync, an automation run, a job) with the record's rows it changed (the record itself and its lines, such as an order's items), and, for invoices, purchases, orders, returns, batches, assemblies, stock transfers and companies, the notes, calls, meetings and emails logged on the record or, except for companies, on its invoices, returns, payments, shipments, credits and tasks.
+ *
+ * A record's history shows only that record's part of an operation. An operation that changed an order and its invoice shows the order's rows here and the invoice's in the invoice's history, under the same `id`. The whole operation, across every record it changed, is at [GET /public/v1/activity](#get-activity) with `ids[]=<id>`; `LEGACY` entries copied from the old activity log are not always there.
+ *
+ * Field names and the entities of `rows` are listed per record type in [Record history fields](#record-history-fields).
+ *
+ * This is not for keeping a copy of your data in sync: use each type's list endpoint with `updated_datetime` ([Incremental Sync](#incremental-sync)). Entries sort by when their operation started, so one still running when you read a page can later appear behind it.
+ *
+ * History is read from a copy of the database that can lag a few seconds behind: a change, or a record, made a moment ago may not show yet (a record created that recently can return 404).
+ *
+ * Results are paginated, 100 entries per page. A page can hold fewer entries, even none, while `next_page` is set: what you may not see is left out after the page is cut. Keep following `next_page` until it is null.
+ *
+ * Required permission: the same as viewing the record in Distru, for example `invoices_permissions_view` for an `INVOICE`; you see the history of the records your team restrictions let you see (another one returns 403), and only the fields you may see. The history of API keys, MCP keys, webhooks, integrations (`PARTNER_CONNECTION`), QuickBooks Online settings, company settings and scheduled reports can't be read with an API key: those types return 403.
+ * @summary Get record history
+ */
+export const getRecordHistory = async (params: GetRecordHistoryParams, options?: Parameters<typeof distruFetch>[1]): Promise<RecordHistoryEntries> => {
+
+  return distruFetch<RecordHistoryEntries>(getGetRecordHistoryUrl(params),
   {
     ...options,
     method: 'GET'
