@@ -110,6 +110,15 @@ free-text keys (`description`, `notes`, `message`, `body`, `title`, …) become
   = PO is gone; `value` = Σ quantity × price; `vendorIdsOf` = supplierId.
 - `distru-mutate-task`: `before`/`verify` via `distru-search-tasks { ids }`; description marker; `find`
   scans the latest 50 tasks.
+- `distru-mutate-product` (`productHooks`, used by the allocation guard to set
+  `maxMenuBuyerOrderQuantity`, the per-buyer cap on one Distru Commerce menu order): `before` =
+  `distru-get-product` normalized to mutate argument names (id kept as sent, so the diff shows only
+  `maxMenuBuyerOrderQuantity: null → 24`; the recorded `before` is what an undo writes back); `verify`
+  reads it back and compares every field the payload sets; no `find` (a product has no field to stamp
+  a key into without touching customer-facing text, and a sparse UPDATE that sets values is idempotent
+  by value); `moneyless`. CREATE/UPDATE is `mutate_product` (medium), DELETE is `mutate_product_delete` (high).
+- `moneyless` hook flag: the tool moves no money, its ops count as 0 toward value rules (tasks,
+  products). Unknown tools keep a null value, so value caps fail closed.
 - Env: `DISTRU_MCP_URL` (default `https://mcp.distru.com/mcp`), `DISTRU_MCP_KEY` (`distru_mcp_…`).
 
 ```sh

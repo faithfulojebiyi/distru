@@ -41,6 +41,19 @@ stamped into the PO description as `[ops-agent:idem=<key>]` at execute time and 
 or another receiving location. `expected_delivery_date` goes into the notes (Distru purchases have
 no delivery-date field).
 
+`purchases.upsert` exports `{ purchase_number, status }` (harness `outputs`), so later ops in the same
+proposal can reference `{{op:N.purchase_number}}` / `{{op:N.recordId}}`.
+
+Action `tasks.create` (tool `propose_distru_tasks_create`, risk `low`, `moneyless`): the human hand-off,
+e.g. "Receive PO-1042 on 2026-12-03" linked to the PO and assigned to the purchasing user.
+`{ name, due (date → 17:00 UTC, or datetime), description?, owner_id? | owner_role?, purchase_id?, location_id? }`.
+`owner_role` is resolved at plan time through `GET /users` (first active user with that role name), so
+the payload is the exact `POST /tasks` body (`status: ACTIVE`). `purchase_id`/`name` may hold op
+references, resolved by the harness from the PO op. The key is stamped into the description and found
+by listing tasks updated in the free 30-day window; verify reads the task back (name, status, owner,
+linked purchase, description, due instant). `location_id` must be one of a *company's* locations
+(Distru refuses your own). Exports `{ task_name, owner_id }`.
+
 ## Compliance derivation
 
 Distru has no pass/fail field. A test result fails when its title contains FAILED or an analyte in

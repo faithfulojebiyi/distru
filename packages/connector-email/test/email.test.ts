@@ -70,7 +70,7 @@ describe('send_vendor_po through the harness', () => {
     expect(p.status).toBe('pending_approval');
     expect(p.ops[0]!.risk).toBe('high');
     expect(p.ops[0]!.summary).toBe('Email PO-123 to orders@humboldt.example (cc 1) – Humboldt Heritage Farms');
-    expect(p.ops[0]!.value).toBeNull();
+    expect(p.ops[0]!.value).toBe(0); // moneyless: counts as $0 toward value rules
     const payload = p.ops[0]!.payload as { subject: string; to: string[]; text: string; html: string };
     expect(payload.subject).toBe('Purchase order PO-123 – Humboldt Heritage Farms');
     expect(payload.text).toContain('Download the purchase order (PDF) (https://app.distru.example/po/123.pdf)');

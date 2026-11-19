@@ -114,9 +114,11 @@ export const sendVendorPoAction = defineAction({
     return { ok: mismatches.length === 0, mismatches };
   },
 
-  // Explicitly undefined: an email has no monetary value. (Must be an own property: the harness
-  // calls `action.valueOf?.()`, which would otherwise hit Object.prototype.valueOf.)
+  // An email moves no money: it counts as 0 toward value rules (so `max_total_value` still applies
+  // to a proposal that pairs a PO with its vendor email). `valueOf` stays an own `undefined` so the
+  // harness never falls back to Object.prototype.valueOf.
   valueOf: undefined,
+  moneyless: true,
 
   summarize: (input, payload) => {
     const what = input.po_number ?? 'PO';

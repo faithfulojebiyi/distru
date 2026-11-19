@@ -46,8 +46,11 @@ in production) so `findByIdempotencyKey` works without a provider search API.
 - `execute(ctx, payload, key)` sends with the key; `findByIdempotencyKey` asks the transport;
   `verify` reads the message back and checks recipients (to/cc as sets) and subject.
 - `summarize` → `Email PO-123 to orders@humboldt.example (cc 1) – Humboldt Heritage Farms`.
-- `valueOf` undefined (an email has no money value). Note it is declared as an own `undefined`
-  property on purpose: the harness calls `action.valueOf?.()`, which otherwise hits `Object.prototype.valueOf`.
+- `moneyless: true`: an email moves no money, so the op's value is 0 and a proposal pairing a PO with
+  its vendor email still gets a checkable total for `max_total_value` (a null value would make the cap
+  uncheckable). `valueOf` stays an own `undefined` so the harness never hits `Object.prototype.valueOf`.
+- `po_number` / `purchase_id` / the body may hold harness op references (`{{op:0.purchase_number}}`),
+  resolved at execute time from the PO op that precedes the email; the approver sees the placeholder.
 
 **No undo.** Email cannot be recalled, so there is no `compensate` hook. That is why the action is
 `high` risk: `auto_approve_below` never auto-approves high-risk ops and `high_risk_requires_approval`

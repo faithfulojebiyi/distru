@@ -62,6 +62,11 @@ export interface McpToolHooks {
   summarize?(payload: JsonObject, before: unknown): string;
   /** Monetary value for value-based policy rules (named `value`, not `valueOf`, to avoid Object.prototype.valueOf). */
   value?(payload: JsonObject): number;
+  /**
+   * The tool never moves money (a task, a catalog setting): its ops count as 0 toward value rules.
+   * Leave unset for unknown tools, so their value stays unknown and value caps fail closed.
+   */
+  moneyless?: boolean;
   vendorIdsOf?(payload: JsonObject): string[];
 }
 
@@ -307,6 +312,7 @@ export function buildMcpConnector<const TId extends string>(config: McpConnector
 
           // Own property even when absent: the harness calls `action.valueOf?.()`.
           valueOf: hooks.value ? (p: JsonObject) => hooks.value!(p) : undefined,
+          ...(hooks.moneyless && !hooks.value ? { moneyless: true } : {}),
           ...(hooks.vendorIdsOf ? { vendorIdsOf: (p: JsonObject) => hooks.vendorIdsOf!(p) } : {}),
 
           summarize: (_input, payload, _ctx, before) => {

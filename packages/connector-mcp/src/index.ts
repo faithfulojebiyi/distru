@@ -51,6 +51,8 @@ export {
   distruMapIntent,
   purchaseOrderHooks,
   taskHooks,
+  productHooks,
+  normalizeProduct,
   normalizePurchaseOrder,
   normalizeTask,
   unprefixIds,
@@ -64,5 +66,6 @@ export {
   type DistruMcpOptions,
   type NormalizedPurchaseOrder,
   type NormalizedTask,
+  type NormalizedProduct,
 } from './distru';
 export { DISTRU_TOOL_TABLE } from './distru-tools';

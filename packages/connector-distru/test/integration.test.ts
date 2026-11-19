@@ -174,6 +174,7 @@ describe('read tools against the mock', () => {
       'distru_open_orders',
       'distru_compliance_check',
       'propose_distru_purchases_upsert',
+      'propose_distru_tasks_create',
     ]);
     expect(env.registry.catalog().every((t) => t.connector?.id === 'distru' && t.connector.system === 'erp')).toBe(true);
   });

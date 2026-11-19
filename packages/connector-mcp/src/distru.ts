@@ -259,6 +259,7 @@ const sameInstant = (a: unknown, b: unknown) => {
 
 export function taskHooks(): McpToolHooks {
   return {
+    moneyless: true,
     before: async (h, payload) => {
       if (payload.action !== 'UPDATE' && payload.action !== 'DELETE') return null;
       const id = str(payload.id);
@@ -298,6 +299,90 @@ export function taskHooks(): McpToolHooks {
   };
 }
 
+// ── Products ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Product fields a sparse `distru-mutate-product` UPDATE may change that the read-back can check.
+ * `maxMenuBuyerOrderQuantity` is the per-buyer cap on one Distru Commerce menu order (sales reps exempt):
+ * the allocation guard sets it while a SKU would stock out before its purchase order arrives.
+ */
+const PRODUCT_FIELDS = ['name', 'sku', 'externalName', 'maxMenuBuyerOrderQuantity', 'isInactive', 'isFeatured', 'unitsPerCase', 'unitPrice', 'quantityAvailableThresholdMin', 'quantityAvailableThresholdMax'] as const;
+const NUMERIC_PRODUCT_FIELDS = new Set<string>(['unitsPerCase', 'unitPrice', 'quantityAvailableThresholdMin', 'quantityAvailableThresholdMax']);
+
+const ProductSchema = z.object({ id: z.string() }).passthrough();
+type Product = z.infer<typeof ProductSchema>;
+
+/** A Distru product normalized to `distru-mutate-product` argument names (decimals as numbers). */
+export type NormalizedProduct = { id: string } & Partial<Record<(typeof PRODUCT_FIELDS)[number], string | number | boolean | null>>;
+
+export function normalizeProduct(p: Product, id: string = p.id): NormalizedProduct {
+  const out: NormalizedProduct = { id };
+  for (const k of PRODUCT_FIELDS) {
+    const v = p[k];
+    if (v === undefined) continue;
+    out[k] = NUMERIC_PRODUCT_FIELDS.has(k) ? num(v) : typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? v : null;
+  }
+  return out;
+}
+
+async function getProduct(h: McpHookContext, id: string): Promise<Product | null> {
+  const parsed = z.object({ product: ProductSchema.nullish() }).passthrough().safeParse(await h.read('distru-get-product', { id }));
+  return parsed.success ? (parsed.data.product ?? null) : null;
+}
+
+const sameValue = (k: string, a: unknown, b: unknown) => (NUMERIC_PRODUCT_FIELDS.has(k) ? num(a) === num(b) : a === b);
+
+/**
+ * `distru-mutate-product` (UPDATE): `before` = the product via `distru-get-product` (so the diff shows
+ * old → new, e.g. `maxMenuBuyerOrderQuantity: null → 24`, and an undo can restore it); `verify` reads
+ * it back and compares every field the payload sets. No `find`: a product has no field to stamp a key
+ * into without touching customer-facing text, and a sparse UPDATE that sets values is idempotent by
+ * value (applying it twice leaves the same product), so the executor record is enough.
+ */
+export function productHooks(): McpToolHooks {
+  return {
+    // A catalog setting (cap, price list, flags) moves no money by itself: 0 toward value rules.
+    moneyless: true,
+    before: async (h, payload) => {
+      if (payload.action !== 'UPDATE' && payload.action !== 'DELETE') return null;
+      const id = str(payload.id);
+      if (!id) throw new InputValidationError(`id is required for ${String(payload.action)}`);
+      const product = await getProduct(h, id);
+      if (!product) throw new InputValidationError(`Product ${id} not found`);
+      // Keep the id as the payload spells it (prefixed or bare) so the diff does not show an id change.
+      return normalizeProduct(product, id);
+    },
+
+    verify: async (h, recordId, payload): Promise<VerifyResult> => {
+      const product = await getProduct(h, str(payload.id) ?? recordId);
+      if (payload.action === 'DELETE') return product ? { ok: false, mismatches: [{ path: [], expected: null, actual: { id: product.id } }] } : { ok: true, mismatches: [] };
+      if (!product) return { ok: false, mismatches: [{ path: [], expected: { id: payload.id ?? recordId }, actual: null }] };
+      const mismatches: VerifyResult['mismatches'] = [];
+      for (const k of PRODUCT_FIELDS) {
+        if (payload[k] === undefined) continue;
+        if (!sameValue(k, payload[k], product[k])) mismatches.push({ path: [k], expected: payload[k], actual: product[k] ?? null });
+      }
+      return { ok: mismatches.length === 0, mismatches };
+    },
+
+    recordIdOf: (parsed, payload) => z.object({ product: z.object({ id: z.string() }) }).safeParse(parsed).data?.product.id ?? str(payload.id) ?? undefined,
+
+    summarize: (payload, before) => {
+      const b = before && typeof before === 'object' ? (before as NormalizedProduct) : null;
+      const label = b ? [b.sku, b.name].filter((x): x is string => typeof x === 'string' && x.length > 0).join(' ') || b.id : str(payload.name) ?? str(payload.id) ?? 'product';
+      if (payload.action === 'DELETE') return `DELETE product ${label}`;
+      if (payload.action === 'UPDATE' && payload.maxMenuBuyerOrderQuantity !== undefined) {
+        const was = b?.maxMenuBuyerOrderQuantity ?? null;
+        const now = payload.maxMenuBuyerOrderQuantity;
+        const fmt = (v: unknown) => (v === null || v === undefined ? 'no cap' : `${String(v)} units`);
+        return `Per-buyer menu cap on ${label}: ${fmt(was)} → ${fmt(now)} per order (sales reps exempt)`;
+      }
+      const fields = Object.keys(payload).filter((k) => !['action', 'id', ...DISTRU_INJECTED_FIELDS].includes(k));
+      return `${String(payload.action ?? 'CREATE')} product ${label}${fields.length ? ` (${fields.join(', ')})` : ''}`;
+    },
+  };
+}
+
 // ── Preset ──────────────────────────────────────────────────────────────────────────────────
 
 /** `intent` from the run, else a description of the governed call; satisfaction 5 unless the run says otherwise. */
@@ -325,6 +410,7 @@ export function distruMcpPreset(options: DistruPresetOptions = {}): DistruPreset
     tools: {
       'distru-mutate-purchase-order': purchaseOrderHooks(options),
       'distru-mutate-task': taskHooks(),
+      'distru-mutate-product': productHooks(),
     },
   };
 }

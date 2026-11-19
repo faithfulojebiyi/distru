@@ -196,6 +196,8 @@ export const purchasesUpsertAction = defineAction({
   },
 
   valueOf: (payload) => itemsValue(payload.items),
+  /** Later ops may reference `{{op:N.purchase_number}}` (vendor email, receiving task). */
+  outputs: (record) => ({ purchase_number: record.purchase_number, status: record.status }),
   vendorIdsOf: (payload) => (payload.company_id ? [payload.company_id] : []),
 
   summarize: async (input, payload, ctx: DistruCtx, before) => {

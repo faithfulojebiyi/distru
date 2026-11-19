@@ -10,6 +10,15 @@ export {
   type PurchaseUpsertInput,
   type PurchaseRecord,
 } from './purchases-upsert';
+export {
+  tasksCreateAction,
+  TaskCreateInputSchema,
+  TaskCreatePayloadSchema,
+  normalizeTask,
+  type TaskCreateInput,
+  type TaskCreatePayload,
+  type TaskRecord,
+} from './tasks-create';
 export { velocityReportTool, VelocityReportInput, VelocityReportOutput } from './tools/velocity';
 export { inventoryTool, productsGetTool, productsSearchTool, vendorsTool, estimateLeadTimes } from './tools/catalog';
 export { vendorPurchaseHistoryTool, openOrdersTool, stripIdempotencyMarkers } from './tools/orders';
