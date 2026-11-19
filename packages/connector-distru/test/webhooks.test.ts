@@ -28,6 +28,16 @@ describe('distru.order_created trigger', () => {
     expect(audit.events.map((e) => e.type)).toEqual(['trigger.received']);
   });
 
+  test('dedupe key is (type, id, occurred_datetime): a retry of the same change has the same event id', async () => {
+    const at = '2026-11-19T12:00:00Z';
+    const a = await ingest({ ...order, occurred_datetime: at });
+    const retry = await ingest({ ...order, occurred_datetime: at });
+    const later = await ingest({ ...order, occurred_datetime: '2026-11-19T12:05:00Z' });
+    expect(a.result).toMatchObject({ status: 'accepted', event: { id: `distru.order_created:ORDER:ord-1:${at}` } });
+    expect(retry.result).toMatchObject({ event: { id: `distru.order_created:ORDER:ord-1:${at}` } });
+    expect(later.result).toMatchObject({ event: { id: 'distru.order_created:ORDER:ord-1:2026-11-19T12:05:00Z' } });
+  });
+
   test('other events are ignored; bad signatures 401; non-JSON / non-envelope 400', async () => {
     expect((await ingest({ ...order, event: 'UPDATE' })).result.status).toBe('ignored');
     const forged = await ingest(order, 'sha256=deadbeef');

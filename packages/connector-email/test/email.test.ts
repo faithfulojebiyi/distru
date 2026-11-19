@@ -16,6 +16,7 @@ import {
 } from '@ops/harness';
 import {
   createEmailContext,
+  InMemorySentEmailRecord,
   createEmailContextFromEnv,
   emailConnector,
   emailErrorClassifier,
@@ -252,4 +253,17 @@ test('markdown rendering escapes HTML and refuses non-http links', () => {
   expect(html).not.toContain('<script>');
   expect(html).not.toContain('href="javascript');
   expect(html).toContain('<a href="https://ok.example/x?a=1&amp;b=2">b</a>');
+});
+
+describe('OutboxTransport with a shared record', () => {
+  test('a second transport over the same record (a restart) dedupes by idempotency key', async () => {
+    const record = new InMemorySentEmailRecord();
+    const msg = { from: 'a@x.test', to: ['b@y.test'], cc: [], subject: 's', text: 't', html: '<p>t</p>', idempotencyKey: 'k-1' };
+    const first = new OutboxTransport({ record });
+    const { messageId } = await first.send(msg);
+    const second = new OutboxTransport({ record });
+    expect((await second.send(msg)).messageId).toBe(messageId);
+    expect(second.deliveries).toBe(0);
+    expect((await second.findByIdempotencyKey('k-1'))?.messageId).toBe(messageId);
+  });
 });

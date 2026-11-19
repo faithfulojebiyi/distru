@@ -32,6 +32,8 @@ export const DistruWebhookSchema = z.object({
   type: z.string(),
   event: z.string(),
   id: z.string(),
+  /** When the change happened; with type + id it identifies one change across Distru's retries. */
+  occurred_datetime: z.string().nullish(),
   object: z
     .object({
       location: RefSchema,
@@ -40,6 +42,18 @@ export const DistruWebhookSchema = z.object({
     .nullish(),
 });
 export type DistruWebhook = z.infer<typeof DistruWebhookSchema>;
+
+/**
+ * Dedupe key of one Distru change. Distru sends no delivery id and retries a webhook ~10 times over
+ * ~4 h, so (type, id, occurred_datetime) identifies the change; the queue event id is built from it
+ * (`distru.order_created:<key>`), so every redelivery is a no-op. Without occurred_datetime: (type, event, id).
+ */
+export function distruWebhookKey(hook: Pick<DistruWebhook, 'type' | 'event' | 'id' | 'occurred_datetime'>): string {
+  return hook.occurred_datetime ? `${hook.type}:${hook.id}:${hook.occurred_datetime}` : `${hook.type}:${hook.event}:${hook.id}`;
+}
+
+/** Record types the context sync re-reads by id on a webhook. */
+export const DISTRU_SYNC_RECORD_TYPES = ['PRODUCT', 'PURCHASE', 'ORDER', 'COMPANY'] as const;
 
 /** ORDER CREATE → the products (and receiving location) to restock-check; anything else → null. */
 export function restockScopeFor(hook: DistruWebhook): { productIds: string[]; locationIds: string[] } | null {
@@ -79,10 +93,10 @@ export const distruOrderCreatedTrigger = defineTrigger<DistruOrderCreatedEvent>(
     } catch {
       return { ok: false, reason: 'invalid_body', message: 'Body is not JSON' };
     }
-    // Distru sends no delivery id header; the envelope id (+ type/event) identifies the event.
+    // Distru sends no delivery id header; (type, id, occurred_datetime) identifies the change.
     const env = DistruWebhookSchema.safeParse(raw);
     if (!env.success) return { ok: false, reason: 'invalid_body', message: 'Not a Distru webhook envelope' };
-    return { ok: true, webhookId: `${env.data.type}:${env.data.event}:${env.data.id}`, raw };
+    return { ok: true, webhookId: distruWebhookKey(env.data), raw };
   },
   normalize: (raw, { eventId }) => {
     const hook = DistruWebhookSchema.parse(raw);

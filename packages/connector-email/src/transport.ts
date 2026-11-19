@@ -44,12 +44,17 @@ export interface EmailTransport {
 export interface OutboxOptions {
   now?: () => Date;
   ids?: () => string;
+  /**
+   * Where "sent" messages are kept (key → message). Default: in memory. Back it with a table so the
+   * outbox (and `findByIdempotencyKey`, the executor's dedupe) survives restarts.
+   */
+  record?: SentEmailRecord;
 }
 
-/** In-memory outbox. `deliveries` counts real deliveries (a deduplicated send does not count). */
+/** Mock outbox: nothing leaves the process. `deliveries` counts real deliveries (a deduplicated send does not count). */
 export class OutboxTransport implements EmailTransport {
   readonly name = 'outbox';
-  readonly #messages: SentEmail[] = [];
+  readonly #record: SentEmailRecord;
   readonly #now: () => Date;
   readonly #ids: () => string;
   /** Calls to `send` (including deduplicated ones). */
@@ -59,32 +64,34 @@ export class OutboxTransport implements EmailTransport {
 
   constructor(options: OutboxOptions = {}) {
     this.#now = options.now ?? (() => new Date());
+    this.#record = options.record ?? new InMemorySentEmailRecord();
+    // Random by default, so ids stay unique across restarts when the record is persistent.
     let n = 0;
-    this.#ids = options.ids ?? (() => `outbox_${++n}`);
+    this.#ids = options.ids ?? (options.record ? () => `outbox_${crypto.randomUUID()}` : () => `outbox_${++n}`);
   }
 
   async send(msg: OutgoingEmail & { idempotencyKey: string }): Promise<{ messageId: string }> {
     this.sendCalls++;
-    const existing = this.#messages.find((m) => m.idempotencyKey === msg.idempotencyKey);
+    const existing = await this.#record.byKey(msg.idempotencyKey);
     if (existing) return { messageId: existing.messageId };
     const sent: SentEmail = { ...OutgoingEmailSchema.parse(msg), idempotencyKey: msg.idempotencyKey, messageId: this.#ids(), sentAt: this.#now().toISOString() };
-    this.#messages.push(sent);
+    await this.#record.put(sent);
     this.deliveries++;
     return { messageId: sent.messageId };
   }
 
   async findByIdempotencyKey(idempotencyKey: string): Promise<SentEmail | null> {
-    const m = this.#messages.find((x) => x.idempotencyKey === idempotencyKey);
+    const m = await this.#record.byKey(idempotencyKey);
     return m ? structuredClone(m) : null;
   }
 
   async get(messageId: string): Promise<SentEmail | null> {
-    const m = this.#messages.find((x) => x.messageId === messageId);
+    const m = await this.#record.byId(messageId);
     return m ? structuredClone(m) : null;
   }
 
   async list(limit = 50): Promise<SentEmail[]> {
-    return this.#messages.slice(-limit).reverse().map((m) => structuredClone(m));
+    return (await this.#record.recent(limit)).map((m) => structuredClone(m));
   }
 }
 

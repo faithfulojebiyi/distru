@@ -119,7 +119,7 @@ export const inventorySnapshots = contextSchema.table(
     reserved: doublePrecision('reserved').notNull(),
     available: doublePrecision('available').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.source, t.snapshotAt, t.productId, t.locationId] }), index('inventory_latest_idx').on(t.source, t.snapshotAt)],
+  (t) => [primaryKey({ name: 'inventory_snapshots_pk', columns: [t.source, t.snapshotAt, t.productId, t.locationId] }), index('inventory_latest_idx').on(t.source, t.snapshotAt)],
 );
 
 export const facts = contextSchema.table(
