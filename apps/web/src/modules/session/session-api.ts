@@ -4,8 +4,8 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 
-import { getHealth } from '../../api/generated/health/health';
-import { getMe } from '../../api/generated/session/session';
+import { getHealth } from '../../api/generated/system/system';
+import { getMe } from '../../api/generated/auth/auth';
 import type { Me } from '../../api/generated/opsAgentAPI.schemas';
 import { getQueryScope } from '../../lib/query';
 import { canApprove } from '../../lib/auth-client';
