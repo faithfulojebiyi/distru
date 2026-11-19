@@ -1,0 +1,79 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Ops Agent API",
+    "version": "0.0.0",
+    "description": "Placeholder until the agent server publishes /api/openapi.json. Proves the Orval pipeline."
+  },
+  "servers": [{ "url": "http://localhost:4111" }],
+  "tags": [
+    { "name": "session", "description": "The signed-in user" },
+    { "name": "health", "description": "Liveness" }
+  ],
+  "paths": {
+    "/api/me": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "getMe",
+        "summary": "The signed-in user and their role",
+        "responses": {
+          "200": {
+            "description": "The current user",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Me" } }
+            }
+          },
+          "401": {
+            "description": "No session",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/ErrorBody" } }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": ["health"],
+        "operationId": "getHealth",
+        "summary": "Liveness probe",
+        "responses": {
+          "200": {
+            "description": "The server is up",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Health" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Role": { "type": "string", "enum": ["operator", "approver"] },
+      "Me": {
+        "type": "object",
+        "required": ["id", "email", "name", "role"],
+        "properties": {
+          "id": { "type": "string" },
+          "email": { "type": "string", "format": "email" },
+          "name": { "type": "string" },
+          "role": { "$ref": "#/components/schemas/Role" }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": ["status"],
+        "properties": { "status": { "type": "string", "enum": ["ok"] } }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": { "type": "string" },
+          "code": { "type": "string" }
+        }
+      }
+    }
+  }
+}

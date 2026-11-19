@@ -1,0 +1,42 @@
+{
+  "name": "@ops/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --cwd ../../packages/ui lib && panda codegen && vite dev --port 3050",
+    "build": "bun run --cwd ../../packages/ui lib && panda codegen && vite build",
+    "start": "bun .output/server/index.mjs",
+    "typecheck": "tsc --noEmit",
+    "prepare": "bun run --cwd ../../packages/ui lib && panda codegen",
+    "api:generate": "orval --config ./orval.config.ts"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.7.0",
+    "@ops/ui": "workspace:*",
+    "@tanstack/react-query": "^5.100.9",
+    "@tanstack/react-router": "^1.170.32",
+    "@tanstack/react-start": "^1.168.49",
+    "better-auth": "1.7.7",
+    "luxon": "^3.7.2",
+    "motion": "^13.1.1",
+    "next-themes": "^0.4.6",
+    "radix-ui": "^1.6.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.10.1",
+    "sonner": "^2.0.8"
+  },
+  "devDependencies": {
+    "@pandacss/dev": "^2.2.0",
+    "@pandacss/preset-base": "^2.2.0",
+    "@tanstack/router-plugin": "^1.168.35",
+    "@types/luxon": "^3.7.5",
+    "@types/node": "^26.4.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.2.2",
+    "orval": "^8.9.1"
+  }
+}
