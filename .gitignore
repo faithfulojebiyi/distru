@@ -1,0 +1,14 @@
+node_modules
+dist
+.output
+.vinxi
+.mastra
+.env
+.env.local
+styled-system
+apps/web/src/styled-system
+apps/web/src/routeTree.gen.ts
+*.log
+.DS_Store
+.claude/settings.local.json
+docs/
