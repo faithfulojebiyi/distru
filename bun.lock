@@ -17,6 +17,7 @@
         "@mastra/memory": "~1.41.2",
         "@mastra/observability": "~1.24.2",
         "@mastra/pg": "~1.37.0",
+        "@ops/harness": "workspace:*",
         "better-auth": "1.7.7",
         "drizzle-orm": "^0.45.4",
         "hono": "^4.13.19",
@@ -73,6 +74,20 @@
         "orval": "^8.9.1",
         "typescript": "^6.0.3",
         "vite": "^8.2.2",
+      },
+    },
+    "packages/connector-distru": {
+      "name": "@ops/connector-distru",
+      "version": "0.0.0",
+      "dependencies": {
+        "@ops/distru-client": "workspace:*",
+        "@ops/harness": "workspace:*",
+        "zod": "^4.6.7",
+      },
+      "devDependencies": {
+        "@ops/distru-mock": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "^6.0.3",
       },
     },
     "packages/distru-client": {
@@ -566,6 +581,8 @@
     "@opentelemetry/sql-common": ["@opentelemetry/sql-common@0.43.1", "", { "dependencies": { "@opentelemetry/core": "^3.0.0" }, "peerDependencies": { "@opentelemetry/api": "^1.10.0" } }, "sha512-a6QbfVVjLUatgzpcE37pWK1GIHCcG6nXJF5FS+O+ExU64VPs1HtGhdZ96CERhwTY5fOP1pJfFsYUpEqtOY1Uqg=="],
 
     "@ops/agent": ["@ops/agent@workspace:apps/agent"],
+
+    "@ops/connector-distru": ["@ops/connector-distru@workspace:packages/connector-distru"],
 
     "@ops/distru-client": ["@ops/distru-client@workspace:packages/distru-client"],
 

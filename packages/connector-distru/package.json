@@ -1,0 +1,23 @@
+{
+  "name": "@ops/connector-distru",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ops/distru-client": "workspace:*",
+    "@ops/harness": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@ops/distru-mock": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "^6.0.3"
+  }
+}
