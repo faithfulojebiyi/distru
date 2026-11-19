@@ -175,7 +175,7 @@ others. You ask a question in plain English and it works out who to ask:
   time, deliveries that sometimes take 26 days against a promised 14.
 - *"Start a restock run for Los Angeles."* It starts one, and you can follow it on the run page.
 
-![The Copilot answering "Which SKUs will stock out before their next PO arrives?"](.github/assets/copilot.png)
+![The Copilot answering "Which vendor has the longest lead time?", with past chats and recent runs in the sidebar](.github/assets/copilot.png)
 
 You see its working as it goes: each hand-off to another agent and each tool it calls. It remembers your
 conversation, and like every other agent it can propose changes but never approve them.
