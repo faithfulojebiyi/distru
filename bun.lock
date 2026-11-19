@@ -24,6 +24,7 @@
         "@ops/connector-email": "workspace:*",
         "@ops/connector-headset": "workspace:*",
         "@ops/connector-mcp": "workspace:*",
+        "@ops/context": "workspace:*",
         "@ops/distru-client": "workspace:*",
         "@ops/harness": "workspace:*",
         "@slack/web-api": "8.2.0",
