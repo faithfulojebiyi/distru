@@ -14,6 +14,7 @@ console.log(
     `            trigger GMAIL_NEW_GMAIL_MESSAGE=${IDS.gmailTrigger} → ${config.composioWebhookUrl} (poll ${config.pollMs}ms)`,
     `  slack     slackApiUrl=${base}/slack/api/  bot=${config.slackBotToken}  events → ${config.slackEventsUrl}`,
     `  google    ${base}/google (Gmail/Calendar REST, for debugging)`,
+    `  resend    ${base}/resend (auth emails; any re_ key) · mailbox GET ${base}/__emu/resend/messages?to=`,
     `  control   GET ${base}/__emu/state · POST /__emu/reset · POST /__emu/simulate/vendor-reply · GET /__emu/slack/messages?channel= · POST /__emu/slack/click`,
   ].join('\n'),
 );

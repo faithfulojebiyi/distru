@@ -1,7 +1,7 @@
 /**
- * The emulator world: Google (Gmail + Calendar), Composio (connected to Google and Slack) and
- * Slack, seeded for Golden Coast Distribution, behind one fetch handler with `/__emu` control
- * endpoints. `src/index.ts` serves it with Bun; tests use `createWorld` in-process.
+ * The emulator world: Google (Gmail + Calendar), Composio (connected to Google and Slack), Slack
+ * and Resend (the agent's auth emails: sign-in / verification / reset codes), seeded for Golden Coast
+ * Distribution, behind one fetch handler with `/__emu` control endpoints. `src/index.ts` serves it with Bun; tests use `createWorld` in-process.
  */
 import {
   App,
@@ -13,6 +13,8 @@ import {
   google,
   grantGoogleAccess,
   pollGmailTriggers,
+  resend,
+  resendInbox,
   seedComposio,
   seedGoogle,
   seedSlack,
@@ -94,7 +96,8 @@ export interface World {
   readonly google: Emulator;
   readonly composio: Emulator;
   readonly slack: Emulator;
-  /** The whole HTTP surface: Composio at `/`, Slack at `/slack`, Google at `/google`, control at `/__emu`. */
+  readonly resend: Emulator;
+  /** The whole HTTP surface: Composio at `/`, Slack at `/slack`, Google at `/google`, Resend at `/resend`, control at `/__emu`. */
   fetch(request: Request): Promise<Response>;
   /** Clears every emulator and seeds the domain again. */
   reset(): void;
@@ -110,6 +113,8 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
   const gmail = createEmulator(google, { ...options, baseUrl: 'https://gmail.googleapis.com' });
   const project = createEmulator(composio, { ...options, baseUrl: 'https://backend.composio.dev' });
   const workspace = createEmulator(slack, { ...options, baseUrl: 'https://slack.com' });
+  // Any `re_` key is accepted and no recipient allowlist is set, so every auth email is delivered to the mailbox.
+  const mail = createEmulator(resend, { ...options, baseUrl: 'https://api.resend.com' });
   const vendorTokens = new Map<string, string>();
 
   connectComposioBackends(project, { google: gmail, slack: workspace });
@@ -232,6 +237,15 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
     const channel = c.req.query('channel') ?? 'ops-approvals';
     return c.json({ channel, messages: slackWorkspace(workspace).messages(channel) });
   });
+  /** The Resend mailbox (auth codes): newest first, `?to=` filters by recipient; each with its 6-digit `code`. */
+  control.get('/__emu/resend/messages', (c) => {
+    const to = c.req.query('to') || undefined;
+    const messages = resendInbox(mail)
+      .list(to)
+      .slice(0, 50)
+      .map((m) => ({ id: m.id, from: m.from, to: m.to, subject: m.subject, text: m.text, createdAt: m.createdAt, code: m.code() ?? null, links: m.links() }));
+    return c.json({ to: to ?? null, messages });
+  });
   control.post('/__emu/slack/click', async (c) => {
     const click = SlackClickSchema.parse(await c.req.json());
     const ws = slackWorkspace(workspace);
@@ -245,6 +259,7 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
     gmail.reset();
     project.reset();
     workspace.reset();
+    mail.reset();
     seed();
   }
 
@@ -254,17 +269,20 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
   };
   const toSlack = forward(workspace, '/slack', 'https://slack.com');
   const toGoogle = forward(gmail, '/google', 'https://gmail.googleapis.com');
+  const toResend = forward(mail, '/resend', 'https://api.resend.com');
 
   return {
     config,
     google: gmail,
     composio: project,
     slack: workspace,
+    resend: mail,
     async fetch(request) {
       const path = new URL(request.url).pathname;
       if (path.startsWith('/__emu/')) return control.fetch(request);
       if (path === '/slack' || path.startsWith('/slack/')) return toSlack(request);
       if (path === '/google' || path.startsWith('/google/')) return toGoogle(request);
+      if (path === '/resend' || path.startsWith('/resend/')) return toResend(request);
       return project.fetch(request);
     },
     reset,
@@ -273,7 +291,7 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
     state,
     async close() {
       if (timer) clearInterval(timer);
-      await Promise.all([gmail.close(), project.close(), workspace.close()]);
+      await Promise.all([gmail.close(), project.close(), workspace.close(), mail.close()]);
     },
   };
 }

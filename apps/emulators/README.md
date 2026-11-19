@@ -7,6 +7,8 @@ One bun server hosting the provider emulators from `@ops/emulators`, seeded for 
   and the Slack emulator.
 - **Slack** at `/slack` (Web API at `/slack/api/…`).
 - **Google** at `/google` (raw Gmail/Calendar REST, for debugging).
+- **Resend** at `/resend` (the agent's auth emails: sign-in, email-verification and password-reset codes). Any
+  `re_` key is accepted; the agent uses it when `RESEND_API_KEY` is unset outside production.
 - **Control** endpoints at `/__emu`.
 
 ```bash
@@ -55,6 +57,7 @@ bun run --cwd apps/emulators dev     # http://localhost:4700
 | `POST /__emu/poll` | Run one Gmail-trigger poll now → `{ fired }` |
 | `POST /__emu/simulate/vendor-reply` | `{ vendor, kind, poNumber?, sku?, ordered?, shipped?, eta?, oldPrice?, newPrice?, subject?, body? }`, `kind` ∈ `partial \| delay \| confirm \| price_change \| injection`. The vendor's own Gmail account replies (via the Gmail API) to the latest PO email it got from purchasing (threaded, `Re:` subject), or sends a fresh one; the purchasing inbox receives it and the trigger fires → signed webhook. Returns the received message + `triggersFired`. |
 | `GET /__emu/slack/messages?channel=ops-approvals` | Messages in a channel (with `blocks`) |
+| `GET /__emu/resend/messages?to=` | The Resend mailbox, newest first: `{ id, from, to, subject, text, createdAt, code, links }` (`code` = the 6-digit code in the body) |
 | `POST /__emu/slack/click` | `{ user, channel, actionId, value?, blockId?, ts? }`: a member clicks a button on the app's message (default: the latest app message with blocks) → signed `block_actions` payload to the interactivity URL |
 
 ```bash
