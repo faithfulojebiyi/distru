@@ -91,7 +91,7 @@ const call = async (method: string, path: string, body?: unknown) => {
 
 function check(specPath: string, method: string, status: number, body: unknown) {
   const res = spec.paths[`/public/v1${specPath}`]![method]!.responses[String(status)]!;
-  const schema = (res.content?.['*/*'] ?? res.content?.['application/json'])!.schema;
+  const schema = Object.values(res.content ?? {})[0]!.schema;
   const errors: string[] = [];
   validate(body, schema, '$', errors);
   return [...new Set(errors)].slice(0, 20);
@@ -119,6 +119,15 @@ const GETS: [string, string][] = [
   ['/test-results/{id}', `/test-results/${anyId(s.testResults)}`],
   ['/batches', '/batches'],
   ['/batches/{id}', `/batches/${anyId(s.batches)}`],
+  ['/tasks', '/tasks'],
+  ['/tasks/{id}', `/tasks/${anyId(s.tasks)}`],
+  ['/users', '/users'],
+  ['/users/{id}', `/users/${s.apiUserId}`],
+  ['/custom-fields', '/custom-fields'],
+  ['/custom-fields/{id}', `/custom-fields/${[...s.customFields.keys()][0]}`],
+  ['/deleted-records', '/deleted-records?record_type=PURCHASE'],
+  ['/activity', '/activity'],
+  ['/record-history', `/record-history?record_type=PURCHASE&record_id=${anyId(s.purchases)}`],
 ];
 
 describe('responses match openapi.json', () => {
@@ -147,6 +156,52 @@ describe('responses match openapi.json', () => {
     const bad = await call('POST', '/purchases', { status: 'NOPE' });
     expect(bad.status).toBe(400);
     expect(check('/purchases', 'post', 400, bad.body)).toEqual([]);
+  });
+
+  test('writes feed /activity, /record-history, /deleted-records (schema-checked)', async () => {
+    const vendor = product.vendor_id;
+    const ok = await call('POST', '/purchases', {
+      status: 'PENDING',
+      company_id: vendor,
+      location_id: ownLoc,
+      billing_location_id: ownLoc,
+      order_datetime: '2026-11-19T00:00:00Z',
+      due_datetime: '2026-12-19T00:00:00Z',
+      owner_id: s.apiUserId,
+      custom_data: { [String([...s.customFields.values()].find((d) => d.parent_object === 'purchase' && d.field_type === 'dropdown')!.id)]: 'Flower team' },
+      items: [{ product_id: product.id, location_id: ownLoc, quantity: 24, price: 14 }],
+    });
+    expect(ok.status).toBe(200);
+    expect(check('/purchases', 'post', 200, ok.body)).toEqual([]);
+    const id = (ok.body.data as { id: string }).id;
+    await call('POST', '/purchases', { id, status: 'PROCESSING' });
+    const act = await call('GET', '/activity');
+    expect((act.body.data as unknown[]).length).toBeGreaterThan(0);
+    expect(check('/activity', 'get', 200, act.body)).toEqual([]);
+    const hist = await call('GET', `/record-history?record_type=PURCHASE&record_id=${id}`);
+    expect((hist.body.data as unknown[]).length).toBe(2);
+    expect(check('/record-history', 'get', 200, hist.body)).toEqual([]);
+    const task = await call('POST', '/tasks', { name: 'Follow up', status: 'ACTIVE', due_datetime: '2026-11-30T17:00:00Z', purchase_id: id, owner_id: s.apiUserId });
+    expect(task.status).toBe(201);
+    expect(check('/tasks', 'post', 201, task.body)).toEqual([]);
+    const upd = await call('POST', '/tasks', { id: (task.body.data as { id: string }).id, description: 'call them' });
+    expect(check('/tasks', 'post', 200, upd.body)).toEqual([]);
+    const got = await call('GET', `/purchases/${id}`);
+    expect(check('/purchases/{id}', 'get', 200, got.body)).toEqual([]);
+    await mock.app.request(`http://mock.test/public/v1/tasks/${(task.body.data as { id: string }).id}`, { method: 'DELETE', headers: H });
+    const del = await call('GET', '/deleted-records?record_type=TASK');
+    expect((del.body.data as unknown[]).length).toBe(1);
+    expect(check('/deleted-records', 'get', 200, del.body)).toEqual([]);
+    const cf = await call('POST', '/custom-fields', { name: 'Idempotency key', parent_object: 'purchase', field_type: 'text' });
+    expect(cf.status).toBe(201);
+    expect(check('/custom-fields', 'post', 201, cf.body)).toEqual([]);
+    for (const format of ['url', 'email'] as const) {
+      const pdf = await call('POST', `/purchases/${id}/pdf`, { format, email_addresses: ['buyer@vendor.example'] });
+      expect(pdf.status).toBe(200);
+      expect(check('/purchases/{id}/pdf', 'post', 200, pdf.body)).toEqual([]);
+    }
+    const bad = await call('POST', '/tasks', {});
+    expect(check('/tasks', 'post', 400, bad.body)).toEqual([]);
   });
 
   test('POST /orders + 404/401 envelopes', async () => {

@@ -73,6 +73,14 @@ export interface ProductRec {
   total_thc: number | null;
   total_cbd: number | null;
   cannabinoid_unit: 'PERCENT' | 'MG' | null;
+  /** most units one buyer may put in one Distru Commerce menu order, on every menu (null = no cap) */
+  max_menu_buyer_order_quantity?: number | null;
+  /** Distru Commerce placement (default INCLUDE_IN_ALL) */
+  menu_visibility?: 'DO_NOT_INCLUDE' | 'INCLUDE_IN_ALL' | 'INCLUDE_IN_SELECT';
+  /** menus for INCLUDE_IN_SELECT */
+  menu_ids?: string[];
+  is_featured?: boolean;
+  external_name?: string | null;
   inserted_datetime: string;
   updated_datetime: string;
 }
@@ -167,6 +175,8 @@ export interface OrderRec {
   external_notes: string | null;
   items: OrderItemRec[];
   charges: ChargeRec[];
+  /** Distru Commerce menu the order was placed from */
+  menu_id?: string | null;
   inserted_datetime: string;
   updated_datetime: string;
 }
@@ -220,4 +230,194 @@ export interface SeedSummary {
   failed_lab_test: { batch_id: string; batch_number: string; sku: string; test_result_id: string } | null;
   prompt_injection: { product_id: string; sku: string } | null;
   calibration: { lead_time_days: number; service_level: number };
+}
+
+export interface UserRec {
+  id: string;
+  email: string;
+  full_name: string;
+  role: { id: string; name: string };
+  is_admin: boolean;
+  banned: boolean;
+  inserted_datetime: string;
+  updated_datetime: string;
+}
+
+export type TaskStatus = 'ACTIVE' | 'COMPLETED';
+/** The record a task is linked to (at most one), REST field names. */
+export type TaskLinkKind = 'order' | 'invoice' | 'purchase' | 'contact' | 'product' | 'batch' | 'assembly' | 'return' | 'company';
+
+export interface TaskRec {
+  id: string;
+  name: string;
+  description: string | null;
+  status: TaskStatus;
+  due_datetime: string;
+  color: string | null;
+  owner_id: string | null;
+  creator_id: string | null;
+  location_id: string | null;
+  link: { kind: TaskLinkKind; id: string } | null;
+  custom_data: Record<string, unknown>;
+  inserted_datetime: string;
+  updated_datetime: string;
+}
+
+export type CustomFieldType = 'checkbox' | 'date' | 'dropdown' | 'text';
+
+export interface CustomFieldDefRec {
+  id: number;
+  name: string;
+  description: string | null;
+  /** REST parent object, e.g. `purchase`, `order`, `product`, `task`, `company` */
+  parent_object: string;
+  field_type: CustomFieldType;
+  filterable: boolean;
+  required: boolean;
+  field_options: string[];
+  disabled_field_options: string[];
+  inserted_datetime: string;
+}
+
+export interface DeletedRecordRec {
+  record_type: string;
+  record_id: string;
+  deleted_datetime: string;
+}
+
+export type ActivitySource = 'AI_AGENT' | 'AUTOMATION' | 'IMPORT' | 'JOB' | 'MCP' | 'METRC' | 'PUBLIC_API' | 'QUICKBOOKS' | 'WEB';
+
+export interface HistoryFieldChange {
+  field: string;
+  label: string;
+  old_value: unknown;
+  new_value: unknown;
+}
+
+export interface HistoryRow {
+  entity: string;
+  entity_label: string;
+  op: 'INSERT' | 'UPDATE' | 'DELETE';
+  row_id: string | null;
+  row_label: string | null;
+  fields: HistoryFieldChange[];
+}
+
+/** One operation (a save, an API call, an MCP write), with the records it changed. */
+export interface ActivityRec {
+  id: string;
+  changed_datetime: string;
+  actor_id: string | null;
+  source: ActivitySource;
+  source_detail: string | null;
+  records: {
+    /** REST record-history type, e.g. PURCHASE, SALES_ORDER, PACKAGE, PRODUCT, BATCH; null when deleted with its rows */
+    type: string | null;
+    id: string;
+    name: string | null;
+    op: 'INSERT' | 'UPDATE' | 'DELETE';
+    rows: HistoryRow[];
+  }[];
+}
+
+export interface StockAdjustmentRec {
+  id: string;
+  quantity: number;
+  reason: string | null;
+  description: string | null;
+  adjusted_datetime: string;
+  location_id: string | null;
+  package_id: string | null;
+  batch_id: string | null;
+  product_id: string;
+  compliance_activity: { id: string; system: 'METRC'; status: 'QUEUED' | 'SUCCESS' | 'FAILED'; error: string | null } | null;
+  source: ActivitySource;
+  inserted_datetime: string;
+}
+
+/** An email the mock pretended to send (PDF emails); never actually sent. */
+export interface OutboxEntry {
+  id: string;
+  at: string;
+  source: ActivitySource;
+  document: string;
+  record_id: string;
+  to: string[];
+  subject: string;
+}
+
+/** Distru logs `intent` and `userSatisfactionEstimate` with every MCP call; so does the mock. */
+export interface McpTelemetryEntry {
+  at: string;
+  tool: string;
+  user_id: string;
+  intent: string | null;
+  user_satisfaction_estimate: number | null;
+  /** false when the value was missing or invalid (Distru still runs the call) */
+  intent_valid: boolean;
+  satisfaction_valid: boolean;
+  is_error: boolean;
+}
+
+export type OfficialCategory = 'CAPSULES' | 'CLONES' | 'CONCENTRATES' | 'EDIBLES' | 'FLOWER' | 'MERCH' | 'OTHER' | 'PREROLLS' | 'TINCTURES' | 'TOPICALS' | 'VAPES';
+
+export interface MenuCollectionRec {
+  id: string;
+  name: string;
+  is_hidden: boolean;
+  only_featured_products: boolean;
+  official_product_category_ids: OfficialCategory[];
+  product_category_ids: string[];
+  strain_ids: string[];
+  strain_types: string[];
+  thc_range: { min?: string; max?: string; unit: 'PERCENT' | 'MG' } | null;
+  inserted_datetime: string;
+  updated_datetime: string;
+}
+
+/** A DistruCommerce menu. Field names follow distru-mutate-menu (snake_case). */
+export interface MenuRec {
+  id: string;
+  name: string;
+  external_name: string;
+  url_suffix: string;
+  owner_id: string | null;
+  active: boolean;
+  visibility: 'PASSCODE_PROTECTED' | 'PRIVATE' | 'PUBLIC';
+  passcode: string | null;
+  location_ids: string[];
+  allow_partner_orders: boolean;
+  minimum_order_subtotal: number | null;
+  minimum_order_lead_time_days: number;
+  available_delivery_days: string[];
+  buyer_can_select_delivery_date: boolean;
+  sell_by_case_only: boolean;
+  allow_customers_to_over_order: boolean;
+  default_order_status: 'Pending' | 'Processing';
+  buyer_default_order_owner_mode: 'CUSTOMERS_COMPANY_OWNER' | 'DEFAULT' | 'SPECIFIC_USER';
+  buyer_default_order_owner_id: string | null;
+  seller_default_order_owner_mode: 'CUSTOMERS_COMPANY_OWNER' | 'DEFAULT' | 'SALES_REP' | 'SPECIFIC_USER';
+  seller_default_order_owner_id: string | null;
+  allow_sales_reps_to_override_net_terms: boolean;
+  auto_create_invoice_for_sales_rep_orders: boolean;
+  show_inventory_levels: boolean;
+  show_products_with_no_inventory_mode: 'DO_NOT_SHOW' | 'SHOW_AND_ALLOW_TO_ORDER' | 'SHOW_AS_SOLD_OUT';
+  hide_prices_mode: 'DO_NOT_HIDE' | 'HIDE_FOR_EVERYONE' | 'HIDE_FOR_NON_LOGGED_IN_USERS';
+  hide_original_price_when_price_tier_applied: boolean;
+  allow_selling_by_potency: boolean;
+  potency_official_product_category_ids: OfficialCategory[];
+  show_coa: boolean;
+  show_expiration_date: boolean;
+  show_package_date: boolean;
+  show_tac: boolean;
+  show_total_cbd: boolean;
+  allow_buyers_to_request_trade_samples: boolean;
+  restrict_trade_sample_request_to_products_in_cart: boolean;
+  send_internal_order_notifications: boolean;
+  internal_order_notification_recipient_ids: string[];
+  collections: MenuCollectionRec[];
+  /** custom names for Distru's official collections */
+  official_collection_names: Record<string, string>;
+  inserted_datetime: string;
+  updated_datetime: string;
 }

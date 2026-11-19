@@ -20,9 +20,12 @@ import type {
   PurchaseOrderItem,
   SalesOrderItem,
   TestResult,
+  User,
 } from '@ops/distru-client/model';
+import { isOnMenu } from './menus';
+import { customDataList } from './records';
 import type { Store } from './store';
-import type { BatchRec, ChargeRec, CompanyRec, LicenseRec, LocationRec, LotRec, OrderRec, ProductRec, PurchaseRec, TestResultRec } from './types';
+import type { BatchRec, ChargeRec, CompanyRec, LicenseRec, LocationRec, LotRec, OrderRec, ProductRec, PurchaseRec, TaskLinkKind, TaskRec, TestResultRec, UserRec } from './types';
 import { fmtNum, isoDate, money } from './util';
 
 const EACH = { id: 'unit-each', name: 'Each' };
@@ -39,6 +42,67 @@ export class Serializer {
       issue_datetime: l.issue_datetime,
       expiry_datetime: l.expiry_datetime,
       inserted_datetime: l.inserted_datetime,
+    };
+  }
+
+  user(u: UserRec | string | null | undefined): User | null {
+    const rec = typeof u === 'string' ? this.s.users.get(u) : u;
+    if (!rec) return null;
+    return {
+      id: rec.id,
+      email: rec.email,
+      full_name: rec.full_name,
+      role: rec.role,
+      banned: rec.banned,
+      deleted_at: null,
+      inserted_datetime: rec.inserted_datetime,
+      updated_datetime: rec.updated_datetime,
+    };
+  }
+
+  /** Tasks linked to a record, as TaskCompact. */
+  tasksFor(kind: TaskLinkKind, id: string) {
+    return [...this.s.tasks.values()]
+      .filter((t) => t.link?.kind === kind && t.link.id === id)
+      .map((t) => ({ id: t.id, name: t.name, status: t.status, due_datetime: t.due_datetime }));
+  }
+
+  /** Full task (GET /public/v1/tasks, POST /public/v1/tasks). */
+  task(t: TaskRec) {
+    const s = this.s;
+    const link = (kind: TaskLinkKind) => (t.link?.kind === kind ? t.link.id : null);
+    const orderId = link('order');
+    const purchaseId = link('purchase');
+    const productId = link('product');
+    const batchId = link('batch');
+    const companyId = link('company');
+    const o = orderId ? s.orders.get(orderId) : undefined;
+    const pu = purchaseId ? s.purchases.get(purchaseId) : undefined;
+    const pr = productId ? s.products.get(productId) : undefined;
+    const b = batchId ? s.batches.get(batchId) : undefined;
+    const co = companyId ? s.companies.get(companyId) : undefined;
+    return {
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      status: t.status,
+      due_datetime: t.due_datetime,
+      color: t.color,
+      owner: this.user(t.owner_id),
+      creator: this.user(t.creator_id),
+      location: this.locationCompact(t.location_id),
+      order: o ? { id: o.id, order_number: o.order_number } : null,
+      purchase: pu ? { id: pu.id, purchase_number: pu.purchase_number } : null,
+      product: pr ? { id: pr.id, name: pr.name, sku: pr.sku } : null,
+      batch: b ? { id: b.id, name: b.batch_number, batch_number: b.batch_number } : null,
+      company: co ? { id: co.id, name: co.name } : null,
+      invoice: null,
+      contact: null,
+      assembly: null,
+      return: null,
+      custom_data: customDataList(s, 'task', t.custom_data),
+      inserted_datetime: t.inserted_datetime,
+      updated_datetime: t.updated_datetime,
     };
   }
 
@@ -158,7 +222,7 @@ export class Serializer {
       upc: null,
       description: p.description,
       description_markdown: p.description,
-      external_name: null,
+      external_name: p.external_name ?? null,
       category: cat ? { id: cat.id, name: cat.name, official_product_category_id: null } : null,
       subcategory: null,
       product_group: null,
@@ -172,12 +236,15 @@ export class Serializer {
       tags: [],
       tasks: [],
       images: [],
-      menus: [],
-      menu_visibility: 'INCLUDE_IN_ALL',
+      menus: [...this.s.menus.values()]
+        .filter((m) => isOnMenu({ ...p, is_active: true }, m.id))
+        .sort((a, b) => (a.inserted_datetime === b.inserted_datetime ? a.id.localeCompare(b.id) : a.inserted_datetime < b.inserted_datetime ? -1 : 1))
+        .map((m) => ({ id: m.id, name: m.name })),
+      menu_visibility: p.menu_visibility ?? 'INCLUDE_IN_ALL',
       custom_data: [],
       inventory_tracking_method: p.tracking,
       is_active: p.is_active,
-      is_featured: false,
+      is_featured: p.is_featured ?? false,
       leaflink_product_id: null,
       unit_type: EACH,
       unit_cost: money(p.unit_cost),
@@ -488,11 +555,11 @@ export class Serializer {
       charges: o.charges.map((c) => this.charge(c, sub)),
       invoices: [],
       returns: [],
-      custom_data: [],
-      tasks: [],
+      custom_data: customDataList(this.s, 'order', {}),
+      tasks: this.tasksFor('order', o.id),
       owner: null,
       creator: null,
-      menu: null,
+      menu: o.menu_id && this.s.menus.get(o.menu_id) ? { id: o.menu_id, name: this.s.menus.get(o.menu_id)!.name } : null,
       combined_order: null,
       biotrack_id: null,
       leaflink_id: null,
@@ -543,13 +610,13 @@ export class Serializer {
         };
       }),
       charges: p.charges.map((c) => this.charge(c, sub)),
-      custom_data: Object.entries(p.custom_data).map(([id, value]) => ({ id: Number(id), name: `Custom field ${id}`, value: String(value) })),
+      custom_data: customDataList(this.s, 'purchase', p.custom_data),
       metrc_transfer_id: p.metrc_transfer_id,
       biotrack_id: null,
       qb_bill_id: null,
-      owner: null,
+      owner: this.user(p.owner_id),
       creator: null,
-      tasks: [],
+      tasks: this.tasksFor('purchase', p.id),
       inserted_datetime: p.inserted_datetime,
       updated_datetime: p.updated_datetime,
     };

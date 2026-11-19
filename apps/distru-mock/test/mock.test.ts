@@ -381,9 +381,13 @@ describe('mock control plane', () => {
     const open = await json(await get(`/public/v1/orders?ids[]=${data.id}&statuses[]=PENDING`));
     expect(open.data).toHaveLength(1);
     await mock.webhooks.idle();
-    expect(JSON.parse(hooks.at(-1)!.body)).toMatchObject({ type: 'ORDER', event: 'CREATE', id: data.id });
+    const orderHook = hooks.map((h) => JSON.parse(h.body)).find((h) => h.type === 'ORDER');
+    expect(orderHook).toMatchObject({ type: 'ORDER', event: 'CREATE', id: data.id });
     const state = await json(await mock.app.request(`${BASE}/__mock/state`));
-    expect(state.webhooks.at(-1)).toMatchObject({ type: 'ORDER', status: 200 });
+    expect(state.webhooks.find((w: { type: string }) => w.type === 'ORDER')).toMatchObject({ type: 'ORDER', status: 200 });
+    // the new order reserves stock: PRODUCT webhooks carry the company-wide quantity change
+    const productHook = hooks.map((h) => JSON.parse(h.body)).find((h) => h.type === 'PRODUCT' && h.id === data.items[0].product.id);
+    expect(productHook.changes.quantity_reserved.after).not.toBe(productHook.changes.quantity_reserved.before);
   });
 
   test('seed is deterministic for a given day', () => {

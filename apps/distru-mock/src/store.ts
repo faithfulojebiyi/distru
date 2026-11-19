@@ -1,15 +1,24 @@
 import type {
+  ActivityRec,
   BatchRec,
   CategoryRec,
   CompanyRec,
+  CustomFieldDefRec,
+  DeletedRecordRec,
   LicenseRec,
   LocationRec,
   LotRec,
+  McpTelemetryEntry,
+  MenuRec,
   OrderRec,
+  OutboxEntry,
   ProductRec,
   PurchaseRec,
   SeedSummary,
+  StockAdjustmentRec,
+  TaskRec,
   TestResultRec,
+  UserRec,
   WebhookLogEntry,
 } from './types';
 
@@ -60,16 +69,32 @@ export class Store {
   testResults = new Map<string, TestResultRec>();
   orders = new Map<string, OrderRec>();
   purchases = new Map<string, PurchaseRec>();
+  users = new Map<string, UserRec>();
+  menus = new Map<string, MenuRec>();
+  tasks = new Map<string, TaskRec>();
+  customFields = new Map<number, CustomFieldDefRec>();
+  adjustments = new Map<string, StockAdjustmentRec>();
+  /** tombstones for GET /deleted-records (kept 90 days in Distru) */
+  deletedRecords: DeletedRecordRec[] = [];
+  /** operations, newest last: feeds GET /activity, GET /record-history and the MCP history tools */
+  activity: ActivityRec[] = [];
+  /** emails the mock pretended to send */
+  outbox: OutboxEntry[] = [];
+  /** `intent` / `userSatisfactionEstimate` logged per MCP tool call */
+  mcpTelemetry: McpTelemetryEntry[] = [];
   webhookLog: WebhookLogEntry[] = [];
   /** our own company's id (owner of our locations) */
   selfCompanyId = '';
+  selfCompanyName = SELF_COMPANY.name;
+  /** the user the REST token and the MCP key act as */
+  apiUserId = '';
   ownLocationIds: string[] = [];
   /** time the seed is anchored to */
   now: Date = new Date();
   summary: SeedSummary | null = null;
-  counters = { order: 1000, purchase: 500, metrcPackage: 900000, metrcTransfer: 70000 };
+  counters = { order: 1000, purchase: 500, metrcPackage: 900000, metrcTransfer: 70000, customField: 4820, metrcActivity: 310000 };
   /** id generator for records created at runtime (random, unlike the seed's deterministic ids) */
-  newId = () => crypto.randomUUID();
+  newId: () => string = () => crypto.randomUUID();
 
   nowIso(): string {
     return new Date().toISOString();
@@ -115,6 +140,8 @@ export class Store {
     return s;
   }
 }
+
+export const SELF_COMPANY = { name: 'Golden Coast Distribution', legal_business_name: 'Golden Coast Distribution LLC', timezone: 'America/Los_Angeles', us_state: 'CA' };
 
 export const OPEN_ORDER_STATUSES = new Set(['PENDING', 'PROCESSING', 'READY_TO_SHIP', 'DELIVERING']);
 export const OPEN_PURCHASE_STATUSES = new Set(['PENDING', 'PROCESSING', 'DELIVERING', 'PARTIALLY_RECEIVED']);

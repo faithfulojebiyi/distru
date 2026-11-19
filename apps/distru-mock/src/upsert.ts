@@ -4,6 +4,7 @@
  * null = clear); sending `items`/`charges` replaces the set (omitted ids deleted, `{id}` alone keeps
  * a row, rows without id are added). Validation errors use the single error envelope with pointers.
  */
+import { applyCustomData } from './records';
 import type { Store } from './store';
 import type { ChargeRec, OrderItemRec, OrderRec, OrderStatus, PurchaseItemRec, PurchaseRec, PurchaseStatus } from './types';
 
@@ -146,7 +147,7 @@ export function upsertPurchase(store: Store, body: unknown): UpsertResult<Purcha
   for (const [k, v] of [['location_id', location_id], ['billing_location_id', billing_location_id]] as const) {
     if (v && !store.ownLocationIds.includes(v)) errs.add([k], 'does not exist or is not one of your locations');
   }
-  if (owner_id) errs.add(['owner_id'], 'does not exist');
+  if (owner_id && !store.users.has(owner_id)) errs.add(['owner_id'], 'does not exist');
   if (existing && !wasDraft) {
     if (company_id !== undefined && existing.company_id && company_id !== existing.company_id) errs.add(['company_id'], 'cannot be changed once set');
     if (location_id !== undefined && existing.location_id && location_id !== existing.location_id) errs.add(['location_id'], 'cannot be changed once set');
@@ -262,6 +263,9 @@ export function upsertPurchase(store: Store, body: unknown): UpsertResult<Purcha
   if (existing?.metrc_transfer_id && status !== 'COMPLETED') errs.add(['status'], 'is locked at COMPLETED once matched with a compliance transfer');
 
   const charges = parseCharges(body.charges, existing?.charges ?? [], store, errs);
+  const customData = applyCustomData(store, 'purchase', body.custom_data, existing?.custom_data ?? {}, errs.list);
+  const required = [...store.customFields.values()].filter((d) => d.parent_object === 'purchase' && d.required);
+  for (const d of required) if (!isDraft && (customData ?? existing?.custom_data ?? {})[String(d.id)] === undefined) errs.add(['custom_data', String(d.id)], "can't be blank (required custom field)");
 
   if (errs.list.length) return { ok: false, status: 400, errors: errs.list };
 
@@ -288,9 +292,10 @@ export function upsertPurchase(store: Store, body: unknown): UpsertResult<Purcha
   Object.assign(rec, next);
   rec.status = status!;
   if (description !== undefined) rec.description = description;
+  if (owner_id !== undefined) rec.owner_id = owner_id;
   if (items) rec.items = items;
   if (charges) rec.charges = charges;
-  if (isObj(body.custom_data)) Object.assign(rec.custom_data, body.custom_data);
+  if (customData) rec.custom_data = customData;
   rec.updated_datetime = now;
 
   // receiving: COMPLETED receives everything; product-tracked lines put stock into a lot
