@@ -49,3 +49,9 @@ export const auth = betterAuth({
 });
 
 export type Auth = typeof auth;
+
+/** Email sign-in returning the session token and Set-Cookie headers (used by the Studio login form in dev). */
+export async function signInWithEmail(email: string, password: string): Promise<{ token: string; cookies: string[] }> {
+  const { headers, response } = await auth.api.signInEmail({ body: { email, password }, returnHeaders: true });
+  return { token: response.token, cookies: headers.getSetCookie() };
+}

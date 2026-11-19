@@ -1,22 +1,15 @@
+import type { z } from 'zod';
 import type { SessionResolver, SessionUser } from '../auth/session';
 import type {
-  Approval,
   AuditEvent,
   DecisionRequest,
+  ListAuditEventsQuerySchema,
+  ListProposalsQuerySchema,
+  ListRunsQuerySchema,
   ProposalDetail,
   ProposalSummary,
   RunSummary,
 } from './schemas';
-import type { z } from 'zod';
-import type {
-  ListAuditEventsQuerySchema,
-  ListProposalsQuerySchema,
-  ListRunsQuerySchema,
-} from './schemas';
-
-export type DecideResult =
-  | { ok: true; proposal: ProposalSummary; approval: Approval }
-  | { ok: false; reason: 'not_found' | 'already_decided' };
 
 /** Everything the custom routes depend on. Injected so routes can be tested without a database. */
 export type ApiServices = {
@@ -25,7 +18,12 @@ export type ApiServices = {
   proposals: {
     list: (q: z.infer<typeof ListProposalsQuerySchema>) => Promise<ProposalSummary[]>;
     get: (id: string) => Promise<ProposalDetail | null>;
-    decide: (id: string, user: SessionUser, input: DecisionRequest) => Promise<DecideResult>;
+    /**
+     * Records the decision through `harness.decide`. Throws harness errors (ForbiddenError,
+     * NotFoundError, DecisionConflictError, ConcurrentModificationError, PolicyDeniedError,
+     * InputValidationError); the route maps them to HTTP status codes.
+     */
+    decide: (id: string, user: SessionUser, input: DecisionRequest) => Promise<ProposalDetail>;
   };
   audit: {
     list: (q: z.infer<typeof ListAuditEventsQuerySchema>) => Promise<AuditEvent[]>;

@@ -10,12 +10,15 @@ import {
   ListProposalsQuerySchema,
   ListRunsQuerySchema,
   MeSchema,
+  PolicyDeniedResponseSchema,
   ProposalDetailSchema,
   ProposalIdParamsSchema,
   ProposalListSchema,
   RunListSchema,
 } from './schemas';
+import { toHttpError } from './harness-errors';
 import type { ApiServices } from './services';
+import { z } from 'zod';
 
 export const OPENAPI_PATH = '/api/openapi.json';
 const SESSION_PATHS = ['/api/me', '/api/proposals', '/api/proposals/*', '/api/audit-events', '/api/runs'];
@@ -71,7 +74,7 @@ const getProposalRoute = createRoute({
   path: '/api/proposals/{id}',
   operationId: 'getProposal',
   tags: ['proposals'],
-  summary: 'Proposal detail with ops and decision',
+  summary: 'Proposal detail: ops with diffs, policy evaluation with reasons, status, version, decision',
   security: authed,
   middleware: [requireUser] as const,
   request: { params: ProposalIdParamsSchema },
@@ -87,7 +90,9 @@ const decideProposalRoute = createRoute({
   path: '/api/proposals/{id}/decision',
   operationId: 'decideProposal',
   tags: ['proposals'],
-  summary: 'Approve or reject a proposal (approver only, one decision per proposal)',
+  summary: 'Approve or reject a proposal (approver only, exactly one decision per proposal)',
+  description:
+    'Calls harness.decide with the session user as principal (role → scopes). Approve-only `edits` re-plan the edited ops and re-run policy; a deny blocks the approval (409 policy_denied, nothing recorded).',
   security: authed,
   middleware: [requireRole('approver')] as const,
   request: {
@@ -96,9 +101,13 @@ const decideProposalRoute = createRoute({
   },
   responses: {
     200: json(DecisionResponseSchema, 'Decision recorded'),
+    400: json(ErrorResponseSchema, 'Invalid body or edit input'),
     ...errors,
     404: json(ErrorResponseSchema, 'Not found'),
-    409: json(ErrorResponseSchema, 'Already decided'),
+    409: json(
+      z.union([PolicyDeniedResponseSchema, ErrorResponseSchema]),
+      'Already decided / concurrently modified (decision_conflict, concurrent_modification), or edits denied by policy (policy_denied)',
+    ),
   },
 });
 
@@ -107,7 +116,7 @@ const listAuditEventsRoute = createRoute({
   path: '/api/audit-events',
   operationId: 'listAuditEvents',
   tags: ['audit'],
-  summary: 'Audit trail (newest first)',
+  summary: 'Audit trail (newest first by default; filter by proposal / type)',
   security: authed,
   middleware: [requireUser] as const,
   request: { query: ListAuditEventsQuerySchema },
@@ -177,13 +186,23 @@ export function createApiRoutes(services: ApiServices) {
 
   api.openapi(decideProposalRoute, async (c) => {
     const { id } = c.req.valid('param');
-    const result = await services.proposals.decide(id, c.get('user')!, c.req.valid('json'));
-    if (!result.ok) {
-      return result.reason === 'not_found'
-        ? c.json({ error: 'not_found', message: 'Proposal not found' }, 404)
-        : c.json({ error: 'already_decided', message: 'Proposal already has a decision' }, 409);
+    try {
+      const proposal = await services.proposals.decide(id, c.get('user')!, c.req.valid('json'));
+      return c.json({ proposal }, 200);
+    } catch (err) {
+      const mapped = toHttpError(err);
+      if (!mapped) throw err;
+      switch (mapped.status) {
+        case 400:
+          return c.json(mapped.body, 400);
+        case 403:
+          return c.json(mapped.body, 403);
+        case 404:
+          return c.json(mapped.body, 404);
+        case 409:
+          return c.json(mapped.body, 409);
+      }
     }
-    return c.json({ proposal: result.proposal, approval: result.approval }, 200);
   });
 
   api.openapi(listAuditEventsRoute, async (c) => {

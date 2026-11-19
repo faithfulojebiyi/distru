@@ -1,44 +1,60 @@
-import { and, count, desc, eq, inArray, type SQL } from 'drizzle-orm';
+import { totalValue, userPrincipal, type Harness, type Proposal } from '@ops/harness';
+import { and, asc, desc, eq, inArray, type SQL } from 'drizzle-orm';
 import type { ApiServices } from '../api/services';
-import type { Approval, AuditEvent, ProposalSummary } from '../api/schemas';
+import type { AuditEvent, ProposalDetail, ProposalSummary } from '../api/schemas';
 import type { DB } from '../db/client';
-import { approval, auditEvent, proposal, proposalOp } from '../db/schema';
+import { auditEvent, proposal, proposalOp } from '../db/schema';
+import { loadProposal } from '../harness/proposal-store';
 
 type ProposalRow = typeof proposal.$inferSelect;
-type ApprovalRow = typeof approval.$inferSelect;
 
-const iso = (d: Date) => d.toISOString();
-
-function toSummary(row: ProposalRow, opCount: number): ProposalSummary {
+function toSummary(row: ProposalRow, actions: string[]): ProposalSummary {
   return {
     id: row.id,
-    title: row.title,
-    summary: row.summary,
+    version: row.version,
     status: row.status,
+    title: row.title,
+    createdBy: row.createdBy,
+    policyOutcome: row.policyOutcome,
+    totalValue: row.totalValue,
+    opCount: actions.length,
+    actions,
     workflowRunId: row.workflowRunId,
-    createdByType: row.createdByType,
-    createdByUserId: row.createdByUserId,
-    opCount,
-    createdAt: iso(row.createdAt),
-    updatedAt: iso(row.updatedAt),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
-function toApproval(row: ApprovalRow): Approval {
-  return { ...row, decidedAt: iso(row.decidedAt) };
+/** Harness Proposal → API detail (summary fields are derived, the rest is the harness shape). */
+export function toProposalDetail(p: Proposal): ProposalDetail {
+  return {
+    id: p.id,
+    version: p.version,
+    status: p.status,
+    title: p.title,
+    createdBy: p.createdBy,
+    policyOutcome: p.policy.outcome,
+    totalValue: totalValue(p.ops),
+    opCount: p.ops.length,
+    actions: p.ops.map((op) => op.action),
+    workflowRunId: typeof p.meta.workflowRunId === 'string' ? p.meta.workflowRunId : null,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+    rationale: p.rationale,
+    meta: p.meta,
+    ops: p.ops,
+    policy: p.policy,
+    decision: p.decision,
+    execution: p.execution,
+  };
 }
 
-async function opCounts(db: Pick<DB, 'select'>, ids: string[]): Promise<Map<string, number>> {
-  if (ids.length === 0) return new Map();
-  const rows = await db
-    .select({ proposalId: proposalOp.proposalId, n: count() })
-    .from(proposalOp)
-    .where(inArray(proposalOp.proposalId, ids))
-    .groupBy(proposalOp.proposalId);
-  return new Map(rows.map((r) => [r.proposalId, r.n]));
-}
-
-export function createProposalService(db: DB): ApiServices['proposals'] {
+/**
+ * Reads go straight to Postgres (list needs filtering/paging the harness doesn't offer); the
+ * decision goes through `harness.decide`, which enforces the approve scope, separation of duties,
+ * exactly-once (compare-and-set on `proposal.version`), edit re-planning and audit.
+ */
+export function createProposalService<TCtx>(db: DB, harness: Harness<TCtx>, ctxFor: () => TCtx): ApiServices['proposals'] {
   return {
     async list({ status, limit }) {
       const rows = await db
@@ -47,95 +63,66 @@ export function createProposalService(db: DB): ApiServices['proposals'] {
         .where(status ? eq(proposal.status, status) : undefined)
         .orderBy(desc(proposal.createdAt))
         .limit(limit);
-      const counts = await opCounts(
-        db,
-        rows.map((r) => r.id),
-      );
-      return rows.map((r) => toSummary(r, counts.get(r.id) ?? 0));
+      if (rows.length === 0) return [];
+      const ops = await db
+        .select({ proposalId: proposalOp.proposalId, action: proposalOp.action })
+        .from(proposalOp)
+        .where(
+          inArray(
+            proposalOp.proposalId,
+            rows.map((r) => r.id),
+          ),
+        )
+        .orderBy(asc(proposalOp.opIndex));
+      const actions = new Map<string, string[]>();
+      for (const op of ops) actions.set(op.proposalId, [...(actions.get(op.proposalId) ?? []), op.action]);
+      return rows.map((r) => toSummary(r, actions.get(r.id) ?? []));
     },
 
     async get(id) {
-      const [row] = await db.select().from(proposal).where(eq(proposal.id, id));
-      if (!row) return null;
-      const ops = await db
-        .select()
-        .from(proposalOp)
-        .where(eq(proposalOp.proposalId, id))
-        .orderBy(proposalOp.seq);
-      const [decision] = await db.select().from(approval).where(eq(approval.proposalId, id));
-      return {
-        ...toSummary(row, ops.length),
-        reasoning: row.reasoning,
-        policyChecks: row.policyChecks,
-        ops: ops.map((o) => ({
-          id: o.id,
-          seq: o.seq,
-          resource: o.resource,
-          op: o.op,
-          payload: o.payload,
-          before: o.before ?? null,
-          diff: o.diff,
-          idempotencyKey: o.idempotencyKey,
-          status: o.status,
-          result: o.result,
-          distruRecordId: o.distruRecordId,
-        })),
-        approval: decision ? toApproval(decision) : null,
-      };
+      const found = await loadProposal(db, id);
+      return found ? toProposalDetail(found) : null;
     },
 
-    /**
-     * Single decision under a row lock: lock the proposal, require `pending_approval`, insert the
-     * approval (unique per proposal as a second guard), flip status and append an audit event.
-     * Resuming the suspended workflow run is wired on day 3.
-     */
     async decide(id, user, input) {
-      return db.transaction(async (tx) => {
-        const [row] = await tx.select().from(proposal).where(eq(proposal.id, id)).for('update');
-        if (!row) return { ok: false, reason: 'not_found' } as const;
-        if (row.status !== 'pending_approval') return { ok: false, reason: 'already_decided' } as const;
-
-        const [decision] = await tx
-          .insert(approval)
-          .values({ proposalId: id, decision: input.decision, decidedBy: user.id, reason: input.reason ?? null })
-          .returning();
-        const [updated] = await tx
-          .update(proposal)
-          .set({ status: input.decision === 'approved' ? 'approved' : 'rejected' })
-          .where(eq(proposal.id, id))
-          .returning();
-        await tx.insert(auditEvent).values({
-          actorType: 'user',
-          actorUserId: user.id,
-          action: `proposal.${input.decision}`,
-          subjectType: 'proposal',
-          subjectId: id,
-          data: { reason: input.reason ?? null, role: user.role },
-        });
-        const counts = await opCounts(tx, [id]);
-        return {
-          ok: true,
-          proposal: toSummary(updated!, counts.get(id) ?? 0),
-          approval: toApproval(decision!),
-        } as const;
+      const decided = await harness.decide({
+        ctx: ctxFor(),
+        // Role → scopes (operator: read+propose, approver: +approve). The harness re-checks the scope.
+        principal: userPrincipal(user.id, user.role, user.name),
+        proposalId: id,
+        decision: input.decision,
+        ...(input.reason !== undefined ? { reason: input.reason } : {}),
+        ...(input.edits ? { edits: input.edits } : {}),
       });
+      return toProposalDetail(decided);
     },
   };
 }
 
 export function createAuditService(db: DB): ApiServices['audit'] {
   return {
-    async list({ subjectType, subjectId, limit }) {
+    async list({ proposalId, type, order, limit }) {
       const filters: SQL[] = [];
-      if (subjectType) filters.push(eq(auditEvent.subjectType, subjectType));
-      if (subjectId) filters.push(eq(auditEvent.subjectId, subjectId));
+      if (proposalId) filters.push(eq(auditEvent.proposalId, proposalId));
+      if (type) filters.push(eq(auditEvent.type, type));
       const rows = await db
         .select()
         .from(auditEvent)
         .where(filters.length ? and(...filters) : undefined)
-        .orderBy(desc(auditEvent.createdAt))
+        .orderBy(order === 'asc' ? asc(auditEvent.seq) : desc(auditEvent.seq))
         .limit(limit);
-      return rows.map((r): AuditEvent => ({ ...r, createdAt: iso(r.createdAt) }));
+      return rows.map(
+        (r): AuditEvent => ({
+          id: r.id,
+          seq: r.seq,
+          type: r.type,
+          actor: r.actor,
+          proposalId: r.proposalId,
+          opIndex: r.opIndex,
+          data: r.data,
+          at: r.at.toISOString(),
+        }),
+      );
     },
   };
 }

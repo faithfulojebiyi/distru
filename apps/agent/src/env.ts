@@ -21,6 +21,16 @@ const EnvSchema = z.object({
         .map((s) => s.trim())
         .filter(Boolean),
     ),
+  /** Standalone Mastra Studio origin(s), allowed by CORS in development only (never in production). */
+  STUDIO_ORIGIN: z
+    .string()
+    .default('http://localhost:3000')
+    .transform((v) =>
+      v
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPS_AGENT_MODEL: z.string().default('anthropic/claude-sonnet-5-5'),
   DISTRU_BASE_URL: z.url().default('http://localhost:4500/public/v1'),

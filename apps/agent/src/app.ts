@@ -7,11 +7,14 @@ import { HTTPException } from 'hono/http-exception';
 import { createApiRoutes } from './api/routes';
 import type { ApiServices } from './api/services';
 import { auth } from './auth/auth';
+import { MASTRA_STUDIO_AUTH_PATHS } from './auth/mastra-auth';
 import { betterAuthResolver } from './auth/session';
 import { db } from './db/client';
 import { env } from './env';
 import { mastra } from './mastra';
 import { inngest } from './mastra/inngest';
+import { createAppHarness } from './harness/harness';
+import { appRegistry, createAppCtx } from './harness/registry';
 import { createAuditService, createProposalService } from './services/proposals';
 
 export function createServices(): ApiServices {
@@ -21,7 +24,7 @@ export function createServices(): ApiServices {
       await db.execute(dsql`select 1`);
       return true;
     },
-    proposals: createProposalService(db),
+    proposals: createProposalService(db, createAppHarness({ registry: appRegistry }), createAppCtx),
     audit: createAuditService(db),
     // Placeholder until the run timeline (day 4) reads runs + traces from Mastra storage.
     runs: { list: async () => [] },
@@ -41,19 +44,26 @@ export function createServices(): ApiServices {
 export async function createApp(services: ApiServices = createServices()) {
   const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
+  // Standalone Mastra Studio (`bun run studio`, http://localhost:3000) is a browser app on another
+  // origin: allowed in development only. Production never trusts it.
+  const origins = env.NODE_ENV === 'production' ? env.WEB_ORIGIN : [...env.WEB_ORIGIN, ...env.STUDIO_ORIGIN];
+
   app.use(
     '*',
     cors({
-      origin: env.WEB_ORIGIN,
+      origin: origins,
       credentials: true,
-      allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'],
+      allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground'],
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       exposeHeaders: ['Content-Length', 'set-auth-token'],
       maxAge: 600,
     }),
   );
 
-  app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw));
+  // Better Auth owns /api/auth/*, except the few Mastra auth paths Studio calls (capabilities, me,
+  // credentials sign-in): those fall through to MastraServer below.
+  const mastraAuthPaths = new Set<string>(MASTRA_STUDIO_AUTH_PATHS);
+  app.on(['GET', 'POST'], '/api/auth/*', (c, next) => (mastraAuthPaths.has(c.req.path) ? next() : auth.handler(c.req.raw)));
 
   app.on(['GET', 'POST', 'PUT'], '/api/inngest', inngestServe({ mastra, inngest }));
 

@@ -4,22 +4,77 @@ The Ops Agent backend: a **Mastra server on Bun**. There is no separate backend 
 workflows, memory, storage and tracing come from Mastra. We add Better Auth, a handful of typed custom
 routes, and the Inngest serve endpoint.
 
-## Why a custom Bun entry instead of `mastra dev` / `mastra build`
+## Why a server adapter instead of `mastra dev`
 
-We run our own entry (`src/index.ts`) that serves one Hono app with `Bun.serve`, and mount Mastra on it
-with the official Hono adapter (`@mastra/hono` → `MastraServer`).
+Mastra documents two ways to serve a project: the generated server (`mastra dev` / `mastra build`) or a
+**server adapter**: "Run Mastra with Express, Hono, or your own HTTP server instead of the generated
+server" ([Server overview](https://mastra.ai/docs/server/server-adapters), also in the installed docs at
+`@mastra/core/dist/docs/references/docs-server-overview.md`). We use the adapter: our own entry
+(`src/index.ts`) serves one Hono app with `Bun.serve`, and mounts Mastra on it with `@mastra/hono` →
+`MastraServer`.
 
-| Need | `mastra dev`/`build` | Custom entry + `@mastra/hono` |
+| Need | `mastra dev`/`build` | Server adapter (`@mastra/hono`) |
 |---|---|---|
 | Custom routes under `/api/*` (`/api/me`, `/api/proposals`, ...) | `registerApiRoute` refuses paths under the `apiPrefix` (`/api`). We would have to move Mastra's built-ins to e.g. `/_mastra` | Any path. Mastra keeps its default `/api/agents`, `/api/workflows`, ... |
-| `/api/inngest` and `/api/auth/*` | Same `/api` restriction | Mounted directly on the app |
-| OpenAPI for *our* routes, used by Orval | Mastra's generated doc includes every built-in route (hundreds), and `registerApiRoute` `openapi` metadata is written by hand | `@hono/zod-openapi`: the zod schemas validate requests **and** generate `/api/openapi.json` with only our routes. `.meta({ id })` becomes `components/schemas/<id>` |
+| `/api/auth/*` (Better Auth) and `/api/inngest` | Same `/api` restriction | Mounted directly on the app, in the order we choose |
+| Lean OpenAPI for *our* routes, consumed by Orval | Mastra's generated doc includes every built-in route (hundreds), and `registerApiRoute` `openapi` metadata is hand-written | `@hono/zod-openapi`: the zod schemas validate requests **and** generate `/api/openapi.json` with only our routes. `.meta({ id })` becomes `components/schemas/<id>` |
 | CORS with credentials | `server.cors` | `hono/cors`, with full control over ordering |
-| Run on Bun in production | `mastra build` produces a Node-oriented bundle | `bun src/index.ts`. Same code in dev and prod |
+| One Bun entry in dev and prod | `mastra build` produces a Node-oriented bundle | `bun --watch src/index.ts` / `bun src/index.ts`. Same code path everywhere |
 
-What we give up: `mastra dev`'s bundled Studio and file-based agent discovery. Agents and workflows are
-registered in code in `src/mastra/index.ts`. With a server adapter, `mastra.startWorkers()` must be
-called ourselves (done in `src/index.ts`).
+What we give up: `mastra dev`'s bundled Studio and file-based agent discovery. Agents, workflows,
+tools, MCP servers and scorers are registered in code in `src/mastra/index.ts`. With a server adapter,
+`mastra.startWorkers()` must be called ourselves (done in `src/index.ts`). Studio is run standalone
+instead (next section).
+
+## Mastra Studio
+
+`mastra studio` serves Studio as a standalone SPA that connects to an already running server
+([Studio deployment](https://mastra.ai/docs/studio/deployment)).
+
+```bash
+bun run dev       # terminal 1: the server on http://localhost:4111
+bun run studio    # terminal 2 (repo root or apps/agent): Studio on http://localhost:3000
+```
+
+Open http://localhost:3000, click **Sign in**, and use a seeded user (`operator@demo.dev` /
+`demo-password`). How that works ([Studio auth](https://mastra.ai/docs/studio/auth)):
+
+- Studio calls `GET /api/auth/capabilities`. Better Auth owns `/api/auth/*`, so `src/app.ts` lets the
+  three Mastra auth paths Studio uses (`/api/auth/capabilities`, `/api/auth/me`,
+  `/api/auth/credentials/sign-in`) fall through to `MastraServer`; Better Auth uses none of them.
+- `BetterAuthMastraProvider` implements `getCurrentUser` and, **in development only**, Mastra's
+  credentials interface: Studio's email/password form signs in through `auth.api.signInEmail`, which
+  sets the normal `better-auth.session_token` cookie. Studio sends every request with
+  `credentials: 'include'`, so all built-in routes authenticate exactly like the web app. Sign-up from
+  Studio is always disabled.
+- Alternative without the form: open `http://localhost:3000/?auth_header=Bearer%20<token>` with a
+  bearer token (the `set-auth-token` header from `POST /api/auth/sign-in/email`). Studio keeps it in
+  memory and sends it as `Authorization` on every request.
+- CORS allows `STUDIO_ORIGIN` (default `http://localhost:3000`) **only when `NODE_ENV` is not
+  `production`**. There is no auth bypass: the `x-mastra-dev-playground` header does nothing because
+  our provider implements `authenticateToken` (checked: it still gets 401 without a session).
+- In production the credentials sign-in is not wired (and Mastra's Studio sign-in screen with a custom
+  provider needs an EE license there anyway); built-in routes still require a Better Auth session.
+
+Expected noise in the browser console: a 404 on `/refresh-events` (that is `mastra dev`'s hot-reload
+channel) and `/connect/providers` (optional platform feature).
+
+## The harness in this app
+
+`packages/harness` owns proposal → policy → decision → execution → audit. This app implements its
+ports against Postgres (`src/harness/`):
+
+| File | Port | Notes |
+|---|---|---|
+| `proposal-store.ts` | `ProposalStore` | `proposal` + `proposal_op` (+ `approval` for the decision) in one transaction. `compareAndSet` is `UPDATE proposal … WHERE id = $1 AND version = $2`; zero rows → `false`. Reads are parsed with the harness `ProposalSchema` (round-trip is exact, checked in tests) |
+| `audit-sink.ts` | `AuditSink` | INSERT-only into `audit_event`; `seq` (bigserial) gives total order |
+| `policy-rules.ts` | `PolicyRuleSource` | `policy_rule` rows → `{ key, params, enabled }`, read per evaluation |
+| `harness.ts` | factory | `createAppHarness({ registry })`: Drizzle ports + system clock + inline steps. `inngestStepRunner(step)` adapts Inngest step tools for one durable step per op; inside a Mastra workflow step keep the inline runner (the Mastra step is the durable boundary, nested `step.run` isn't allowed) |
+| `registry.ts` | `Registry<AppCtx>` | empty until `packages/distru-client` lands (`purchases.upsert`, read tools) |
+
+Default policy (seeded): `max_total_value` $25,000 (deny above), `auto_approve_below` $500 (low risk
+only), `high_risk_requires_approval`, `allowed_actions: [purchases.upsert]`, and `vendor_allowlist`
+present but disabled.
 
 ## Layout
 
@@ -38,18 +93,24 @@ apps/agent/
 │   │   ├── session.ts        session resolver, sessionMiddleware, requireUser, requireRole(...)
 │   │   └── mastra-auth.ts    MastraAuthProvider that reuses the Better Auth session for built-ins
 │   ├── db/
-│   │   ├── schema.ts         Drizzle: Better Auth tables + proposal, proposal_op, approval, audit_event,
-│   │   │                     policy_rule, eval_run
+│   │   ├── schema.ts         Drizzle: Better Auth tables + proposal (versioned), proposal_op, approval,
+│   │   │                     audit_event, policy_rule (harness rule configs), eval_run
 │   │   ├── client.ts         drizzle(postgres-js)
 │   │   └── seed.ts           demo users + default policy rules (idempotent)
-│   ├── services/proposals.ts Drizzle implementations (list/get/decide with row lock, audit list)
-│   └── mastra/
-│       ├── index.ts          Mastra instance: PostgresStore (schema `mastra`), tracing, auth
+│   ├── harness/              @ops/harness ports on Drizzle + createAppHarness (see "The harness in this app")
+│   ├── services/proposals.ts list/get read Postgres; decide calls harness.decide; audit list
+│   └── mastra/               layout per https://mastra.ai/reference/project-structure
+│       ├── index.ts          central registration: agents, workflows, tools, mcpServers, scorers,
+│       │                     PostgresStore (schema `mastra`), tracing, auth
 │       ├── inngest.ts        Inngest client + init() → Inngest-backed createWorkflow/createStep
 │       ├── agents/ops-agent.ts  placeholder supervisor agent (model router string)
-│       └── workflows/hello.ts   2-step workflow with one suspend/resume point
+│       ├── workflows/hello.ts   2-step workflow with one suspend/resume point
+│       ├── tools/            harness-generated tools (propose_* / read tools) — empty for now
+│       ├── mcp/              our MCP server (read/propose/approve scopes) — empty for now
+│       └── scorers/          eval scorers — empty for now
 ├── scripts/verify-hello-workflow.ts   e2e: sign in → start → suspended → resume → success
-├── test/                     bun tests: role guard + decision route authorization + OpenAPI shape
+├── test/                     bun tests: role guard, decision route (auth + harness error mapping),
+│                             OpenAPI shape, harness-postgres integration (skips without Postgres)
 └── drizzle.config.ts         manages the `public` schema only
 ```
 
@@ -59,10 +120,10 @@ apps/agent/
 |---|---|---|
 | `GET /api/health` | public | includes a DB ping |
 | `GET /api/me` | session | `{ id, email, name, role }` |
-| `GET /api/proposals?status=&limit=` | session | reads from Postgres |
-| `GET /api/proposals/:id` | session | ops + decision |
-| `POST /api/proposals/:id/decision` | **approver** | `{ decision: 'approved'\|'rejected', reason? }`. Row lock, one decision per proposal (409 on a second one), writes an audit event. Resuming the workflow comes on day 3 |
-| `GET /api/audit-events` | session | newest first |
+| `GET /api/proposals?status=&limit=` | session | summaries (status, version, policy outcome, total, actions) |
+| `GET /api/proposals/:id` | session | harness shape: ops with diff/payload/before/result, policy evaluation with reasons, status, version, decision, execution |
+| `POST /api/proposals/:id/decision` | **approver** | `{ decision: 'approve'\|'reject', reason?, edits? }` → `harness.decide` with `userPrincipal(user.id, role)`. Errors: 400 `InputValidationError`, 403 `ForbiddenError` (scope, separation of duties), 404 `NotFoundError`, 409 `decision_conflict` / `concurrent_modification` / `policy_denied` (+ `evaluation`). Resuming the workflow comes on day 3 |
+| `GET /api/audit-events?proposalId=&type=&order=&limit=` | session | newest first by default; `order=asc` for a timeline |
 | `GET /api/runs` | session | placeholder (empty list) until the run timeline lands |
 | `GET /api/openapi.json` | public | OpenAPI 3.1 for the routes above (Orval input) |
 | `/api/auth/*` | Better Auth | `sign-in/email`, `sign-up/email` (sign-up is disabled in production), `get-session`, ... |
@@ -93,14 +154,15 @@ bun install
 cp apps/agent/.env.example apps/agent/.env # then set BETTER_AUTH_SECRET (openssl rand -base64 32)
 
 cd apps/agent
-bun run db:push                            # drizzle-kit push (public schema)
+bun run db:push                            # drizzle-kit push (public schema; see Known issues for renames)
 bun run db:seed                            # operator@demo.dev / approver@demo.dev, password demo-password
 bun run dev                                # http://localhost:4111
 
 # second terminal: Inngest dev server (UI on http://localhost:8288)
 bun run inngest:dev                        # (apps/agent) uses npx, see "Known issues"
 bun run verify:hello                       # suspend → resume through Inngest
-bun test
+bun test                                   # incl. Postgres integration test (skips if DB is down)
+bun run studio                             # Mastra Studio on :3000 (see "Mastra Studio")
 ```
 
 Mastra creates its own tables in the `mastra` schema on first boot (`PostgresStore({ schemaName: 'mastra' })`).
@@ -114,6 +176,10 @@ is disabled. Point Inngest Cloud at `https://<host>/api/inngest`. Run behind a p
 `X-Forwarded-For`, because Better Auth's rate limiter reads the client IP from it.
 
 ## Known issues
+
+- `drizzle-kit push` asks interactively when a change looks like a column rename. The harness schema
+  change was applied by dropping the (empty) domain tables first:
+  `DROP TABLE approval, proposal_op, proposal, audit_event, policy_rule CASCADE;` then `db:push` + `db:seed`.
 
 - `bunx inngest-cli@latest` fails because bun skips the package's postinstall, which downloads the binary.
   The root `inngest:dev` script uses `bunx`, so for now use `bun run --cwd apps/agent inngest:dev` (npx

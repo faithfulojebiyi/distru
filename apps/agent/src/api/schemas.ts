@@ -1,10 +1,13 @@
 import { z } from 'zod';
+import { FindingOutcomeSchema, ScopeSchema as HarnessScopeSchema, SeveritySchema } from '@ops/harness';
 import {
-  ACTOR_TYPES,
-  APPROVAL_DECISIONS,
-  PROPOSAL_OP_KINDS,
-  PROPOSAL_OP_STATUSES,
+  ACTOR_KINDS,
+  DECISIONS,
+  OP_STATUSES,
+  POLICY_OUTCOMES,
+  PRINCIPAL_KINDS,
   PROPOSAL_STATUSES,
+  RISKS,
   USER_ROLES,
 } from '../db/schema';
 
@@ -36,57 +39,143 @@ export const MeSchema = z
   })
   .meta({ id: 'Me' });
 
+// ---------------------------------------------------------------------------
+// Harness model (packages/harness), re-declared with stable component names
+// ---------------------------------------------------------------------------
+
 export const ProposalStatusSchema = z.enum(PROPOSAL_STATUSES).meta({ id: 'ProposalStatus' });
-export const ActorTypeSchema = z.enum(ACTOR_TYPES).meta({ id: 'ActorType' });
-export const ApprovalDecisionSchema = z.enum(APPROVAL_DECISIONS).meta({ id: 'ApprovalDecision' });
+export const PrincipalKindSchema = z.enum(PRINCIPAL_KINDS).meta({ id: 'PrincipalKind' });
+export const ActorKindSchema = z.enum(ACTOR_KINDS).meta({ id: 'ActorKind' });
+export const ScopeSchema = z.enum(HarnessScopeSchema.options).meta({ id: 'Scope' });
+export const RiskSchema = z.enum(RISKS).meta({ id: 'Risk' });
+export const OpStatusSchema = z.enum(OP_STATUSES).meta({ id: 'OpStatus' });
+export const PolicyOutcomeSchema = z.enum(POLICY_OUTCOMES).meta({ id: 'PolicyOutcome' });
+export const DecisionKindSchema = z.enum(DECISIONS).meta({ id: 'DecisionKind' });
+
+export const PrincipalSchema = z
+  .object({
+    kind: PrincipalKindSchema,
+    id: z.string(),
+    scopes: z.array(ScopeSchema),
+    label: z.string().optional(),
+  })
+  .meta({ id: 'Principal' });
+
+/** Who did something: a principal, or the harness itself (`kind: 'system'`, e.g. the executor). */
+export const ActorSchema = z
+  .object({
+    kind: ActorKindSchema,
+    id: z.string(),
+    scopes: z.array(ScopeSchema).optional(),
+    label: z.string().optional(),
+  })
+  .meta({ id: 'Actor' });
+
+export const PolicyReasonSchema = z
+  .object({
+    rule: z.string(),
+    outcome: z.enum(FindingOutcomeSchema.options),
+    severity: z.enum(SeveritySchema.options),
+    message: z.string(),
+  })
+  .meta({ id: 'PolicyReason' });
+
+export const PolicyEvaluationSchema = z
+  .object({ outcome: PolicyOutcomeSchema, reasons: z.array(PolicyReasonSchema) })
+  .meta({ id: 'PolicyEvaluation' });
+
+export const FieldChangeSchema = z
+  .object({
+    /** Path into the payload; keyed array elements appear as `id=<key>`, new ones as `new:<i>`. */
+    path: z.array(z.union([z.string(), z.number()])),
+    kind: z.enum(['added', 'removed', 'changed']),
+    before: z.unknown(),
+    after: z.unknown(),
+  })
+  .meta({ id: 'FieldChange' });
+
+export const MismatchSchema = z
+  .object({ path: z.array(z.union([z.string(), z.number()])), expected: z.unknown(), actual: z.unknown() })
+  .meta({ id: 'Mismatch' });
+
+export const SerializedErrorSchema = z
+  .object({ name: z.string(), message: z.string(), code: z.string().optional() })
+  .meta({ id: 'SerializedError' });
+
+export const OpResultSchema = z
+  .object({
+    recordId: z.string().nullable(),
+    deduplicated: z.boolean(),
+    attempts: z.number().int(),
+    mismatches: z.array(MismatchSchema),
+    error: SerializedErrorSchema.nullable(),
+    finishedAt: z.string(),
+  })
+  .meta({ id: 'OpResult' });
+
+export const ProposalOpSchema = z
+  .object({
+    index: z.number().int(),
+    action: z.string(),
+    resource: z.string(),
+    risk: RiskSchema,
+    input: z.unknown(),
+    /** ERP record before the write (null when creating). */
+    before: z.unknown(),
+    /** Exact request body that will be sent. */
+    payload: z.unknown(),
+    diff: z.array(FieldChangeSchema),
+    summary: z.string().nullable(),
+    value: z.number().nullable(),
+    vendorIds: z.array(z.string()).nullable(),
+    idempotencyKey: z.string(),
+    status: OpStatusSchema,
+    result: OpResultSchema.nullable(),
+  })
+  .meta({ id: 'ProposalOp' });
+
+export const DecisionSchema = z
+  .object({
+    decision: DecisionKindSchema,
+    by: PrincipalSchema,
+    reason: z.string().nullable(),
+    edited: z.boolean(),
+    at: z.iso.datetime(),
+  })
+  .meta({ id: 'Decision' });
+
+export const ExecutionSchema = z
+  .object({
+    startedAt: z.string().nullable(),
+    finishedAt: z.string().nullable(),
+    error: SerializedErrorSchema.nullable(),
+  })
+  .meta({ id: 'Execution' });
 
 export const ProposalSummarySchema = z
   .object({
     id: z.uuid(),
-    title: z.string(),
-    summary: z.string().nullable(),
+    version: z.number().int(),
     status: ProposalStatusSchema,
-    workflowRunId: z.string().nullable(),
-    createdByType: ActorTypeSchema,
-    createdByUserId: z.string().nullable(),
+    title: z.string().nullable(),
+    createdBy: PrincipalSchema,
+    policyOutcome: PolicyOutcomeSchema,
+    totalValue: z.number().nullable(),
     opCount: z.number().int(),
+    actions: z.array(z.string()),
+    workflowRunId: z.string().nullable(),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
   })
   .meta({ id: 'ProposalSummary' });
 
-export const ProposalOpSchema = z
-  .object({
-    id: z.uuid(),
-    seq: z.number().int(),
-    resource: z.string(),
-    op: z.enum(PROPOSAL_OP_KINDS),
-    payload: z.record(z.string(), z.unknown()),
-    before: z.record(z.string(), z.unknown()).nullable(),
-    diff: z.unknown(),
-    idempotencyKey: z.string(),
-    status: z.enum(PROPOSAL_OP_STATUSES),
-    result: z.unknown(),
-    distruRecordId: z.string().nullable(),
-  })
-  .meta({ id: 'ProposalOp' });
-
-export const ApprovalSchema = z
-  .object({
-    id: z.uuid(),
-    proposalId: z.uuid(),
-    decision: ApprovalDecisionSchema,
-    decidedBy: z.string(),
-    reason: z.string().nullable(),
-    decidedAt: z.iso.datetime(),
-  })
-  .meta({ id: 'Approval' });
-
 export const ProposalDetailSchema = ProposalSummarySchema.extend({
-  reasoning: z.string().nullable(),
-  policyChecks: z.array(z.unknown()),
+  rationale: z.string().nullable(),
+  meta: z.record(z.string(), z.unknown()),
   ops: z.array(ProposalOpSchema),
-  approval: ApprovalSchema.nullable(),
+  policy: PolicyEvaluationSchema,
+  decision: DecisionSchema.nullable(),
+  execution: ExecutionSchema.nullable(),
 }).meta({ id: 'ProposalDetail' });
 
 export const ProposalListSchema = z
@@ -100,28 +189,43 @@ export const ListProposalsQuerySchema = z.object({
 
 export const ProposalIdParamsSchema = z.object({ id: z.uuid() });
 
+export const OpEditSchema = z
+  .object({
+    opIndex: z.number().int().nonnegative(),
+    /** Replacement input; the op is re-planned, re-diffed and policy re-runs. */
+    input: z.unknown(),
+  })
+  .meta({ id: 'OpEdit' });
+
 export const DecisionRequestSchema = z
   .object({
-    decision: ApprovalDecisionSchema,
+    decision: DecisionKindSchema,
     reason: z.string().max(2000).optional(),
+    /** Approve-only edits. A `deny` after re-evaluation blocks the approval (409 policy_denied). */
+    edits: z.array(OpEditSchema).max(100).optional(),
   })
   .meta({ id: 'DecisionRequest' });
 
 export const DecisionResponseSchema = z
-  .object({ proposal: ProposalSummarySchema, approval: ApprovalSchema })
+  .object({ proposal: ProposalDetailSchema })
   .meta({ id: 'DecisionResponse' });
+
+/** 409 when an approver's edits were denied by policy: the decision was not recorded. */
+export const PolicyDeniedResponseSchema = z
+  .object({ error: z.literal('policy_denied'), message: z.string(), evaluation: PolicyEvaluationSchema })
+  .meta({ id: 'PolicyDeniedResponse' });
 
 export const AuditEventSchema = z
   .object({
     id: z.uuid(),
-    actorType: ActorTypeSchema,
-    actorUserId: z.string().nullable(),
-    actorAgentId: z.string().nullable(),
-    action: z.string(),
-    subjectType: z.string(),
-    subjectId: z.string().nullable(),
+    /** Insertion order (total, unlike timestamps). */
+    seq: z.number().int(),
+    type: z.string(),
+    actor: ActorSchema,
+    proposalId: z.string().nullable(),
+    opIndex: z.number().int().nullable(),
     data: z.record(z.string(), z.unknown()),
-    createdAt: z.iso.datetime(),
+    at: z.iso.datetime(),
   })
   .meta({ id: 'AuditEvent' });
 
@@ -130,8 +234,10 @@ export const AuditEventListSchema = z
   .meta({ id: 'AuditEventList' });
 
 export const ListAuditEventsQuerySchema = z.object({
-  subjectType: z.string().optional(),
-  subjectId: z.string().optional(),
+  proposalId: z.uuid().optional(),
+  type: z.string().optional(),
+  /** `desc` (default): newest first. `asc`: chronological, e.g. a proposal timeline. */
+  order: z.enum(['asc', 'desc']).default('desc'),
   limit: z.coerce.number().int().min(1).max(500).default(100),
 });
 
@@ -159,7 +265,6 @@ export const ListRunsQuerySchema = z.object({
 export type Me = z.infer<typeof MeSchema>;
 export type ProposalSummary = z.infer<typeof ProposalSummarySchema>;
 export type ProposalDetail = z.infer<typeof ProposalDetailSchema>;
-export type Approval = z.infer<typeof ApprovalSchema>;
 export type DecisionRequest = z.infer<typeof DecisionRequestSchema>;
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 export type RunSummary = z.infer<typeof RunSummarySchema>;

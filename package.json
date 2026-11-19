@@ -10,6 +10,7 @@
     "dev:agent": "bun run --cwd apps/agent dev",
     "dev:mock": "bun run --cwd apps/distru-mock dev",
     "inngest:dev": "bun run --cwd apps/agent inngest:dev",
+    "studio": "bun run --cwd apps/agent studio",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "typecheck": "bun run --filter '*' typecheck",
