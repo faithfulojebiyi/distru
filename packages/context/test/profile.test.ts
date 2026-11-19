@@ -9,7 +9,7 @@ async function synced() {
 }
 
 describe('account profile', () => {
-  test('vendor lead times match the mock’s true lead times; promised parsed from PO notes', async () => {
+  test('vendor lead times match the mock’s true lead times (median); promised parsed from PO notes; late / short receipts show', async () => {
     const env = await synced();
     const profile = await buildProfile(env.store, { clock: env.clock });
     const truth = (await env.mockState()).vendors;
@@ -20,10 +20,19 @@ describe('account profile', () => {
       expect(Math.round(p.actualLeadTimeDays!)).toBe(v.typical_lead_time_days);
       expect(p.promisedLeadTimeDays).toBe(v.typical_lead_time_days);
       expect(p.leadTimeSamples).toBeGreaterThanOrEqual(2);
-      expect(p.onTimePct).toBe(100);
-      expect(p.fillRatePct).toBe(100);
+      // the mock seeds a few late receipts and short shipments per vendor (MOCK_PO_VARIATION, on by default)
+      expect(p.onTimePct!).toBeGreaterThanOrEqual(60);
+      expect(p.onTimePct!).toBeLessThan(100);
+      expect(p.fillRatePct!).toBeGreaterThanOrEqual(95);
+      expect(p.fillRatePct!).toBeLessThan(100);
+      expect(p.leadTimeP90Days!).toBeGreaterThanOrEqual(p.actualLeadTimeDays!);
       expect(p.priceTrends.length).toBeGreaterThan(0);
     }
+    // Sierra Extracts is the least reliable: lowest on-time rate, p90 well above its promised 14 days
+    const sec = profile.vendors.find((x) => x.name === 'Sierra Extracts Co.')!;
+    expect(sec.onTimePct).toBe(Math.min(...profile.vendors.map((x) => x.onTimePct!)));
+    expect(sec.leadTimeP90Days!).toBeGreaterThan(22);
+    expect(sec.leadTimeP90Days!).toBeLessThan(30);
     const gse = profile.vendors.find((x) => x.name === 'Golden State Edibles')!;
     expect(gse.openPurchaseCount).toBe(1);
   });

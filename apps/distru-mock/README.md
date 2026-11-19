@@ -35,11 +35,10 @@ last 120 days of sales never move):
 - **Purchase orders.** 8–12 COMPLETED POs per vendor over the year (the core seed's three, PO-501…, plus
   older ones numbered below PO-501). Each vendor's most recent completed PO carries one price increase
   (HHF +4 %, ETG +5 %, SEC +8 %, GSE +6 %, CCV +7 %, MPR +5 %; that generation's batch cost and the open GSE
-  PO follow). By default every receipt is on time and complete. `MOCK_PO_VARIATION=1` (or
-  `poVariation: true`, or `POST /__mock/reset {"po_variation": true}`) adds a few late receipts (lead time
-  above the promised one; Sierra Extracts the worst, p90 ≈ 26 days vs 14) and short shipments on the
-  older POs, without changing any id. It is opt-in because `@ops/context`'s profile test expects 100 %
-  on-time and fill rate.
+  PO follow). By default the older POs carry a few late receipts (lead time above the promised one;
+  Sierra Extracts the worst, p90 ≈ 26 days vs 14) and short shipments, without changing any id.
+  `MOCK_PO_VARIATION=0` (or `poVariation: false`, or `POST /__mock/reset {"po_variation": false}`) turns
+  that off: every receipt on time and complete.
 - **Accounts receivable.** One invoice per COMPLETED / DELIVERED order (`INV-1xxxx`, dated on the order
   date, due on the customer's Net 15 / Net 30 term), and payments that follow each customer's habits
   (ACH / check / cash). Harbor Greens is clearly the worst account (~$18.7k more than 60 days past due,

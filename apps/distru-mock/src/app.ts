@@ -59,7 +59,7 @@ export interface MockOptions {
   publicUrl?: string;
   /** clock for rate limiting (ms since epoch); default Date.now */
   clock?: Clock;
-  /** Seed older POs with late receipts and short shipments (see seed-year.ts). Default false. */
+  /** Seed older POs with late receipts and short shipments (see seed-year.ts). Default true; false = every PO on time and complete. */
   poVariation?: boolean;
 }
 
@@ -156,8 +156,8 @@ export function createMockServer(opts: MockOptions = {}) {
   const mcpLimiter = new McpRateLimiter({ ...DEFAULT_MCP_LIMIT, ...opts.mcpRateLimit }, clock);
   const state = {
     scenario: (opts.scenario ?? 'default') as ScenarioName,
-    store: seedStore(opts.scenario ?? 'default', anchor(), { poVariation: opts.poVariation === true }),
-    poVariation: opts.poVariation === true,
+    store: seedStore(opts.scenario ?? 'default', anchor(), { poVariation: opts.poVariation !== false }),
+    poVariation: opts.poVariation !== false,
     rateLimit: { fail_next: 0, every: 0, retry_after: 2, ...legacyRl, list: restLimiter.config, pdf: restLimiter.pdf } as RateLimitConfig,
     requests: 0,
     metrc: { fail_next: 0 },

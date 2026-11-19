@@ -117,8 +117,8 @@ describe('a year of purchase orders per vendor', () => {
     expect(sorted.every((p, i) => i === 0 || p.order_datetime! >= sorted[i - 1]!.order_datetime!)).toBe(true);
   });
 
-  test('default: every receipt on time and complete (the profile tests in @ops/context rely on it)', () => {
-    const st = seedStore('default', NOW);
+  test('poVariation false: every receipt on time and complete', () => {
+    const st = seedStore('default', NOW, { poVariation: false });
     for (const v of vendorsOf(st)) {
       for (const p of completed(st, v.id)) {
         expect(leadOf(p)).toBe(v.lead_time_days);
@@ -153,8 +153,8 @@ describe('a year of purchase orders per vendor', () => {
   });
 
   test('poVariation: a few late receipts and short shipments per vendor; ids and the median lead time unchanged', () => {
-    const plain = seedStore('default', NOW);
-    const varied = seedStore('default', NOW, { poVariation: true });
+    const plain = seedStore('default', NOW, { poVariation: false });
+    const varied = seedStore('default', NOW);
     expect([...varied.purchases.keys()]).toEqual([...plain.purchases.keys()]);
     expect([...varied.orders.keys()]).toEqual([...plain.orders.keys()]);
     for (const v of vendorsOf(varied)) {
@@ -333,12 +333,14 @@ describe('REST: invoices, payments, payment methods', () => {
     expect(act.some((a) => a.records.some((r) => r.type === 'INVOICE' && r.id === inv.id))).toBe(true);
   });
 
-  test('state counts and reset keep the AR world; po_variation can be switched on reset', async () => {
+  test('state counts and reset keep the AR world; po_variation (on by default) can be switched on reset', async () => {
     const state = (await (await mock.app.request('/__mock/state')).json()) as { counts: { invoices: number; payments: number }; po_variation: boolean };
     expect(state.counts.invoices).toBeGreaterThan(1000);
-    expect(state.po_variation).toBe(false);
-    const r = await mock.app.request('/__mock/reset', { method: 'POST', body: JSON.stringify({ po_variation: true }), headers: { 'content-type': 'application/json' } });
+    expect(state.po_variation).toBe(true);
+    const r = await mock.app.request('/__mock/reset', { method: 'POST', body: JSON.stringify({ po_variation: false }), headers: { 'content-type': 'application/json' } });
     expect(r.status).toBe(200);
+    expect(mock.poVariation).toBe(false);
+    await mock.app.request('/__mock/reset', { method: 'POST', body: JSON.stringify({ po_variation: true }), headers: { 'content-type': 'application/json' } });
     expect(mock.poVariation).toBe(true);
     const bad = await mock.app.request('/__mock/reset', { method: 'POST', body: JSON.stringify({ po_variation: 'yes' }), headers: { 'content-type': 'application/json' } });
     expect(bad.status).toBe(400);

@@ -7,7 +7,7 @@
  *   chronologically. They feed the 365-day half of Distru's demand rate, so stock is calibrated after them.
  * - **Older purchase orders**: 5–9 more COMPLETED POs per vendor across the year (8–12 in total), numbered
  *   below PO-501. Every vendor gets one price increase on its most recent completed PO (`applyPriceIncreases`).
- * - **Receipt variation** (`poVariation`, opt-in): a few late receipts (lead time > promised) and short
+ * - **Receipt variation** (`poVariation`, on by default): a few late receipts (lead time > promised) and short
  *   shipments (received < ordered) per vendor. The draws happen either way, so ids never depend on it.
  */
 import { rng, type Store } from './store';

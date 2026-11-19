@@ -259,7 +259,8 @@ function calibrateBranchStock(
 export interface SeedOptions {
   /**
    * Older purchase orders get realistic receipt variation: a few late receipts (lead time above the
-   * vendor's promised one) and short shipments. Off by default (every PO arrives on time and complete).
+   * vendor's promised one) and short shipments. On by default; `false` makes every PO arrive on time
+   * and complete.
    */
   poVariation?: boolean;
 }
@@ -762,7 +763,7 @@ export function seedStore(scenario: ScenarioName = 'default', now: Date = new Da
   };
   store.purchases.set(draft.id, draft);
   // a year of completed POs per vendor (own PRNG) and one price increase per vendor
-  seedOlderPurchases({ store, products, demandBySku, vendorIds, oakland: OAK, today, variation: options.poVariation === true });
+  seedOlderPurchases({ store, products, demandBySku, vendorIds, oakland: OAK, today, variation: options.poVariation !== false });
   applyPriceIncreases({ store, vendorIds, corePos, openPos: [openPo] });
 
   calibrateBranchStock(store, {
