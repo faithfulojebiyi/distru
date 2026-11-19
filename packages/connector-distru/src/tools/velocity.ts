@@ -3,9 +3,25 @@ import { defineReadTool } from '@ops/harness';
 import { z } from 'zod';
 import { label, locationNames, num, num0, RefSchema, reportDate, take, type DistruCtx } from '../shared';
 
+/**
+ * Distru has no default lead time: without `lead_time_days` no row gets a reorder point, and a
+ * `below_reorder_point` filter (true OR false) then drops every row. An omitted lead time used to make
+ * the tool return nothing; it now falls back to this.
+ */
+export const DEFAULT_LEAD_TIME_DAYS = 14;
+
 export const VelocityReportInput = z.object({
-  below_reorder_point: z.boolean().default(true).describe('Only SKUs at or below their reorder point (default true).'),
-  lead_time_days: z.number().int().min(1).max(365).optional().describe('Supplier lead time used for reorder points (Distru default when omitted).'),
+  below_reorder_point: z
+    .union([z.boolean(), z.literal('any')])
+    .default(true)
+    .describe("true (default): only SKUs at or below their reorder point. false: only SKUs above it. 'any': every SKU with sales, either way (use it to look up specific product_ids)."),
+  lead_time_days: z
+    .number()
+    .int()
+    .min(1)
+    .max(365)
+    .optional()
+    .describe(`Supplier lead time used for reorder points. Distru computes no reorder point without it, so ${DEFAULT_LEAD_TIME_DAYS} is used when omitted.`),
   target_days_of_supply: z.number().int().min(1).max(365).optional().describe('Days of stock a suggested order should cover.'),
   service_level: z.number().int().min(50).max(99).optional().describe('Safety-stock service level, percent.'),
   vendor_ids: z.array(z.string().min(1)).max(50).optional(),
@@ -38,7 +54,7 @@ export type VelocityRow = z.infer<typeof VelocityRowSchema>;
 
 export const VelocityReportOutput = z.object({
   params: z.object({
-    below_reorder_point: z.boolean(),
+    below_reorder_point: z.union([z.boolean(), z.literal('any')]),
     lead_time_days: z.number().nullable(),
     target_days_of_supply: z.number().nullable(),
     service_level: z.number().nullable(),
@@ -71,14 +87,15 @@ const toRow = (r: InventoryVelocityReportRow, location: VelocityRow['location'])
 export const velocityReportTool = defineReadTool({
   name: 'velocity_report',
   description:
-    'Inventory velocity / reorder report: SKUs at risk of stocking out with days of supply, reorder point and a suggested order quantity. Use first to find what needs restocking. Pass lead_time_days (the vendor lead time, see the vendors tool; 14 is a sensible default) — Distru\'s own default can hide at-risk SKUs.',
+    'Inventory velocity / reorder report: SKUs at risk of stocking out with days of supply, reorder point and a suggested order quantity. Use first to find what needs restocking. Pass lead_time_days (the vendor lead time, see the vendors tool); 14 is used when omitted, because Distru computes no reorder point without one.',
   input: VelocityReportInput,
   output: VelocityReportOutput,
   run: async (ctx: DistruCtx, input) => {
     const client = ctx.connectors.distru;
+    const leadTime = input.lead_time_days ?? DEFAULT_LEAD_TIME_DAYS;
     const base: GetInventoryVelocityReportParams = {
-      below_reorder_point: input.below_reorder_point,
-      ...(input.lead_time_days !== undefined ? { lead_time_days: input.lead_time_days } : {}),
+      ...(input.below_reorder_point === 'any' ? {} : { below_reorder_point: input.below_reorder_point }),
+      lead_time_days: leadTime,
       ...(input.target_days_of_supply !== undefined ? { target_days_of_supply: input.target_days_of_supply } : {}),
       ...(input.service_level !== undefined ? { service_level: input.service_level } : {}),
       ...(input.vendor_ids ? { vendor_ids: input.vendor_ids } : {}),
@@ -103,7 +120,7 @@ export const velocityReportTool = defineReadTool({
     return {
       params: {
         below_reorder_point: input.below_reorder_point,
-        lead_time_days: input.lead_time_days ?? null,
+        lead_time_days: leadTime,
         target_days_of_supply: input.target_days_of_supply ?? null,
         service_level: input.service_level ?? null,
       },

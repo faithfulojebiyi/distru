@@ -67,6 +67,26 @@ describe('read tools against the mock', () => {
     expect(report.rows.every((r) => r.location?.id === state.locations[0]!.id && r.location.name === state.locations[0]!.name)).toBe(true);
   });
 
+  test('velocity_report never comes back empty for want of a lead time; below_reorder_point=any looks up specific SKUs', async () => {
+    // Regression: the vendor-reply workflow asked for {below_reorder_point:false, product_ids} without a lead time.
+    // Distru computes no reorder point without lead_time_days and the filter (true or false) then drops every row.
+    const noLead = VelocityReportOutput.parse(await env.read('velocity_report', {}));
+    expect(noLead.params.lead_time_days).toBe(14);
+    expect(noLead.rows.map((r) => r.sku).sort()).toEqual([...LOW_STOCK_SKUS].sort());
+
+    const state = await env.mockState();
+    const oak = state.locations[0]!.id;
+    const low = await bySku(env, 'EDB-GUM-WM');
+    const healthy = await bySku(env, 'FLW-GSC-35');
+    const product_ids = [low.id, healthy.id];
+    const above = VelocityReportOutput.parse(await env.read('velocity_report', { below_reorder_point: false, location_ids: [oak], product_ids }));
+    expect(above.rows.map((r) => r.sku)).toEqual(['FLW-GSC-35']); // a low SKU is NOT above its reorder point
+    const any = VelocityReportOutput.parse(await env.read('velocity_report', { below_reorder_point: 'any', location_ids: [oak], product_ids }));
+    expect(any.params.below_reorder_point).toBe('any');
+    expect(any.rows.map((r) => r.sku).sort()).toEqual(['EDB-GUM-WM', 'FLW-GSC-35']);
+    expect(any.rows.every((r) => r.avg_daily_demand > 0 && r.reorder_point !== null)).toBe(true);
+  });
+
   test('compliance_check marks FLW-WC-35 blocked and the other at-risk SKUs ok', async () => {
     const report = await velocity(env);
     const result = ComplianceCheckOutput.parse(await env.read('compliance_check', { product_ids: report.rows.map((r) => r.product_id) }));
