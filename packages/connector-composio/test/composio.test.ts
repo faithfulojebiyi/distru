@@ -167,6 +167,8 @@ describe('GMAIL_SEND_EMAIL through the harness', () => {
     expect(p.ops[0]!.payload).toEqual(sendInput); // plan = exact tool arguments
     expect(p.ops[0]!.summary).toBe(`Email "${sendInput.subject}" to ${VENDOR}`);
     expect(executions('GMAIL_SEND_EMAIL')).toBe(0);
+    // The emulator world seeds the vendor's mailbox with earlier PO threads (apps/emulators history).
+    const sentBefore = gmailMailbox(world.google, VENDOR).inbox().length;
 
     await env.harness.decide({ ctx: env.ctx, principal: approver, proposalId: p.id, decision: 'approve' });
     const done = await env.harness.execute({ ctx: env.ctx, proposalId: p.id });
@@ -181,7 +183,7 @@ describe('GMAIL_SEND_EMAIL through the harness', () => {
     const again = await env.harness.execute({ ctx: env.ctx, proposalId: p.id });
     expect(again.status).toBe('executed');
     expect(executions('GMAIL_SEND_EMAIL')).toBe(1);
-    expect(gmailMailbox(world.google, VENDOR).inbox()).toHaveLength(1);
+    expect(gmailMailbox(world.google, VENDOR).inbox()).toHaveLength(sentBefore + 1);
   });
 
   test('crash after send: resume finds the sent message by its marker and does not resend', async () => {

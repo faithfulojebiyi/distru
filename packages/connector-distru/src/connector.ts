@@ -5,6 +5,7 @@ import type { DistruCtx } from './shared';
 import { inventoryTool, productsGetTool, productsSearchTool, vendorsTool } from './tools/catalog';
 import { complianceCheckTool } from './tools/compliance';
 import { openOrdersTool, vendorPurchaseHistoryTool } from './tools/orders';
+import { DISTRU_RECEIVABLES_TOOLS } from './tools/receivables';
 import { velocityReportTool } from './tools/velocity';
 import { distruOrderCreatedTrigger } from './webhooks';
 
@@ -17,7 +18,7 @@ import { distruOrderCreatedTrigger } from './webhooks';
 export const distruConnector = defineConnector<DistruCtx>({
   id: 'distru',
   system: 'erp',
-  description: 'Distru cannabis ERP: inventory velocity, stock, products, vendors, purchase history, open orders, lab results / Metrc; proposes purchase orders and hand-off tasks.',
+  description: 'Distru cannabis ERP: inventory velocity, stock, products, vendors, purchase history, open orders, lab results / Metrc, overdue invoices / AR aging; proposes purchase orders and hand-off tasks.',
   readTools: [
     velocityReportTool,
     inventoryTool,
@@ -27,6 +28,8 @@ export const distruConnector = defineConnector<DistruCtx>({
     vendorPurchaseHistoryTool,
     openOrdersTool,
     complianceCheckTool,
+    // Accounts receivable: overdue balances by customer (aging buckets) and invoice search.
+    ...DISTRU_RECEIVABLES_TOOLS,
   ],
   actions: [purchasesUpsertAction, tasksCreateAction],
   // Signed ORDER CREATE webhooks (POST /api/webhooks/distru) → restock-check the ordered products.

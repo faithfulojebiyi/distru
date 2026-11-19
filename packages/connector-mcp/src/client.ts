@@ -159,7 +159,16 @@ export class McpBridgeClient {
     }
     if (!c) throw new McpBoundaryError(`MCP tool ${name} is not offered by the server`);
     if (c.kind !== 'read') throw new McpBoundaryError(`MCP tool ${name} is classified as a write and cannot be called as a read tool`);
-    return parseResult(await this.#call(name, args));
+    // Reads have no side effects, so a rate-limited one (429, e.g. too many calls in flight while parallel
+    // planners read) is retried here after Retry-After; writes are retried only by the harness executor.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return parseResult(await this.#call(name, args));
+      } catch (err) {
+        if (attempt >= READ_RETRY_ATTEMPTS || !isRateLimitedMcpError(err)) throw err;
+        await new Promise((r) => setTimeout(r, Math.min(retryAfterMsOf(err) ?? 250 * attempt, READ_RETRY_MAX_WAIT_MS)));
+      }
+    }
   }
 
   /**
@@ -178,6 +187,25 @@ export class McpBridgeClient {
     this.#connecting = null;
     if (c) await c.close();
   }
+}
+
+const READ_RETRY_ATTEMPTS = 4;
+const READ_RETRY_MAX_WAIT_MS = 2_000;
+
+const messageOf = (err: unknown) => (err instanceof Error ? err.message : typeof err === 'string' ? err : '');
+
+/** A rate-limit refusal from the MCP endpoint: HTTP 429, or a JSON-RPC rate-limit error (-32029). */
+export function isRateLimitedMcpError(err: unknown): boolean {
+  if (err instanceof McpToolError || err instanceof McpBoundaryError) return false;
+  const status = typeof err === 'object' && err !== null && 'status' in err && typeof err.status === 'number' ? err.status : undefined;
+  const code = typeof err === 'object' && err !== null && 'code' in err && typeof err.code === 'number' ? err.code : undefined;
+  return status === 429 || code === 429 || code === -32029 || /"code"\s*:\s*-32029|rate limit exceeded/i.test(messageOf(err));
+}
+
+/** `retryAfterSeconds` from a JSON-RPC rate-limit error body, in ms. */
+export function retryAfterMsOf(err: unknown): number | null {
+  const m = /"retryAfterSeconds"\s*:\s*(\d+(?:\.\d+)?)/.exec(messageOf(err));
+  return m ? Number(m[1]) * 1000 : null;
 }
 
 /** Transport-level failures worth retrying: HTTP 429 / 5xx from the MCP endpoint. */

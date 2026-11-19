@@ -247,10 +247,5 @@ export const invoicesSearchTool = defineReadTool({
   },
 });
 
-/**
- * The AR read tools. Not in `distruConnector.readTools` yet: registering them changes the catalog every
- * agent and the MCP server see (and the eval recordings keyed on it). Register them with
- * `defineConnector({ ...distruConnector, readTools: [...distruConnector.readTools, ...DISTRU_RECEIVABLES_TOOLS] })`
- * (or add them to the connector), then grant them per agent in AGENT_TOOLS.
- */
+/** The AR read tools, registered in `distruConnector.readTools` (`distru.invoices_overdue`, `distru.invoices_search`). */
 export const DISTRU_RECEIVABLES_TOOLS = [invoicesOverdueTool, invoicesSearchTool] as const;

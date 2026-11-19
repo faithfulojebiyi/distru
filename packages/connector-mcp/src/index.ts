@@ -22,6 +22,8 @@ export {
   McpToolError,
   McpBoundaryError,
   isRetryableMcpError,
+  isRateLimitedMcpError,
+  retryAfterMsOf,
   parseResult,
   textOf,
   IDEMPOTENCY_META_KEY,

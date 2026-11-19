@@ -1,18 +1,16 @@
 /** AR read tools against the mock's seeded receivables (Harbor Greens is the worst account). */
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { agentPrincipal, defineConnector, Registry } from '@ops/harness';
+import { agentPrincipal, Registry } from '@ops/harness';
 import { agingBucket, daysOverdue, distruConnector, DISTRU_RECEIVABLES_TOOLS, InvoicesOverdueOutput, InvoicesSearchOutput } from '../src';
 import { planner, setup } from './setup';
 
 const AS_OF = '2026-11-19';
 
-/** The Distru connector with the AR tools registered (the shipped connector leaves them out for now). */
-const withAr = defineConnector({ ...distruConnector, readTools: [...distruConnector.readTools, ...DISTRU_RECEIVABLES_TOOLS] });
 
 let env: ReturnType<typeof make>;
 const make = () => {
   const base = setup();
-  const registry = Registry.fromConnectors([withAr]);
+  const registry = Registry.fromConnectors([distruConnector]);
   return { ...base, registry, read: (tool: string, input: unknown = {}) => registry.runReadTool(base.ctx, planner, `distru.${tool}`, input) };
 };
 beforeEach(() => {
@@ -129,11 +127,11 @@ describe('distru_invoices_search', () => {
     expect(all.invoices).toHaveLength(25);
   });
 
-  test('registered: read tools for any principal with read scope; not in the shipped connector yet', async () => {
+  test('registered: read tools for any principal with read scope; part of the shipped connector', async () => {
     const reader = agentPrincipal('ops-lead', 'Ops Lead');
     const names = env.registry.catalog(reader).map((t) => t.toolName);
     expect(names).toEqual(expect.arrayContaining(['distru_invoices_overdue', 'distru_invoices_search']));
     expect(env.registry.catalog(reader).filter((t) => t.toolName.startsWith('distru_invoices')).every((t) => t.kind === 'read')).toBe(true);
-    expect(distruConnector.readTools.map((t) => t.name)).not.toContain('invoices_overdue');
+    expect(distruConnector.readTools.map((t) => t.name)).toEqual(expect.arrayContaining(DISTRU_RECEIVABLES_TOOLS.map((t) => t.name)));
   });
 });

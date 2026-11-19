@@ -193,6 +193,8 @@ describe('read tools against the mock', () => {
       'distru_vendor_purchase_history',
       'distru_open_orders',
       'distru_compliance_check',
+      'distru_invoices_overdue',
+      'distru_invoices_search',
       'propose_distru_purchases_upsert',
       'propose_distru_tasks_create',
     ]);
