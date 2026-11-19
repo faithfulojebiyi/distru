@@ -209,10 +209,18 @@ list it should tell you it can't see, rather than guess.
 
 ## Why everything runs on emulators
 
-This project talks to six outside services, and I don't have an account with most of them. Distru only
-turns on API access for its customers, Headset's API is for partners, and you don't want a half-built agent
-sending real emails or editing a real Slack workspace while you test it. So every outside service has a local
-stand-in that behaves like the real thing:
+Every outside service in this project runs on an emulator I built from scratch, and that was a deliberate
+choice, not a shortcut.
+
+I wanted to test against services that behave like the real ones without the hassle that usually comes with
+them: creating accounts, getting API access approved, setting up sandboxes, managing keys, cleaning up test
+data, and worrying that a half-built agent might send a real email or post in a real Slack channel. Distru
+only turns on API access for its customers and Headset's API is partner-only, so for this project the hassle
+would have been a wall. The emulators remove all of it. They speak the same protocols as the real services,
+return the same shapes and errors, send the same signed webhooks, and keep state like the real thing, so the
+code that talks to them is exactly the code that would talk to production.
+
+Here's what each one stands in for:
 
 | Stand-in | What it imitates |
 |---|---|
@@ -221,9 +229,12 @@ stand-in that behaves like the real thing:
 | `apps/emulators` | Composio, Gmail, Slack and Resend. Vendors have mailboxes and can reply; Slack has a workspace with real Approve buttons. |
 | `packages/emulators` | The engine underneath, including an emulator for the Claude API that records and replays model calls. |
 
-The emulators come from danwo, an emulator framework I built for another project. I chose it
-over Vercel's `emulate`, a good alternative, because danwo already emulates Composio, including its
-triggers. That's what lets an email from a vendor wake up an agent locally, with no real inbox involved.
+The Distru and Headset emulators were written for this project from Distru's published OpenAPI spec and MCP
+tool documentation. The Composio, Gmail, Slack, Resend and Claude emulators run on **danwo**, an emulator
+framework I built from scratch: you define a provider's routes, state, signed webhooks and OAuth once, and get
+a stateful local service you can seed, reset, fast-forward in time and break on purpose. I picked it over
+Vercel's `emulate`, a good alternative, because danwo already emulates Composio including its triggers, which
+is what lets an email from a vendor wake up an agent locally with no real inbox involved.
 
 Building it this way paid off in four ways:
 
