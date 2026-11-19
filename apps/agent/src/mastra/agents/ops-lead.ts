@@ -54,8 +54,8 @@ export function createStartRestockRunTool(launcher: RestockLauncher) {
 
 export interface OpsLeadOptions<TTools extends ToolsInput, TAgents extends Record<string, Agent>> {
   model: MastraModelConfig;
-  /** Read tools (harness-generated for the read-only principal) + start_restock_run. */
-  tools: TTools;
+  /** Read tools (harness-generated for the read-only principal) + start_restock_run; static or resolved per call. */
+  tools: TTools | (() => TTools);
   /** The specialists, exposed to the Ops Lead as subagents (Mastra supervisor pattern). */
   agents: TAgents;
   memory?: Memory;

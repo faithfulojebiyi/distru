@@ -28,6 +28,9 @@
     "@mastra/observability": "~1.24.2",
     "@mastra/pg": "~1.37.0",
     "@ops/connector-distru": "workspace:*",
+    "@ops/connector-email": "workspace:*",
+    "@ops/connector-headset": "workspace:*",
+    "@ops/connector-mcp": "workspace:*",
     "@ops/distru-client": "workspace:*",
     "@ops/harness": "workspace:*",
     "better-auth": "1.7.7",
@@ -39,6 +42,7 @@
   },
   "devDependencies": {
     "@ops/distru-mock": "workspace:*",
+    "@ops/headset-mock": "workspace:*",
     "@types/bun": "latest",
     "drizzle-kit": "^0.31.11",
     "mastra": "~1.40.1",

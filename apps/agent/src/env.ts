@@ -44,6 +44,24 @@ const EnvSchema = z.object({
   LLM_OUTPUT_USD_PER_MTOK: z.coerce.number().nonnegative().default(15),
   DISTRU_BASE_URL: z.url().default('http://localhost:4500/public/v1'),
   DISTRU_API_TOKEN: z.string().default('mock-token'),
+  /**
+   * Distru MCP server for the `distru_mcp` bridge connector (writes such as the allocation guard's
+   * per-buyer menu cap). Empty string disables the connector. Default: the local mock's /mcp.
+   */
+  DISTRU_MCP_URL: z.union([z.url(), z.literal('')]).default('http://localhost:4500/mcp'),
+  /** `distru_mcp_…` key (the mock accepts any `distru_mcp_` key). */
+  DISTRU_MCP_KEY: z.string().min(1).default('distru_mcp_mock'),
+  /** How often the MCP bridge re-lists tools (and reconnects while the server is down), in ms. */
+  DISTRU_MCP_REFRESH_MS: z.coerce.number().int().min(1000).default(60_000),
+  /** Retail sell-through analytics (Headset-style mock by default). */
+  HEADSET_BASE_URL: z.url().default('http://localhost:4600'),
+  HEADSET_API_TOKEN: z.string().min(1).default('headset-mock-token'),
+  /** Set to send vendor email through Resend; unset = in-memory mock outbox (nothing leaves the process). */
+  RESEND_API_KEY: z.string().optional(),
+  /** Sender for vendor email (required with RESEND_API_KEY). */
+  EMAIL_FROM: z.string().min(3).optional(),
+  /** Role of the Distru user who gets the "Receive PO-… on <date>" hand-off task. */
+  RESTOCK_TASK_OWNER_ROLE: z.string().min(1).default('Purchasing Manager'),
   /** HMAC secret for `x-distru-signature` on POST /api/webhooks/distru (the mock's default in dev). */
   DISTRU_WEBHOOK_SECRET: z.string().min(1).optional(),
   /** `1` registers the morning restock cron (Inngest). Off by default. */
@@ -73,6 +91,10 @@ function loadEnv(): Env {
   }
   if (env.NODE_ENV === 'production' && (!env.INNGEST_EVENT_KEY || !env.INNGEST_SIGNING_KEY)) {
     console.error('INNGEST_EVENT_KEY and INNGEST_SIGNING_KEY are required in production.');
+    process.exit(1);
+  }
+  if (env.RESEND_API_KEY && !env.EMAIL_FROM) {
+    console.error('EMAIL_FROM is required when RESEND_API_KEY is set.');
     process.exit(1);
   }
   if (env.NODE_ENV === 'production' && !env.DISTRU_WEBHOOK_SECRET) {

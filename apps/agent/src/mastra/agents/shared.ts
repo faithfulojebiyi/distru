@@ -4,7 +4,11 @@ import { z } from 'zod';
 /** What every agent factory receives: its model and its (harness-generated) tools. */
 export interface AgentFactoryOptions<TTools> {
   model: MastraModelConfig;
-  tools: TTools;
+  /**
+   * Static tools, or a function Mastra resolves on every call (the harness registry is rebuilt at
+   * runtime when the MCP connector connects or changes, so the app passes a function).
+   */
+  tools: TTools | (() => TTools);
 }
 
 /**

@@ -6,9 +6,11 @@
  * the role is then set server-side because clients can never set it.
  * Also ensures the default policy rules (harness rule configs).
  */
-import { BUILTIN_POLICY_RULES, deepEqual, RULE_KEYS, type PolicyRuleConfig } from '@ops/harness';
+import { EMAIL_RECIPIENT_DOMAINS_RULE } from '@ops/connector-email';
+import { deepEqual, RULE_KEYS, type PolicyRuleConfig } from '@ops/harness';
 import { eq } from 'drizzle-orm';
 import { auth } from '../auth/auth';
+import { APP_POLICY_RULES, DEFAULT_ALLOWED_ACTIONS, DEFAULT_EMAIL_DOMAINS } from '../harness/policy';
 import { db, sql } from './client';
 import { policyRule, user, type UserRole } from './schema';
 
@@ -43,9 +45,15 @@ const DEFAULT_POLICY: Array<PolicyRuleConfig & { description: string }> = [
   },
   {
     key: RULE_KEYS.allowedActions,
-    params: { actions: ['distru.purchases.upsert'] },
+    params: { actions: DEFAULT_ALLOWED_ACTIONS },
     enabled: true,
     description: 'Actions agents may propose (registry names are namespaced by connector)',
+  },
+  {
+    key: EMAIL_RECIPIENT_DOMAINS_RULE,
+    params: { domains: DEFAULT_EMAIL_DOMAINS, onViolation: 'deny' },
+    enabled: true,
+    description: 'Vendor email may only go to these domains (the vendors on file)',
   },
   {
     key: RULE_KEYS.vendorAllowlist,
@@ -56,7 +64,7 @@ const DEFAULT_POLICY: Array<PolicyRuleConfig & { description: string }> = [
 ];
 
 for (const rule of DEFAULT_POLICY) {
-  const impl = BUILTIN_POLICY_RULES.find((r) => r.key === rule.key);
+  const impl = APP_POLICY_RULES.find((r) => r.key === rule.key);
   if (!impl) throw new Error(`Unknown policy rule '${rule.key}'`);
   impl.params.parse(rule.params);
 }
@@ -79,6 +87,8 @@ const SUPERSEDED_DEFAULTS: Array<{ key: string; params: Record<string, unknown> 
   { key: RULE_KEYS.autoApproveBelow, params: { maxValue: 500, currency: 'USD' } },
   // Before connectors, the action was registered as `purchases.upsert`; it is now `distru.purchases.upsert`.
   { key: RULE_KEYS.allowedActions, params: { actions: ['purchases.upsert'] } },
+  // Before the cross-tool restock (emails, tasks, buyer caps), only POs were allowed.
+  { key: RULE_KEYS.allowedActions, params: { actions: ['distru.purchases.upsert'] } },
 ];
 for (const old of SUPERSEDED_DEFAULTS) {
   const next = DEFAULT_POLICY.find((r) => r.key === old.key)!;

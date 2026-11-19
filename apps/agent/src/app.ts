@@ -16,7 +16,7 @@ import { createRestockFunctions } from './mastra/functions';
 import { inngest, RESTOCK_REQUESTED_EVENT } from './mastra/inngest';
 import { restockLauncher } from './mastra/restock-launcher';
 import { appHarness } from './harness/app';
-import { appRegistry, createAppCtx } from './harness/registry';
+import { appConnectors, createAppCtx } from './harness/registry';
 import { createConnectorsService } from './services/connectors';
 import { createAuditService, createProposalService } from './services/proposals';
 import { createRunsService, dbProposalLinks, resumeRunOnDecision } from './services/runs';
@@ -37,7 +37,7 @@ export function createServices(): ApiServices {
     }),
     audit: createAuditService(db),
     runs: createRunsService({ launcher: restockLauncher, proposalLinks: dbProposalLinks(db) }),
-    connectors: createConnectorsService(appRegistry, createAppCtx),
+    connectors: createConnectorsService(() => appConnectors.registry, createAppCtx, () => appConnectors.mcpStatus),
     webhooks: {
       distruSecret: env.DISTRU_WEBHOOK_SECRET,
       requestRestock: async (data) => {

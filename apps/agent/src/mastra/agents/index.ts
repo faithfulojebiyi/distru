@@ -2,7 +2,7 @@ import type { MastraModelConfig } from '@mastra/core/llm';
 import type { Memory } from '@mastra/memory';
 import type { Env } from '../../env';
 import type { RestockLauncher } from '../restock-launcher';
-import { createHarnessTools, type HarnessToolDeps } from '../tools/harness-tools';
+import { createHarnessTools, type HarnessToolDeps, type HarnessToolSet } from '../tools/harness-tools';
 import { createComplianceReviewer } from './compliance-reviewer';
 import { createInventoryAnalyst } from './inventory-analyst';
 import { createOpsLead, createStartRestockRunTool } from './ops-lead';
@@ -35,14 +35,25 @@ export function modelsFromEnv(env: Env): Record<AgentKey, string> {
  * specialists as subagents. Register the returned object as `agents` on the Mastra instance.
  */
 export function createAgents<TCtx>(deps: AgentDeps<TCtx>) {
-  const tools = (key: AgentKey) => createHarnessTools(deps, key);
+  // Resolved per agent call from the *current* registry (memoized per registry instance), so tools
+  // contributed by a connector that came up after boot (e.g. distru_mcp) appear without a restart.
+  const cache = new Map<AgentKey, { registry: unknown; tools: HarnessToolSet }>();
+  const tools = (key: AgentKey) => (): HarnessToolSet => {
+    const registry = deps.registry;
+    const hit = cache.get(key);
+    if (hit && hit.registry === registry) return hit.tools;
+    const built = createHarnessTools(deps, key);
+    cache.set(key, { registry, tools: built });
+    return built;
+  };
   const inventoryAnalyst = createInventoryAnalyst({ model: deps.models.inventoryAnalyst, tools: tools('inventoryAnalyst') });
   const procurementPlanner = createProcurementPlanner({ model: deps.models.procurementPlanner, tools: tools('procurementPlanner') });
   const complianceReviewer = createComplianceReviewer({ model: deps.models.complianceReviewer, tools: tools('complianceReviewer') });
   const policyCritic = createPolicyCritic({ model: deps.models.policyCritic, tools: tools('policyCritic') });
+  const startRestockRun = createStartRestockRunTool(deps.launcher);
   const opsLead = createOpsLead({
     model: deps.models.opsLead,
-    tools: { ...tools('opsLead'), start_restock_run: createStartRestockRunTool(deps.launcher) },
+    tools: () => ({ ...tools('opsLead')(), start_restock_run: startRestockRun }),
     agents: { inventoryAnalyst, procurementPlanner, complianceReviewer, policyCritic },
     ...(deps.memory ? { memory: deps.memory } : {}),
   });

@@ -7,16 +7,21 @@ import {
   type Harness,
   type HarnessConfig,
   type IdGenerator,
+  type PolicyEngine,
   type Registry,
   type StepRunner,
 } from '@ops/harness';
 import { db as defaultDb, type DB } from '../db/client';
 import { DrizzleAuditSink } from './audit-sink';
+import { appPolicyEngine } from './policy';
 import { DrizzlePolicyRuleSource } from './policy-rules';
 import { DrizzleProposalStore } from './proposal-store';
 
 export interface AppHarnessOptions<TCtx> {
-  registry: Registry<TCtx>;
+  /** The registry, or a getter for the current one (the app rebuilds it when MCP tools change). */
+  registry: Registry<TCtx> | (() => Registry<TCtx>);
+  /** Policy engine; default: the app engine (harness built-ins + connector rules such as email_recipient_domains). */
+  policyEngine?: PolicyEngine;
   /** Defaults to the app's Drizzle client. */
   db?: DB;
   /**
@@ -47,6 +52,7 @@ export function createAppHarness<TCtx>(options: AppHarnessOptions<TCtx>): Harnes
     steps: options.steps ?? inlineStepRunner,
     ...(options.errors ? { errors: options.errors } : {}),
     ...(options.ids ? { ids: options.ids } : {}),
+    policyEngine: options.policyEngine ?? appPolicyEngine,
     ...options.config,
   });
 }

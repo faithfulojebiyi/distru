@@ -70,13 +70,37 @@ ports against Postgres (`src/harness/`):
 | `audit-sink.ts` | `AuditSink` | INSERT-only into `audit_event`; `seq` (bigserial) gives total order |
 | `policy-rules.ts` | `PolicyRuleSource` | `policy_rule` rows → `{ key, params, enabled }`, read per evaluation |
 | `harness.ts` | factory | `createAppHarness({ registry })`: Drizzle ports + system clock + inline steps. `inngestStepRunner(step)` adapts Inngest step tools for one durable step per op; inside a Mastra workflow step keep the inline runner (the Mastra step is the durable boundary, nested `step.run` isn't allowed) |
-| `registry.ts` | `Registry<DistruCtx>` | `Registry.fromConnectors([distruConnector])`; `appContexts()` builds the read ctx (client retries) and the execute ctx (`maxRetries: 0`, so 429s reach the harness) from `DISTRU_BASE_URL`/`DISTRU_API_TOKEN` |
-| `app.ts` | singletons | `appHarness` (with `distruErrorClassifier`) and `appPolicyRules`, shared by routes and the restock workflow |
+| `registry.ts` | `Registry<AppCtx>` | connectors `distru`, `headset`, `email`, `distru_mcp`; `AppConnectors` (async boot, degraded mode, refresh → rebuild); `appContexts()` (read ctx with client retries, execute ctx with `maxRetries: 0`); `appErrorClassifier` routed per connector |
+| `policy.ts` | — | `appPolicyEngine` = harness built-ins + `emailRecipientDomainsRule`, used by the harness *and* `dryRunPolicy`; seed defaults (`DEFAULT_ALLOWED_ACTIONS`, `DEFAULT_EMAIL_DOMAINS`) |
+| `app.ts` | singletons | `appHarness` (registry getter, `appErrorClassifier`, `appPolicyEngine`) and `appPolicyRules`, shared by routes and the restock workflow |
 | `dry-run.ts` | — | `previewOp` / `dryRunPolicy`: what `harness.propose` would compute, without persisting (propose tools + review loop) |
 
+### Connectors and boot (`src/harness/registry.ts`)
+
+| id | system | role |
+|---|---|---|
+| `distru` | erp | REST: velocity, stock, vendors, compliance; `purchases.upsert`, `tasks.create` |
+| `headset` | analytics | retail sell-through (read-only): `retail_trends`, `demand_signal`, … (`HEADSET_BASE_URL`, `HEADSET_API_TOKEN`) |
+| `email` | email | `send_vendor_po` (high risk: always a human). Mock outbox by default; Resend when `RESEND_API_KEY` (+ `EMAIL_FROM`) is set |
+| `distru_mcp` | erp | Distru's MCP through the bridge (`DISTRU_MCP_URL`, default `http://localhost:4500/mcp`; `DISTRU_MCP_KEY`, default `distru_mcp_mock`; empty URL disables it) |
+
+`distru_mcp` is built from a live `tools/list`, so `src/index.ts` awaits `appConnectors.start()` before
+serving. **Degraded mode**: if the MCP server is unreachable the app boots without it, logs why, and
+`GET /api/connectors` lists `distru_mcp` with `health.ok: false` and the reason. A timer
+(`DISTRU_MCP_REFRESH_MS`, default 60 s) retries; once connected each tick re-lists tools and rebuilds
+the registry when tools were added, removed or reclassified. A connector that was registered once is
+never dropped because the server is briefly down (pending proposals may reference its actions); its
+health probe reports the outage instead. The harness reads the registry through a getter and the agents
+resolve their tools per call (Mastra dynamic `tools`, memoized per registry instance), so a rebuilt
+registry is live without a restart. Errors are classified by the failing op's connector
+(`routeErrorClassifier`: Distru REST, MCP endpoint, Resend).
+
 Default policy (seeded): `max_total_value` $25,000 (deny above), `auto_approve_below` `{ amount: 500, max_risk: 'medium' }`
-(so small Distru POs, which are medium risk, auto-approve; high risk never does), `high_risk_requires_approval`, `allowed_actions: [distru.purchases.upsert]`, and `vendor_allowlist`
-present but disabled.
+(so small Distru POs, which are medium risk, auto-approve; high risk never does), `high_risk_requires_approval`,
+`allowed_actions: [distru.purchases.upsert, distru_mcp.mutate_product, email.send_vendor_po, distru.tasks.create]`
+(an unedited old `[distru.purchases.upsert]` row is upgraded by the seed), `email_recipient_domains` (enabled, deny
+outside the six mock vendors' domains, e.g. `sierraextractsco.com`), and `vendor_allowlist` present but disabled.
+Emails, tasks and buyer caps are `moneyless` (value 0), so `max_total_value` still applies to a cross-tool proposal.
 
 ## Agents and the restock workflow
 
@@ -86,13 +110,38 @@ present but disabled.
   `OPS_AGENT_MODEL`). Tools are generated from `registry.catalog(principal)` (`src/mastra/tools/harness-tools.ts`).
 - `propose_*` tools never write: inside a workflow run they add an op to the run's draft (same vendor + location
   replaces), outside one they call `harness.propose` (pending proposal).
-- `src/mastra/workflows/restock.ts` (Inngest): prepare → foreach location Analyst → group by vendor → foreach
-  vendor Planner → review loop (Compliance veto + deterministic `compliance_check`, plan guard, policy dry-run,
-  deny → Critic → Planner revision with per-vendor budgets; max 2 revisions) → one proposal → suspend unless
-  auto-approved → execute → finalize. Cron (`RESTOCK_CRON_ENABLED=1`) and webhook triggers are Inngest
+- `src/mastra/workflows/restock.ts` (Inngest): prepare → foreach location Analyst → group by vendor (+ allocation
+  guard, in code) → foreach vendor Planner → review loop (Compliance veto + deterministic `compliance_check`, plan
+  guard, policy dry-run, deny → Critic → Planner revision with per-vendor budgets; max 2 revisions) → one
+  cross-tool proposal → suspend unless auto-approved → execute → finalize.
+
+### Cross-tool restock
+
+- **Inventory Analyst** blends wholesale velocity (Distru) with retail sell-through (Headset `retail_trends`,
+  `demand_signal`; the maths is in `demand_signal`, not the prompt). SKUs that retail flags `reorder_now`/`watch`
+  are included even when Distru says OK (`flagged_by: retail`), and every reason cites both sources.
+- **Allocation guard** (`src/mastra/workflows/cross-tool.ts`, code only): a SKU whose retail-adjusted days of supply
+  (recomputed with `headset.demand_signal`) are below its vendor's lead time will stock out before the PO arrives.
+  Cap = company-wide available ÷ distinct buyers with orders in the last 14 days, rounded down to whole cases, at
+  least one case; skipped when nobody ordered it or an existing cap is already tighter. The Planner gets the caps as
+  suggestions and proposes `distru_mcp.mutate_product` `{ action: UPDATE, id, maxMenuBuyerOrderQuantity }`; the plan
+  guard denies any other value/field, and a suggestion the Planner omitted is backfilled by the workflow
+  (`meta.crossTool[].source: guard-backfill`). Caps whose SKU ends up on no PO are dropped. `before` comes from
+  `get-product`, so the diff is `null → 25` and an undo can restore it. No caps (with a rationale note) while
+  `distru_mcp` is down.
+- **Assembly** (per PO, in this order): PO → its buyer cap(s) → `email.send_vendor_po` to the vendor's PO address →
+  `distru.tasks.create` "Receive {{op:N.purchase_number}} on <date>" (due = today + lead time, owner resolved from
+  `RESTOCK_TASK_OWNER_ROLE` via `GET /users`, linked with `purchase_id: {{op:N.recordId}}`). The email and the task
+  use **harness op references** (packages/harness README, "Op references"): the diff shows the placeholder, the
+  executor resolves it from the PO op's result and records the value in `op.result.resolved`. Because the email is
+  high risk, a proposal with POs always needs a human. `RestockDeps.crossTool` can switch each part off.
+- `RestockResult` adds `emailIds`, `taskIds`, `buyerCapProductIds`; a failure names the failed op and stays
+  resumable (earlier ops are skipped on resume). Proposal meta carries `atRisk` (why each SKU is in), `allocationGuard`
+  (with status) and `crossTool` (op → PO, source). Cron (`RESTOCK_CRON_ENABLED=1`) and webhook triggers are Inngest
   functions in `src/mastra/functions.ts`.
-- `bun run restock:demo [-- --location "Los Angeles"]`: live demo through the API (needs ANTHROPIC_API_KEY, the
-  mock on :4500, the server and `bun run inngest:dev`).
+- `bun run restock:demo [-- --location "Oakland"]`: live demo through the API (needs ANTHROPIC_API_KEY, the
+  Distru mock on :4500 (REST + MCP), the Headset mock on :4600 (`bun run dev:headset`), the server and
+  `bun run inngest:dev`). Prints ops per system, retail-driven picks, guard caps, emails, tasks and cost.
 
 ## Layout
 

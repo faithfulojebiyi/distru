@@ -1,7 +1,13 @@
 import { createApp } from './app';
 import { sql } from './db/client';
 import { env } from './env';
+import { appConnectors } from './harness/registry';
 import { mastra } from './mastra';
+
+// Build the registry before serving: connects the Distru MCP bridge from a live tools/list. If the MCP
+// server is down this resolves anyway (degraded: no distru_mcp, reported unhealthy, retried on a timer).
+const mcp = await appConnectors.start();
+console.log(`connectors: ${appConnectors.registry.connectors().map((c) => c.id).join(', ')}${mcp.state === 'connected' ? '' : ` (distru_mcp ${mcp.state}: ${mcp.detail})`}`);
 
 const app = await createApp();
 
@@ -24,6 +30,7 @@ async function shutdown(signal: string) {
   shuttingDown = true;
   console.log(`${signal} received, shutting down`);
   await server.stop();
+  await appConnectors.stop();
   await mastra.shutdown();
   await sql.end({ timeout: 5 });
   process.exit(0);

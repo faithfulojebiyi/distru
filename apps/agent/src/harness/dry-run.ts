@@ -1,8 +1,9 @@
 import {
   assertScope,
+  opValueOf,
   parseWith,
-  PolicyEngine,
   totalValue,
+  type PolicyEngine,
   type FieldChange,
   type OpRequest,
   type PolicyEvaluation,
@@ -11,6 +12,7 @@ import {
   type Registry,
   type Risk,
 } from '@ops/harness';
+import { appPolicyEngine } from './policy';
 
 /**
  * Dry-run helpers: everything `harness.propose` computes for an op (validate → load before → plan →
@@ -45,20 +47,19 @@ export async function previewOp<TCtx>(registry: Registry<TCtx>, ctx: TCtx, princ
     payload,
     diff: action.diff(before, payload),
     summary: (await action.summarize?.(input, payload, ctx, before)) ?? null,
-    // Own property only: every object inherits Object.prototype.valueOf (same rule as harness planOp).
-    value: Object.hasOwn(action, 'valueOf') ? (action.valueOf?.(payload) ?? null) : null,
+    // Same rule as harness planOp: the action's own valueOf, 0 when moneyless, else unknown.
+    value: opValueOf(action, payload),
     vendorIds: action.vendorIdsOf?.(payload) ?? null,
   };
 }
 
-const defaultEngine = new PolicyEngine();
 
 /** The verdict `harness.propose` would reach for these previews, with the same rule source. */
 export async function dryRunPolicy(
   rules: PolicyRuleSource,
   principal: Principal,
   previews: readonly OpPreview[],
-  engine: PolicyEngine = defaultEngine,
+  engine: PolicyEngine = appPolicyEngine,
 ): Promise<PolicyEvaluation> {
   return engine.evaluate(
     {

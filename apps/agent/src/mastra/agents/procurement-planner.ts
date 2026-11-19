@@ -17,6 +17,28 @@ export const PlannedLineSchema = z
   })
   .meta({ id: 'PlannedLine' });
 
+/**
+ * Allocation guard suggestion, computed in CODE by the workflow (never by a model): the SKU will stock
+ * out before this vendor's PO can arrive (adjusted days of supply < lead time), so remaining stock is
+ * shared with a per-buyer cap on each Distru Commerce menu order (`maxMenuBuyerOrderQuantity`).
+ */
+export const GuardSuggestionSchema = z
+  .object({
+    product_id: z.string(),
+    sku: z.string(),
+    name: z.string(),
+    cap: z.number().int().positive().describe('Units per buyer per menu order (whole cases, at least one case)'),
+    current_cap: z.number().int().nullable().describe('maxMenuBuyerOrderQuantity today (null = no cap)'),
+    available: z.number().describe('Company-wide available units'),
+    active_buyers: z.number().int().describe('Distinct customers that ordered it in the last 14 days'),
+    units_per_case: z.number().nullable(),
+    adjusted_days_of_supply: z.number(),
+    lead_time_days: z.number(),
+    reason: z.string(),
+  })
+  .meta({ id: 'GuardSuggestion' });
+export type GuardSuggestion = z.infer<typeof GuardSuggestionSchema>;
+
 export const PlannerResultSchema = z
   .object({
     vendor_id: z.string(),
@@ -29,8 +51,9 @@ export type PlannerResult = z.infer<typeof PlannerResultSchema>;
 
 export const PROCUREMENT_PLANNER_INSTRUCTIONS = `
 You are the Procurement Planner for a cannabis distributor running on Distru ERP. For ONE vendor you turn
-at-risk SKUs into draft purchase orders. You are the only agent that can propose writes, and you can only
-*propose*: propose_distru_purchases_upsert adds a PO to the run's draft proposal. Nothing is written until the
+at-risk SKUs into draft purchase orders (and, when asked, per-buyer menu caps). You are the only agent that can
+propose writes, and you can only *propose*: propose_distru_purchases_upsert adds a PO to the run's draft
+proposal. (The vendor email and the receiving task for each PO are added by the workflow, not by you.) Nothing is written until the
 deterministic policy engine allows it and a human approves it. You cannot approve.
 
 ## Method
@@ -48,6 +71,20 @@ deterministic policy engine allows it and a human approves it. You cannot approv
    earlier draft (use that to revise).
 6. Return every SKU you were given in \`lines\` with decision ordered or skipped and the reason.
 
+## Retail-adjusted demand
+SKUs carry adjusted_avg_daily_demand / adjusted_days_of_supply from the retail blend (Headset). When there is
+no suggested_qty, size the order with adjusted_avg_daily_demand instead of avg_daily_demand when it is present
+and larger. A SKU with recommendation "watch" whose formula quantity is zero or negative is skipped (say
+"covered: watch only").
+
+## Allocation guard (per-buyer menu cap)
+When the task lists ALLOCATION GUARD suggestions (computed by the workflow in code: the SKU will run out before
+your PO can arrive), propose each one with propose_distru_mcp_mutate_product:
+{ "action": "UPDATE", "id": <product_id>, "maxMenuBuyerOrderQuantity": <cap> } — exactly the suggested cap,
+no other fields. It limits how many units one buyer may put in a single Distru Commerce menu order (sales reps
+are exempt), so the remaining stock is shared until the PO arrives. Only propose caps for SKUs you order. If
+the tool is not available, skip it and say so in your summary.
+
 ## Revisions
 When you receive policy feedback (from the deterministic policy engine via the Policy Critic), follow the
 revision instructions exactly: e.g. reduce quantities to fit a total cap, drop vetoed lines, or split
@@ -62,15 +99,24 @@ ${UNTRUSTED_DATA_RULES}`.trim();
 export interface PlannerTask {
   vendor: { id: string; name: string; lead_time_days: number | null };
   items: AtRiskSku[];
+  guard?: GuardSuggestion[] | undefined;
   scenarioNote?: string | undefined;
+}
+
+function guardLine(guard: readonly GuardSuggestion[] | undefined): string | null {
+  if (!guard?.length) return null;
+  return `ALLOCATION GUARD suggestions (computed in code; propose each with propose_distru_mcp_mutate_product, exact cap): ${JSON.stringify(
+    guard.map((g) => ({ product_id: g.product_id, sku: g.sku, cap: g.cap, current_cap: g.current_cap, reason: g.reason })),
+  )}`;
 }
 
 export function plannerPrompt(task: PlannerTask): string {
   return [
     `Plan purchase orders for vendor "${task.vendor.name}" (vendor_id ${task.vendor.id}, lead time ${task.vendor.lead_time_days ?? 'unknown'} days).`,
     `At-risk SKUs (from the Inventory Analysts): ${JSON.stringify(task.items)}`,
+    guardLine(task.guard),
     task.scenarioNote ? `Operator note (from the person who started the run): ${task.scenarioNote}` : null,
-    'Propose one PO per receiving location with propose_distru_purchases_upsert, then return your result.',
+    `Propose one PO per receiving location with propose_distru_purchases_upsert${task.guard?.length ? ', then each allocation-guard cap' : ''}, then return your result.`,
   ]
     .filter(Boolean)
     .join('\n');
@@ -91,6 +137,7 @@ export function plannerRevisionPrompt(task: RevisionTask): string {
     `Revision instructions from the Policy Critic: ${task.instruction}`,
     task.vetoedProductIds.length ? `Vetoed by compliance (never re-add): ${JSON.stringify(task.vetoedProductIds)}` : null,
     `At-risk SKUs for context: ${JSON.stringify(task.items)}`,
+    guardLine(task.guard),
     'Re-propose every affected location with propose_distru_purchases_upsert (it replaces the earlier draft), then return your result.',
   ]
     .filter(Boolean)

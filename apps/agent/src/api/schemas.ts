@@ -102,6 +102,8 @@ export const SerializedErrorSchema = z
   .object({ name: z.string(), message: z.string(), code: z.string().optional() })
   .meta({ id: 'SerializedError' });
 
+const OutputValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
 export const OpResultSchema = z
   .object({
     recordId: z.string().nullable(),
@@ -110,6 +112,10 @@ export const OpResultSchema = z
     mismatches: z.array(MismatchSchema),
     error: SerializedErrorSchema.nullable(),
     finishedAt: z.string(),
+    /** Values this op's record exports to later ops of the proposal (`{{op:<index>.<key>}}`), e.g. `{ purchase_number }`. */
+    outputs: z.record(z.string(), OutputValueSchema).optional(),
+    /** Op references substituted into this op's payload at execute time (placeholder → value). The stored payload keeps the placeholder. */
+    resolved: z.record(z.string(), OutputValueSchema).optional(),
   })
   .meta({ id: 'OpResult' });
 

@@ -8,7 +8,7 @@ import { db } from '../db/client';
 import { env } from '../env';
 import { appHarness, appPolicyRules } from '../harness/app';
 import { findProposalByRunId } from '../harness/proposal-store';
-import { appContexts, appRegistry } from '../harness/registry';
+import { appConnectors, appContexts } from '../harness/registry';
 import { createAgents, modelsFromEnv } from './agents';
 import { mcpServers } from './mcp';
 import { restockLauncher } from './restock-launcher';
@@ -19,12 +19,16 @@ import { createRestockWorkflow, type RestockDeps } from './workflows/restock';
 
 /** What the restock workflow runs against: the app harness (Postgres), the Distru connector, the seeded policy. */
 export const restockDeps: RestockDeps = {
-  registry: appRegistry,
+  // Getter: the registry is rebuilt when the Distru MCP bridge connects or its tools change.
+  get registry() {
+    return appConnectors.registry;
+  },
   harness: appHarness,
   policyRules: appPolicyRules,
   contexts: appContexts,
   pricing: { inputUsdPerMTok: env.LLM_INPUT_USD_PER_MTOK, outputUsdPerMTok: env.LLM_OUTPUT_USD_PER_MTOK },
   findProposalByRunId: (runId) => findProposalByRunId(db, runId),
+  crossTool: { taskOwnerRole: env.RESTOCK_TASK_OWNER_ROLE },
 };
 
 /**
@@ -32,7 +36,9 @@ export const restockDeps: RestockDeps = {
  * Model ids come from env per agent; ANTHROPIC_API_KEY is only needed when an agent is called.
  */
 export const agents = createAgents({
-  registry: appRegistry,
+  get registry() {
+    return appConnectors.registry;
+  },
   harness: appHarness,
   readCtx: () => appContexts().read,
   models: modelsFromEnv(env),

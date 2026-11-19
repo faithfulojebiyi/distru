@@ -9,8 +9,8 @@ import { z } from 'zod';
 import { AGENT_KEYS, AGENTS, principalFor } from '../src/mastra/agents/roster';
 import { toolDescriptorsFor } from '../src/mastra/tools/harness-tools';
 import { VetoedLineSchema, RestockResultSchema } from '../src/mastra/workflows/restock';
-import { appRegistry } from '../src/harness/registry';
 import { createRunsService, harnessProposalLinks, resumeRunOnDecision } from '../src/services/runs';
+import { DEFAULT_ALLOWED_ACTIONS } from '../src/harness/policy';
 import { FAILED_TEST_SKU, INJECTION_SKU, restockEnv, type RestockEnv } from './fixtures/restock-env';
 
 const Meta = z.object({
@@ -22,7 +22,8 @@ const Meta = z.object({
 });
 
 const LinesInput = z.object({ vendor_id: z.string(), location_id: z.string(), lines: z.array(z.object({ product_id: z.string(), quantity: z.number(), unit_price: z.number() })) });
-const linesOf = (p: Proposal) => p.ops.flatMap((op) => LinesInput.parse(op.input).lines);
+const poOps = (p: Proposal) => p.ops.filter((op) => op.action === 'distru.purchases.upsert');
+const linesOf = (p: Proposal) => poOps(p).flatMap((op) => LinesInput.parse(op.input).lines);
 
 async function la(env: RestockEnv) {
   const locs = await env.locations();
@@ -42,7 +43,7 @@ async function start(env: RestockEnv, trigger: Parameters<RestockEnv['launcher']
 
 describe('restock workflow (scripted models, in-process mock)', () => {
   test('default scenario: FLW-WC-35 vetoed, VAP-PE-1G injection flagged and not obeyed, suspends for approval', async () => {
-    const env = restockEnv();
+    const env = await restockEnv();
     const { ids, trigger } = await defaultScope(env);
     const runId = await start(env, trigger);
     const state = await env.waitFor(runId, ['suspended']);
@@ -69,15 +70,18 @@ describe('restock workflow (scripted models, in-process mock)', () => {
     expect(pe.quantity).toBeLessThan(5000);
     expect(lines.every((l) => l.quantity < 5000)).toBe(true);
 
-    // One proposal, one op per vendor/location; suspended on await-decision with the proposal id.
-    expect(p.ops.length).toBe(2);
+    // One proposal, one PO per vendor/location (each followed by its vendor email and receiving task);
+    // suspended on await-decision with the proposal id.
+    expect(poOps(p).length).toBe(2);
+    expect(p.ops.filter((op) => op.action === 'email.send_vendor_po')).toHaveLength(2);
+    expect(p.ops.filter((op) => op.action === 'distru.tasks.create')).toHaveLength(2);
     expect(state.steps?.['await-decision']).toMatchObject({ status: 'suspended', suspendPayload: { proposalId: p.id } });
     expect(env.net.purchaseWrites).toBe(0);
     expect(p.rationale).toContain('Vetoed lines');
   });
 
   test('suspension → approve → resume → PO created and verified → re-running execute writes nothing', async () => {
-    const env = restockEnv();
+    const env = await restockEnv();
     const { trigger } = await defaultScope(env);
     const runId = await start(env, trigger);
     await env.waitFor(runId, ['suspended']);
@@ -109,7 +113,7 @@ describe('restock workflow (scripted models, in-process mock)', () => {
   });
 
   test('reject path: run ends rejected, nothing written', async () => {
-    const env = restockEnv();
+    const env = await restockEnv();
     const { trigger } = await defaultScope(env);
     const runId = await start(env, trigger);
     await env.waitFor(runId, ['suspended']);
@@ -122,8 +126,8 @@ describe('restock workflow (scripted models, in-process mock)', () => {
     expect((await env.harness.get(p.id)).status).toBe('rejected');
   });
 
-  test('auto-approve path: a medium-risk PO under $500 executes without a human', async () => {
-    const env = restockEnv({ planner: { quantity: () => 5 } });
+  test('auto-approve path: a medium-risk PO under $500 (no vendor email/task/caps) executes without a human', async () => {
+    const env = await restockEnv({ planner: { quantity: () => 5 }, crossTool: { vendorEmails: false, receivingTasks: false, allocationGuard: false } });
     const bd = await env.productId('FLW-BD-35');
     const runId = await start(env, { triggeredBy: 'test', locationIds: [(await la(env)).id], productIds: [bd] });
     const done = await env.waitFor(runId, ['success']);
@@ -141,10 +145,10 @@ describe('restock workflow (scripted models, in-process mock)', () => {
   });
 
   test('revision path: a tiny max_total_value denies the plan → Policy Critic → Planner revises → within cap', async () => {
-    const env = restockEnv({
+    const env = await restockEnv({
       rules: [
         { key: 'max_total_value', params: { max: 300 } },
-        { key: 'allowed_actions', params: { actions: ['distru.purchases.upsert'] } },
+        { key: 'allowed_actions', params: { actions: DEFAULT_ALLOWED_ACTIONS } },
       ],
       planner: { revise: 'shrink' },
     });
@@ -157,6 +161,8 @@ describe('restock workflow (scripted models, in-process mock)', () => {
     expect(meta.critiques[0]?.explanation).toContain('max_total_value');
     expect(p.policy.outcome).not.toBe('deny');
     expect(p.ops.reduce((s, op) => s + (op.value ?? 0), 0)).toBeLessThanOrEqual(300);
+    // Emails, tasks and caps move no money (value 0), so the total stays checkable.
+    expect(p.ops.every((op) => op.value !== null)).toBe(true);
     expect(state.status).toBe('suspended');
 
     // Timeline: Policy Critic and the Planner's revision appear on review-round.
@@ -168,7 +174,7 @@ describe('restock workflow (scripted models, in-process mock)', () => {
   });
 
   test('injection obeyed by the Planner is caught by the plan guard and revised away', async () => {
-    const env = restockEnv({ planner: { obeyInjection: true, revise: 'suggested' } });
+    const env = await restockEnv({ planner: { obeyInjection: true, revise: 'suggested' } });
     const { ids, trigger } = await defaultScope(env);
     const runId = await start(env, trigger);
     await env.waitFor(runId, ['suspended']);
@@ -182,7 +188,7 @@ describe('restock workflow (scripted models, in-process mock)', () => {
   });
 
   test('GET /api/runs data: list + detail timeline with agents, tokens, cost, tool calls and the linked proposal', async () => {
-    const env = restockEnv();
+    const env = await restockEnv();
     const { trigger } = await defaultScope(env);
     const runId = await start(env, trigger);
     await env.waitFor(runId, ['suspended']);
@@ -213,17 +219,17 @@ describe('restock workflow (scripted models, in-process mock)', () => {
 
 describe('agent scopes', () => {
   test('no agent can approve: no approve/decide tool, principals refuse the scope, harness.decide rejects agents', async () => {
+    const env = await restockEnv();
     for (const key of AGENT_KEYS) {
       const principal = principalFor(key);
       expect(principal.scopes).not.toContain('approve');
-      const names = toolDescriptorsFor(appRegistry, key).map((d) => d.toolName);
+      const names = toolDescriptorsFor(env.connectors.registry, key).map((d) => d.toolName);
       expect(names.some((n) => /approve|decide|execute/.test(n))).toBe(false);
       const proposes = names.filter((n) => n.startsWith('propose_'));
       expect(proposes.length > 0).toBe(key === 'procurementPlanner');
     }
     expect(() => PrincipalSchema.parse({ kind: 'agent', id: 'x', scopes: ['read', 'approve'] })).toThrow();
 
-    const env = restockEnv();
     const tools = Object.keys((await env.agents.opsLead.listTools()) ?? {});
     expect(tools).toContain('start_restock_run');
     expect(tools.some((n) => /approve|decide|propose_/.test(n))).toBe(false);
@@ -242,13 +248,13 @@ describe('agent scopes', () => {
   });
 
   test('propose tool outside a workflow creates a pending proposal and never writes to Distru', async () => {
-    const env = restockEnv();
+    const env = await restockEnv();
     const tools = await env.agents.procurementPlanner.listTools();
     const tool = tools['propose_distru_purchases_upsert'];
     expect(tool?.execute).toBeDefined();
     const loc = await la(env);
     const bd = await env.productId('FLW-BD-35');
-    const vendor = z.object({ vendor: z.object({ id: z.string() }) }).parse(await appRegistry.runReadTool(env.contexts.read, principalFor('procurementPlanner'), 'distru.products_get', { product_id: bd }));
+    const vendor = z.object({ vendor: z.object({ id: z.string() }) }).parse(await env.connectors.registry.runReadTool(env.contexts.read, principalFor('procurementPlanner'), 'distru.products_get', { product_id: bd }));
     const out = await tool!.execute!({ vendor_id: vendor.vendor.id, location_id: loc.id, lines: [{ product_id: bd, quantity: 48, unit_price: 14 }] }, {});
     expect(out).toMatchObject({ ok: true, mode: 'proposal', status: 'pending_approval' });
     expect(env.net.purchaseWrites).toBe(0);

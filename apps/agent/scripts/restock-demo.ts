@@ -1,23 +1,25 @@
 /**
  * Live restock demo through the HTTP API (real model, local Distru mock, Inngest dev server):
  *
- *   reset the mock → operator starts a run → wait for suspension → print the proposal (diff summary,
- *   policy reasons, vetoed lines, ignored injections) → approver approves → wait for completion →
- *   print created PO ids, the run timeline (agents, tokens, cost) and the audit trail.
+ *   reset the mocks → operator starts a run → wait for suspension → print the cross-tool proposal (ops per
+ *   system, retail-driven picks, allocation-guard caps, policy reasons, vetoed lines, ignored injections)
+ *   → approver approves → wait for completion → print POs, buyer caps, vendor emails, receiving tasks,
+ *   the run timeline (agents, tokens, cost) and the audit trail.
  *
- * Prereqs (see apps/agent/README.md): Postgres + seed, `bun run dev:mock` (:4500), the agent server
- * (:4111) with ANTHROPIC_API_KEY, `bun run inngest:dev` (:8288).
+ * Prereqs (see apps/agent/README.md): Postgres + seed, `bun run dev:mock` (:4500, REST + MCP),
+ * `bun run dev:headset` (:4600), the agent server (:4111) with ANTHROPIC_API_KEY, `bun run inngest:dev` (:8288).
  *
  *   bun run restock:demo                         # all locations
  *   bun run restock:demo -- --location "Oakland"  # one location (faster, cheaper)
  *
  * Env: AGENT_URL (default http://localhost:4111), DISTRU_BASE_URL (mock; default http://localhost:4500/public/v1),
- * DEMO_TIMEOUT_MS (default 15 min).
+ * HEADSET_BASE_URL (default http://localhost:4600), DEMO_TIMEOUT_MS (default 15 min).
  */
 export {};
 
 const BASE = process.env.AGENT_URL ?? 'http://localhost:4111';
 const MOCK = new URL(process.env.DISTRU_BASE_URL ?? 'http://localhost:4500/public/v1').origin;
+const HEADSET = new URL(process.env.HEADSET_BASE_URL ?? 'http://localhost:4600').origin;
 const TIMEOUT_MS = Number(process.env.DEMO_TIMEOUT_MS ?? 15 * 60_000);
 const ORIGIN = 'http://localhost:3050';
 
@@ -117,13 +119,26 @@ function printProposal(p: Json) {
   console.log(c.bold(`\nProposal ${str(p.id)}`));
   console.log(`  ${str(p.title)}`);
   console.log(`  status ${c.yellow(str(p.status))}, policy ${str(p.policyOutcome)}, total ${money(p.totalValue)}, ${str(p.opCount)} op(s)`);
-  console.log(c.bold('  Ops (diff summary)'));
-  for (const op of arr(p.ops)) {
+  const ops = arr(p.ops);
+  const bySystem = new Map<string, number>();
+  for (const op of ops) bySystem.set(str(op.action).split('.')[0]!, (bySystem.get(str(op.action).split('.')[0]!) ?? 0) + 1);
+  console.log(c.bold(`  Ops per system: ${[...bySystem.entries()].map(([k, n]) => `${k} ${n}`).join(', ')}`));
+  console.log(c.bold('  Ops in execution order (diff summary)'));
+  for (const op of ops) {
     const input = obj(op.input);
     const lines = arr(input.lines);
-    console.log(`   #${str(op.index)} ${str(op.summary)} [${str(op.risk)} risk, ${arr(op.diff).length} field changes, idem ${str(op.idempotencyKey).slice(0, 12)}…]`);
+    console.log(`   #${str(op.index)} ${c.dim(str(op.action).padEnd(26))} ${str(op.summary)} [${str(op.risk)} risk, ${arr(op.diff).length} field changes]`);
     for (const l of lines) console.log(c.dim(`       ${str(l.product_id).slice(0, 8)}… × ${str(l.quantity)} @ ${money(l.unit_price)}`));
   }
+  const atRisk = arr(meta.atRisk);
+  const retail = atRisk.filter((a) => str(a.flagged_by) !== 'wholesale' || ['surging', 'rising'].includes(str(a.retail_signal)));
+  console.log(c.bold(`  Retail-driven picks (${retail.length} of ${atRisk.length} at-risk SKU rows)`));
+  for (const a of retail) {
+    console.log(`   ${str(a.sku).padEnd(12)} ${str(a.location).padEnd(32)} flagged_by=${str(a.flagged_by)} Distru ${str(a.reorder_status)} ${str(a.days_of_supply)}d → adjusted ${str(a.adjusted_days_of_supply)}d, retail ${str(a.retail_signal)} ${str(a.retail_growth_3w_pct)}% (${str(a.recommendation)})`);
+  }
+  const guard = arr(meta.allocationGuard);
+  console.log(c.bold(`  Allocation guard (${guard.length} computed cap(s); ${guard.filter((g) => !str(g.status).startsWith('dropped')).length} in the proposal)`));
+  for (const g of guard) console.log(`   [${str(g.status)}] ${str(g.reason)}`);
   console.log(c.bold('  Policy reasons'));
   for (const r of arr(obj(p.policy).reasons)) console.log(`   ${str(r.outcome).padEnd(14)} ${str(r.rule)}: ${str(r.message)}`);
   const vetoed = arr(meta.vetoedLines);
@@ -142,7 +157,11 @@ function printProposal(p: Json) {
 // ── 1. reset the mock ────────────────────────────────────────────────────────────────────────────
 const reset = await call('/__mock/reset', { method: 'POST', body: JSON.stringify({ scenario: 'default' }) }, MOCK);
 if (reset.status !== 200) fail(`reset the Distru mock at ${MOCK} (${reset.status}); start it with \`bun run dev:mock\``, reset.body);
-console.log(c.green(`✓ mock reset (${MOCK}, scenario default)`));
+const resetHeadset = await call('/__mock/reset', { method: 'POST', body: JSON.stringify({ scenario: 'default' }) }, HEADSET);
+if (resetHeadset.status !== 200) fail(`reset the Headset mock at ${HEADSET} (${resetHeadset.status}); start it with \`bun run dev:headset\``, resetHeadset.body);
+console.log(c.green(`✓ mocks reset (Distru ${MOCK}, Headset ${HEADSET}, scenario default)`));
+const connectors = await call<{ items: Array<{ id: string; health: { ok: boolean; detail: string | null } }> }>('/api/connectors', { cookie: await signIn('operator@demo.dev') });
+if (connectors.status === 200) console.log(`  connectors: ${connectors.body.items.map((x) => `${x.id} ${x.health.ok ? c.green('ok') : c.red('down')} (${x.health.detail ?? ''})`).join('; ')}`);
 
 // ── 2. operator starts a run ─────────────────────────────────────────────────────────────────────
 const operator = await signIn('operator@demo.dev');
@@ -201,6 +220,33 @@ console.log(`  purchase orders: ${poIds.join(', ') || 'none'}`);
 const mockState = (await call<{ recent_purchases: Array<{ id: string; purchase_number: string; status: string; total: string }> }>('/__mock/state', {}, MOCK)).body;
 const ids = new Set(poIds);
 for (const po of mockState.recent_purchases.filter((p) => ids.has(p.id))) console.log(`   ${po.purchase_number} ${po.id} ${po.status} $${po.total}`);
+
+// Cross-tool outcome, read back from each system.
+const finalProposal = (await call<Json>(`/api/proposals/${proposalId}`, { cookie: operator })).body;
+const finalOps = arr(finalProposal.ops);
+const resolvedText = (text: string, resolved: Json) => Object.entries(resolved).reduce((t, [k, v]) => t.split(k).join(str(v)), text);
+console.log(c.bold('\nOps per system (status)'));
+for (const op of finalOps) {
+  const result = obj(op.result);
+  const resolved = obj(result.resolved);
+  const refs = Object.keys(resolved).length ? c.dim(` resolved ${Object.entries(resolved).map(([k, v]) => `${k}→${str(v)}`).join(', ')}`) : '';
+  console.log(`  #${str(op.index)} ${str(op.action).padEnd(26)} ${str(op.status).padEnd(8)} ${str(result.recordId)}${result.deduplicated ? ' (dedup)' : ''}${arr(result.mismatches).length ? c.red(' MISMATCH') : ''}${refs}`);
+}
+const caps = (await call<{ buyer_caps: Array<{ sku: string; max_menu_buyer_order_quantity: number }> }>('/__mock/state', {}, MOCK)).body.buyer_caps;
+console.log(c.bold(`\nBuyer caps in Distru (via MCP mutate-product): ${caps.map((b) => `${b.sku}=${b.max_menu_buyer_order_quantity}/order`).join(', ') || 'none'}`));
+console.log(c.bold('Vendor emails (mock outbox; subject as sent)'));
+for (const op of finalOps.filter((o) => str(o.action) === 'email.send_vendor_po')) {
+  const payload = obj(op.payload);
+  const resolved = obj(obj(op.result).resolved);
+  console.log(`  ${str(obj(op.result).recordId)} → ${arr(payload.to).map(str).join(', ') || str(payload.to)}: "${resolvedText(str(payload.subject), resolved)}"`);
+}
+console.log(c.bold('Receiving tasks (Distru REST, read back)'));
+for (const op of finalOps.filter((o) => str(o.action) === 'distru.tasks.create')) {
+  const id = str(obj(op.result).recordId);
+  if (!id) continue;
+  const task = obj((await call<Json>(`/public/v1/tasks/${id}`, { headers: { Authorization: 'Bearer mock-token' } }, MOCK)).body.data);
+  console.log(`  ${str(task.name)} → ${str(obj(task.owner).full_name)}, linked ${str(obj(task.purchase).purchase_number)}, due ${str(task.due_datetime).slice(0, 10)}`);
+}
 
 const audit = (await call<{ items: Json[] }>(`/api/audit-events?proposalId=${proposalId}&order=asc&limit=200`, { cookie: operator })).body;
 console.log(c.bold('\nAudit trail'));

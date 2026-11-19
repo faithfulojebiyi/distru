@@ -40,9 +40,12 @@ export const AGENT_TOOLS: Record<AgentKey, readonly string[]> = {
     'distru.vendor_purchase_history',
     'distru.open_orders',
     'distru.compliance_check',
+    'headset.retail_trends',
+    'headset.top_movers',
   ],
-  inventoryAnalyst: ['distru.velocity_report', 'distru.inventory', 'distru.open_orders', 'distru.products_get'],
-  procurementPlanner: ['distru.vendors', 'distru.vendor_purchase_history', 'distru.products_get', 'distru.purchases.upsert'],
+  inventoryAnalyst: ['distru.velocity_report', 'distru.inventory', 'distru.open_orders', 'distru.products_get', 'headset.retail_trends', 'headset.demand_signal'],
+  // `distru_mcp.mutate_product` (per-buyer menu cap) is only present while the MCP bridge is connected.
+  procurementPlanner: ['distru.vendors', 'distru.vendor_purchase_history', 'distru.products_get', 'distru.purchases.upsert', 'distru_mcp.mutate_product'],
   complianceReviewer: ['distru.compliance_check', 'distru.products_get'],
   policyCritic: ['distru.vendors', 'distru.products_get'],
 };
@@ -50,8 +53,9 @@ export const AGENT_TOOLS: Record<AgentKey, readonly string[]> = {
 /** Per-agent budget for one agent call (tool calls = steps). The run budget caps the sum. */
 export const AGENT_BUDGETS: Record<AgentKey, BudgetLimits> = {
   opsLead: { maxSteps: 25, maxTokens: 400_000, maxCostUsd: 3, maxWallClockMs: 5 * 60_000 },
-  inventoryAnalyst: { maxSteps: 12, maxTokens: 250_000, maxCostUsd: 2, maxWallClockMs: 4 * 60_000 },
-  procurementPlanner: { maxSteps: 16, maxTokens: 250_000, maxCostUsd: 2, maxWallClockMs: 4 * 60_000 },
+  // Wholesale velocity + retail trends + one demand_signal per candidate SKU.
+  inventoryAnalyst: { maxSteps: 40, maxTokens: 500_000, maxCostUsd: 3, maxWallClockMs: 6 * 60_000 },
+  procurementPlanner: { maxSteps: 20, maxTokens: 300_000, maxCostUsd: 2, maxWallClockMs: 4 * 60_000 },
   complianceReviewer: { maxSteps: 16, maxTokens: 250_000, maxCostUsd: 2, maxWallClockMs: 4 * 60_000 },
   policyCritic: { maxSteps: 6, maxTokens: 120_000, maxCostUsd: 1, maxWallClockMs: 2 * 60_000 },
 };
@@ -62,7 +66,7 @@ export const RUN_BUDGET = { maxTokens: 2_000_000, maxCostUsd: 15 } as const;
 /** Max LLM steps (model calls) per agent call. */
 export const AGENT_MAX_STEPS: Record<AgentKey, number> = {
   opsLead: 12,
-  inventoryAnalyst: 10,
+  inventoryAnalyst: 12,
   procurementPlanner: 12,
   complianceReviewer: 12,
   policyCritic: 4,
