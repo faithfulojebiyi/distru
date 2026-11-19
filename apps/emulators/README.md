@@ -36,6 +36,15 @@ bun run --cwd apps/emulators dev     # http://localhost:4700
   `orders@sierraextractsco.com`, `orders@goldenstateedibles.com`, `orders@coastalcloudvapes.com`,
   `orders@mojaveprerollco.com`). Mail between seeded accounts is delivered, so a PO emailed through
   Composio lands in the vendor's inbox.
+- Vendor mail history (`src/history.ts`): ~3 months of threaded, already-read mail between purchasing@
+  and the six vendors, matching distru-mock's POs — PO confirmations (PO-502…PO-518), Golden State's delay
+  notice on the open PO-519 (cacao shortage, ships Dec 2), Coastal Cloud's +7 % price-change notice, Sierra
+  Extracts' "we're having supply issues with our extraction line" (plan ~3 weeks on live resin), the
+  Wedding Cake lab failure with Emerald Triangle (orders on hold pending a retest), and friendly check-ins
+  from Humboldt and Mojave. Both copies of each message share a Message-ID and replies carry
+  In-Reply-To/References, so both mailboxes thread them. It is seeded before the Gmail trigger's
+  baseline poll, so it never fires `GMAIL_NEW_GMAIL_MESSAGE`, and `simulate/vendor-reply` never replies
+  into it (no PO emailed → a fresh PO-527 thread, as before). `GET /__emu/state` lists the threads.
 - Composio project: API key above; user id **`golden-coast`**; auth configs
   `ac_goldencoast_gmail` / `ac_goldencoast_gcal`; ACTIVE connected accounts
   **`ca_goldencoast_gmail`** (Gmail) and **`ca_goldencoast_gcal`** (Calendar), both the purchasing

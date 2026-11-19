@@ -26,6 +26,7 @@ import {
 } from '@ops/emulators';
 import { z } from 'zod';
 import { COMPANY, COMPOSIO_USER_ID, findVendor, PURCHASING, SLACK_CHANNELS, SLACK_USERS, VENDORS } from './domain';
+import { seedVendorHistory, VENDOR_THREADS } from './history';
 import { composeReply, VendorReplyRequestSchema, type VendorReplyRequest } from './replies';
 
 export const WorldConfigSchema = z.object({
@@ -116,6 +117,8 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
   // Any `re_` key is accepted and no recipient allowlist is set, so every auth email is delivered to the mailbox.
   const mail = createEmulator(resend, { ...options, baseUrl: 'https://api.resend.com' });
   const vendorTokens = new Map<string, string>();
+  /** Gmail ids of the seeded historical vendor mail (never a reply target, never a trigger). */
+  let historyIds = new Set<string>();
 
   connectComposioBackends(project, { google: gmail, slack: workspace });
 
@@ -154,6 +157,9 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
       installations: [{ app: SLACK_APP.app_id, installer: 'adam', bot_token: config.slackBotToken, channels: [...SLACK_CHANNELS] }],
     });
 
+    // months of historical vendor mail, already read; seeded before the baseline poll so it never fires
+    historyIds = seedVendorHistory({ google: gmail, now: gmail.store.clock() });
+
     pollGmailTriggers(project, gmail); // baseline: messages already there never fire
   }
 
@@ -171,7 +177,7 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
     // The PO email the vendor got from purchasing (sent through Composio's GMAIL_SEND_EMAIL), if any.
     const fromBuyer = gmailMailbox(gmail, vendor.email)
       .inbox()
-      .filter((m) => m.from.toLowerCase().includes(PURCHASING.email));
+      .filter((m) => m.from.toLowerCase().includes(PURCHASING.email) && !historyIds.has(m.id));
     const original = req.poNumber ? fromBuyer.find((m) => `${m.subject}\n${m.text ?? ''}`.includes(req.poNumber ?? '')) : fromBuyer[0];
     const poNumber = req.poNumber ?? /PO-\d+/.exec(original?.subject ?? '')?.[0] ?? 'PO-527';
     const reply = composeReply(vendor, poNumber, req, original?.subject);
@@ -215,6 +221,7 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
       gmail: {
         purchasing: { inbox: gmailMailbox(gmail, PURCHASING.email).inbox().slice(0, 20).map(summary), sent: gmailMailbox(gmail, PURCHASING.email).sent().slice(0, 20).map(summary) },
         vendors: Object.fromEntries(VENDORS.map((v) => [v.key, { email: v.email, inbox: gmailMailbox(gmail, v.email).inbox().length, sent: gmailMailbox(gmail, v.email).sent().length }])),
+        history: { threads: VENDOR_THREADS.map((t) => ({ key: t.key, vendor: t.vendor, kind: t.kind, subject: t.subject, messages: t.messages.length })), messages: historyIds.size },
       },
       slack: {
         channels: Object.fromEntries(SLACK_CHANNELS.map((c) => [c, ws.messages(c).length])),
