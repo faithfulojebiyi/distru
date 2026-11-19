@@ -350,6 +350,8 @@ caching.
 
 ## A few decisions, and why
 
+The full reasoning, including how the design holds up when a constraint changes, is in [DESIGN.md](DESIGN.md).
+
 - **Mastra runs inside our own server, not `mastra dev`.** One server handles the agents, sign-in, the
   workflow engine and our API. Mastra documents this as a supported setup, and Mastra Studio still works
   next to it (`bun run studio`).
