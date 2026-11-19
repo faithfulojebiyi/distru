@@ -9,9 +9,9 @@
  * - No dry-run, idempotency or undo on any write → everything here goes through propose/approve,
  *   and DELETE is split out as its own high-risk action.
  */
-import { InputValidationError, matchesExpected, type VerifyResult, type WrittenRecord } from '@ops/harness';
+import { InputValidationError, matchesExpected, type CompensableOp, type OpResult, type VerifyResult, type WrittenRecord } from '@ops/harness';
 import { z } from 'zod';
-import { createMcpConnector, hasMarker, runContextOf, stampText, stripMarkers, type IntentArgs, type McpBridge, type McpConnectorConfig, type McpHookContext, type McpToolHooks } from './connector';
+import { createMcpConnector, hasMarker, runContextOf, stampText, stripMarkers, type IntentArgs, type McpBridge, type McpConnectorConfig, type McpHookContext, type McpToolHooks, type McpUndoPlan } from './connector';
 import { DISTRU_TOOL_TABLE } from './distru-tools';
 import type { JsonObject } from './schema';
 
@@ -367,6 +367,17 @@ export function productHooks(): McpToolHooks {
 
     recordIdOf: (parsed, payload) => z.object({ product: z.object({ id: z.string() }) }).safeParse(parsed).data?.product.id ?? str(payload.id) ?? undefined,
 
+    // Undo an UPDATE (e.g. lift the allocation guard's buyer cap): UPDATE the same fields back to their `before` values.
+    undo: {
+      canUndo: (op) => {
+        const payload = asJsonObject(op.payload);
+        if (payload?.action !== 'UPDATE') return { ok: false, reason: 'Only product UPDATEs can be undone (a created product must be removed in Distru).' };
+        if (!asJsonObject(op.before)) return { ok: false, reason: 'The product as it was before the update was not recorded.' };
+        return productUndoFields(payload).length ? { ok: true } : { ok: false, reason: 'The update changed no restorable product field.' };
+      },
+      plan: planProductUndo,
+    },
+
     summarize: (payload, before) => {
       const b = before && typeof before === 'object' ? (before as NormalizedProduct) : null;
       const label = b ? [b.sku, b.name].filter((x): x is string => typeof x === 'string' && x.length > 0).join(' ') || b.id : str(payload.name) ?? str(payload.id) ?? 'product';
@@ -381,6 +392,37 @@ export function productHooks(): McpToolHooks {
       return `${String(payload.action ?? 'CREATE')} product ${label}${fields.length ? ` (${fields.join(', ')})` : ''}`;
     },
   };
+}
+
+const asJsonObject = (v: unknown): JsonObject | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as JsonObject) : null);
+
+/** Product fields an UPDATE set that an undo restores. */
+const productUndoFields = (payload: JsonObject): (typeof PRODUCT_FIELDS)[number][] => PRODUCT_FIELDS.filter((k) => payload[k] !== undefined);
+
+const fmtCap = (v: unknown) => (v === null || v === undefined ? 'no cap' : `${String(v)} units`);
+
+async function planProductUndo(h: McpHookContext, op: CompensableOp, result: OpResult): Promise<McpUndoPlan> {
+  const payload = asJsonObject(op.payload) ?? {};
+  const before = asJsonObject(op.before) ?? {};
+  const id = str(payload.id) ?? result.recordId;
+  if (!id) throw new InputValidationError('The product op recorded no product id');
+  const product = await getProduct(h, id);
+  if (!product) throw new InputValidationError(`Product ${id} no longer exists`);
+  const fields = productUndoFields(payload);
+  const now = normalizeProduct(product, id);
+  const current: JsonObject = {};
+  const target: JsonObject = {};
+  for (const k of fields) {
+    current[k] = now[k] ?? null;
+    target[k] = (before[k] as JsonObject[string] | undefined) ?? null;
+  }
+  const label = [now.sku, now.name].filter((x): x is string => typeof x === 'string' && x.length > 0).join(' ') || id;
+  const summary =
+    fields.length === 1 && fields[0] === 'maxMenuBuyerOrderQuantity'
+      ? `Restore per-buyer menu cap on ${label}: ${fmtCap(current.maxMenuBuyerOrderQuantity)} → ${fmtCap(target.maxMenuBuyerOrderQuantity)}`
+      : `Restore ${fields.join(', ')} on product ${label}`;
+  const done = fields.every((k) => sameValue(k, current[k], target[k]));
+  return { current, target, summary, value: 0, args: done ? null : { action: 'UPDATE', id, ...target } };
 }
 
 // ── Preset ──────────────────────────────────────────────────────────────────────────────────

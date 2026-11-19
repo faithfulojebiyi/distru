@@ -90,6 +90,16 @@ Names containing `email`/`mail`/`sms` are assumed to reach `email`.
 - **verify**: per-tool `verify` resolver, else `{ ok: true, mismatches: [] }` (unverified). The tool
   description says "Result is unverified" and `bridge.tools[].unverified` is true so the UI can badge it.
 
+### Undo hooks
+
+`McpToolHooks.undo = { canUndo?(op), plan(h, op, result) → { current, target, args, summary?, value? } }`
+gives a bridged write a harness `compensate`: the bridge calls the **same tool** with `args` (plus the
+injected `intent` fields) and an idempotency key derived from the undone op; `args: null` = nothing
+left to undo. Hooks stay read-only (`h.read`). `irreversible` explains tools without undo; split-out
+`*_delete` actions are always irreversible. The Distru preset implements it for `distru-mutate-product`
+UPDATEs: restore every field the update set to its `before` value (e.g. lift the allocation guard's
+`maxMenuBuyerOrderQuantity` cap back to `null`).
+
 ## Read tools
 
 Pass-through `tools/call` with injected fields filled. Output is deep-walked: string values of

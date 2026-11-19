@@ -13,7 +13,7 @@
  * `{{op:0.purchase_number}}`: the harness resolves them from the PO op that ran before this one.
  */
 import { DistruApiError, idempotencyMarker, IDEMPOTENCY_LOOKBACK_MS, type Task, type UpsertTaskBody } from '@ops/distru-client';
-import { defineAction, InputValidationError, type Mismatch } from '@ops/harness';
+import { defineAction, InputValidationError, type CompensableOp, type CompensationPlan, type Mismatch, type OpResult } from '@ops/harness';
 import { z } from 'zod';
 import { label, must, type DistruCtx } from './shared';
 import { stripIdempotencyMarkers } from './tools/orders';
@@ -191,8 +191,39 @@ export const tasksCreateAction = defineAction({
 
   outputs: (record) => ({ task_name: record.name, owner_id: record.owner_id }),
 
+  // Undo: delete the task (DELETE /tasks/{id}; a 404 means it is already gone, e.g. deleted with its PO).
+  planCompensation: planTaskCompensation,
+  compensate: compensateTask,
+
   summarize: async (_input, payload, ctx: DistruCtx) => {
     const who = payload.owner_id ? await userName(ctx, payload.owner_id) : 'unassigned';
     return `Task "${payload.name}" → ${who}, due ${payload.due_datetime.slice(0, 10)}`;
   },
 });
+
+// ── Undo ─────────────────────────────────────────────────────────────────────────────────────
+
+async function planTaskCompensation(ctx: DistruCtx, _op: CompensableOp, result: OpResult): Promise<CompensationPlan> {
+  const id = result.recordId;
+  if (!id) throw new InputValidationError('The task op recorded no task id');
+  const task = await getTaskOrNull(ctx, id);
+  if (!task) return { current: null, target: null, summary: `Task ${id} is already deleted`, value: 0 };
+  const t = normalizeTask(task);
+  return {
+    current: { name: t.name, status: t.status, owner_name: t.owner_name, due_datetime: t.due_datetime, purchase_number: t.purchase_number },
+    target: null,
+    summary: `Delete task "${t.name}"${t.owner_name ? ` (assigned to ${t.owner_name})` : ''}`,
+    value: 0,
+  };
+}
+
+async function compensateTask(ctx: DistruCtx, _op: CompensableOp, result: OpResult) {
+  const id = result.recordId;
+  if (!id) throw new InputValidationError('The task op recorded no task id');
+  try {
+    await ctx.connectors.distru.deleteTask(id);
+  } catch (err) {
+    if (!(err instanceof DistruApiError && err.isNotFound)) throw err;
+  }
+  return { recordId: id, record: null };
+}

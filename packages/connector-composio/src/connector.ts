@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { calendarActions, calendarReadTools } from './calendar';
 import { createComposioClient, run, toolkitOfSlug, type ComposioClientConfig, type ComposioToolInfo, type ComposioToolsClient } from './client';
 import { gmailActions, gmailReadTools } from './gmail';
+import { composioGmailNewMessageTrigger } from './triggers';
 import { untrusted } from './untrusted';
 
 export type ComposioCtx<TId extends string = 'composio'> = ConnectorContext<TId, ComposioToolsClient>;
@@ -204,6 +205,8 @@ export function buildComposioConnector<const TId extends string = 'composio'>(
       `Composio (${config.toolkits.join(', ')}) for ${client.userId}: reads pass through with external text marked untrusted; sending email, replying and creating events are proposed and need approval.`,
     readTools,
     actions,
+    // Gmail new-message webhooks (signed by Composio) → `composio/gmail.new_message`.
+    triggers: config.toolkits.some((t) => t.toLowerCase() === 'gmail') ? [composioGmailNewMessageTrigger(id)] : [],
     health: async (ctx) => {
       const listed = await clientOf(ctx).listTools(available.slice(0, 1).map((t) => t.slug));
       return { ok: listed.length > 0 || available.length === 0, detail: `${readTools.length} read tools, ${actions.length} write actions (${config.toolkits.join(', ')})` };

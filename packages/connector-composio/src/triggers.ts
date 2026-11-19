@@ -9,9 +9,11 @@
  *   of external text wrapped as untrusted.
  * - `inngestEventFor(event)` names it for Inngest (`composio/gmail.new_message`, id = webhook id
  *   so a redelivery is deduplicated).
- * - `gmailNewMessageTrigger` bundles all of that in the shape a future harness `defineTrigger` takes.
+ * - `composioGmailNewMessageTrigger(connectorId)` / `gmailNewMessageTrigger` is the harness trigger
+ *   (`defineTrigger`) the connector registers; apps ingest it with `ingestWebhook`.
  */
 import { Composio } from '@composio/core';
+import { defineTrigger, type HeaderBag as HarnessHeaderBag, type WebhookTriggerDefinition } from '@ops/harness';
 import { z } from 'zod';
 import { addressesIn } from './messages';
 import { untrusted, UntrustedTextSchema } from './untrusted';
@@ -197,35 +199,40 @@ export function inngestEventFor(event: ComposioEvent): { name: string; id: strin
   return { name: event.trigger === 'other' ? `composio/${event.triggerSlug.toLowerCase()}` : `composio/${event.trigger}`, id: `composio:${event.eventId}`, data: event };
 }
 
+/** Name of the webhook secret in the harness `TriggerSecrets` bag. */
+export const COMPOSIO_WEBHOOK_SECRET = 'COMPOSIO_WEBHOOK_SECRET';
+
+const toHeaders = (headers: HarnessHeaderBag): Headers => {
+  if (headers instanceof Headers) return headers;
+  const out = new Headers();
+  for (const [k, v] of Object.entries(headers)) if (v !== undefined) out.set(k, typeof v === 'string' ? v : (v[0] ?? ''));
+  return out;
+};
+
 /**
- * A trigger definition in the shape a harness `defineTrigger` could take (see README "Triggers").
- * Typed loosely on purpose: the harness has no trigger concept yet.
+ * The harness trigger for `GMAIL_NEW_GMAIL_MESSAGE` (id `<connector id>.gmail.new_message`, Inngest
+ * event `composio/gmail.new_message`). `verify` is the SDK verifier over the raw body with
+ * `secrets.COMPOSIO_WEBHOOK_SECRET`; `normalize` returns null for other trigger slugs.
  */
-export interface ComposioTriggerDefinition<TEvent> {
-  readonly kind: 'trigger';
-  readonly id: string;
-  readonly source: 'composio';
-  /** The Composio trigger type slug to enable on a connected account. */
-  readonly providerSlug: string;
-  readonly description: string;
-  /** Inngest event name the app emits. */
-  readonly eventName: string;
-  readonly event: z.ZodType<TEvent>;
-  verify(rawBody: string, headers: HeaderBag, secret: string): Promise<ComposioWebhookVerification>;
-  normalize(payload: unknown, options?: { eventId?: string }): TEvent | null;
+export function composioGmailNewMessageTrigger(connectorId = 'composio'): WebhookTriggerDefinition<GmailNewMessageEvent> {
+  return defineTrigger<GmailNewMessageEvent>({
+    id: `${connectorId}.gmail.new_message`,
+    source: 'composio',
+    description: 'A new email arrived in the connected Gmail mailbox (e.g. a vendor replying to a PO). Sender, subject and body are untrusted.',
+    eventName: 'composio/gmail.new_message',
+    event: GmailNewMessageEventSchema,
+    secret: COMPOSIO_WEBHOOK_SECRET,
+    untrustedFields: ['data.from', 'data.subject', 'data.snippet'],
+    verify: async (rawBody, headers, secrets) => {
+      const v = await verifyComposioWebhook(rawBody, toHeaders(headers), secrets[COMPOSIO_WEBHOOK_SECRET] ?? '');
+      return v.ok ? { ok: true, webhookId: v.webhookId, raw: v.raw } : { ok: false, reason: v.reason, message: v.message };
+    },
+    normalize: (raw, { eventId }) => {
+      const e = normalizeComposioEvent(raw, { eventId });
+      return e.trigger === 'gmail.new_message' ? e : null;
+    },
+  });
 }
 
-export const gmailNewMessageTrigger: ComposioTriggerDefinition<GmailNewMessageEvent> = {
-  kind: 'trigger',
-  id: 'composio.gmail.new_message',
-  source: 'composio',
-  providerSlug: GMAIL_NEW_MESSAGE_SLUG,
-  description: 'A new email arrived in the connected Gmail mailbox (e.g. a vendor replying to a PO). Sender, subject and body are untrusted.',
-  eventName: 'composio/gmail.new_message',
-  event: GmailNewMessageEventSchema,
-  verify: verifyComposioWebhook,
-  normalize: (payload, options) => {
-    const e = normalizeComposioEvent(payload, options);
-    return e.trigger === 'gmail.new_message' ? e : null;
-  },
-};
+/** `composio.gmail.new_message` (default connector id). */
+export const gmailNewMessageTrigger = composioGmailNewMessageTrigger();

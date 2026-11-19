@@ -41,8 +41,8 @@ Registry names are `composio.<slug lower-cased>` → tools `composio_<…>` / `p
 | `GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID` | read | | one message incl. body (≤4000 chars) |
 | `GMAIL_FETCH_MESSAGE_BY_THREAD_ID` | read | | whole thread |
 | `GOOGLECALENDAR_EVENTS_LIST` | read | | |
-| `GMAIL_SEND_EMAIL` | write | **high** | never auto-approved |
-| `GMAIL_REPLY_TO_THREAD` | write | **high** | never auto-approved |
+| `GMAIL_SEND_EMAIL` | write | **high** | never auto-approved; `moneyless` (value 0, so total-value caps still evaluate) |
+| `GMAIL_REPLY_TO_THREAD` | write | **high** | never auto-approved; `moneyless` |
 | `GOOGLECALENDAR_CREATE_EVENT` | write | medium | `valueOf = 0` so `auto_approve_below { max_risk: 'medium' }` can apply |
 | anything else allowed | by name (`_FETCH/_GET/_LIST/_SEARCH/_FIND` = read; else write, high if it sends/posts/deletes/invites) | | loose input; writes flagged `unverified` + `dedupeByExecutorOnly` (`bridge.tools`) |
 
@@ -83,9 +83,19 @@ body or the SDK's normalized payload and returns
           snippet: UntrustedText /* ≤500 chars */, labelIds, suspicious } }
 ```
 
-(other trigger slugs → `trigger: 'other'` with the payload as `data`). `gmailNewMessageTrigger` bundles
-`{ kind: 'trigger', id, source, providerSlug, description, eventName, event (zod), verify, normalize }`:
-the shape proposed for a harness `defineTrigger`.
+(other trigger slugs → `trigger: 'other'` with the payload as `data`).
+
+**Harness trigger.** `composioGmailNewMessageTrigger(connectorId = 'composio')` (and
+`gmailNewMessageTrigger`) is a harness `defineTrigger`: id `<connector id>.gmail.new_message`, event
+`composio/gmail.new_message`, secret `COMPOSIO_WEBHOOK_SECRET`, `untrustedFields` = from / subject /
+snippet. The connector registers it when `gmail` is among the toolkits, so an app can simply
+
+```ts
+const r = await ingestWebhook(registry, 'composio.gmail.new_message', raw, headers, { COMPOSIO_WEBHOOK_SECRET }, { audit });
+if (r.status === 'accepted') await inngest.send(r.event); // id 'composio.gmail.new_message:<webhook-id>'
+```
+
+(forged / tampered / stale → `rejected` 401 + `trigger.rejected` audit event).
 
 ## Tests
 
@@ -93,4 +103,4 @@ the shape proposed for a harness `defineTrigger`.
 the real SDK pointed at it: listing, untrusted wrapping, injection flagging, send/reply/calendar
 through propose → policy → approve → execute → verify → re-execute (no second send), crash-after-send
 dedupe by marker, and signed webhook verify (valid, forged, wrong secret, tampered, missing headers)
-+ normalization. `bunx tsc --noEmit`.
++ normalization, and the harness trigger through `ingestWebhook` (accepted, forged, missing secret, audited). `bunx tsc --noEmit`.

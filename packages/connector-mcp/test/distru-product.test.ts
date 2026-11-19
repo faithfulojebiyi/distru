@@ -105,3 +105,29 @@ describe('Distru MCP preset: mutate-product (menu buyer cap)', () => {
     await expect(env.harness.propose({ ctx: env.ctx, principal: planner, ops: [{ action: 'distru_mcp.mutate_product', input: cap('prd_nope', 5) }] })).rejects.toThrow('Product prd_nope not found');
   });
 });
+
+describe('Distru MCP preset: undo a buyer cap', () => {
+  test('harness.undo → UPDATE back to the before value (null = no cap), verified by read-back; DELETE ops are irreversible', async () => {
+    const env = await setup();
+    const p = await env.harness.propose({ ctx: env.ctx, principal: planner, ops: [{ action: 'distru_mcp.mutate_product', input: cap('prd_42', 24) }] });
+    await env.harness.decide({ ctx: env.ctx, principal: approver, proposalId: p.id, decision: 'approve' });
+    await env.harness.execute({ ctx: env.ctx, proposalId: p.id });
+    expect(env.products.get('prd_42')!.maxMenuBuyerOrderQuantity).toBe(24);
+
+    const operator = userPrincipal('u-operator', 'operator');
+    const u = await env.harness.undo({ ctx: env.ctx, principal: operator, proposalId: p.id, reason: 'PO arrived early' });
+    expect(u.ops[0]!.action).toBe('distru_mcp.mutate_product.undo');
+    expect(u.ops[0]!.diff).toEqual([{ path: ['maxMenuBuyerOrderQuantity'], kind: 'changed', before: 24, after: null }]);
+    expect(u.ops[0]!.summary).toBe('Restore per-buyer menu cap on VAP-BD-1G Blue Dream Live Resin Cart 1g: 24 units → no cap');
+    expect(env.products.get('prd_42')!.maxMenuBuyerOrderQuantity).toBe(24); // nothing written yet
+
+    await env.harness.decide({ ctx: env.ctx, principal: approver, proposalId: u.id, decision: 'approve' });
+    const undone = await env.harness.execute({ ctx: env.ctx, proposalId: u.id });
+    expect(undone.status).toBe('executed');
+    expect(env.products.get('prd_42')!.maxMenuBuyerOrderQuantity).toBeNull();
+    const call = env.server.callsTo('distru-mutate-product').at(-1)!;
+    expect(call.args).toMatchObject({ action: 'UPDATE', id: 'prd_42', maxMenuBuyerOrderQuantity: null, intent: 'Allocation guard' });
+
+    expect(env.registry.action('distru_mcp.mutate_product_delete').irreversible).toContain('cannot be undone');
+  });
+});

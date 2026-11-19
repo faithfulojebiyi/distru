@@ -6,6 +6,7 @@ import { inventoryTool, productsGetTool, productsSearchTool, vendorsTool } from 
 import { complianceCheckTool } from './tools/compliance';
 import { openOrdersTool, vendorPurchaseHistoryTool } from './tools/orders';
 import { velocityReportTool } from './tools/velocity';
+import { distruOrderCreatedTrigger } from './webhooks';
 
 /**
  * Distru ERP connector. Registered names are `distru.<tool>` (tools `distru_velocity_report`, …)
@@ -28,6 +29,8 @@ export const distruConnector = defineConnector<DistruCtx>({
     complianceCheckTool,
   ],
   actions: [purchasesUpsertAction, tasksCreateAction],
+  // Signed ORDER CREATE webhooks (POST /api/webhooks/distru) → restock-check the ordered products.
+  triggers: [distruOrderCreatedTrigger],
   health: async (ctx) => {
     const page = await ctx.connectors.distru.listLocations({});
     const n = page.data?.length ?? 0;

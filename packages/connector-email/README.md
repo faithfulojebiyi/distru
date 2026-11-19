@@ -54,7 +54,8 @@ in production) so `findByIdempotencyKey` works without a provider search API.
 
 **No undo.** Email cannot be recalled, so there is no `compensate` hook. That is why the action is
 `high` risk: `auto_approve_below` never auto-approves high-risk ops and `high_risk_requires_approval`
-flags it, so a human always sees the message first.
+flags it, so a human always sees the message first. The action's `irreversible` text is what
+`harness.undo` lists for it ("The email was already delivered to the vendor and cannot be unsent…").
 
 Input validation: RFC email addresses (to, up to 10 cc, cc may not repeat to), single-line subject
 and names (no header injection), https-only PDF link, non-empty body.

@@ -119,6 +119,8 @@ export const sendVendorPoAction = defineAction({
   // harness never falls back to Object.prototype.valueOf.
   valueOf: undefined,
   moneyless: true,
+  /** Shown in the undo preview: there is no compensating action for a delivered email. */
+  irreversible: 'The email was already delivered to the vendor and cannot be unsent: send a correction instead.',
 
   summarize: (input, payload) => {
     const what = input.po_number ?? 'PO';

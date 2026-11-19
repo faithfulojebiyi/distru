@@ -5,6 +5,7 @@ import {
   FakeClock,
   InMemoryAuditSink,
   InMemoryProposalStore,
+  ingestWebhook,
   Registry,
   sequentialIds,
   StaticPolicyRules,
@@ -294,6 +295,25 @@ describe('trigger: GMAIL_NEW_GMAIL_MESSAGE → signed webhook → verify → nor
     expect(await verifyComposioWebhook(hook.body, stale, SECRET)).toMatchObject({ ok: false });
     const plain = Object.fromEntries(hook.headers);
     expect((await verifyComposioWebhook(hook.body, plain, SECRET)).ok).toBe(true);
+  });
+
+  test('harness trigger: registered on the connector; ingestWebhook accepts the signed delivery, rejects a forged one (audited)', async () => {
+    const env = await setup();
+    const trigger = env.registry.trigger('composio.gmail.new_message');
+    expect(trigger).toMatchObject({ connectorId: 'composio', source: 'composio', eventName: 'composio/gmail.new_message', secret: 'COMPOSIO_WEBHOOK_SECRET' });
+    await vendorReply({ vendor: 'MPR', kind: 'partial', shipped: 200, ordered: 312 });
+    const hook = await waitForHook();
+    const audit = new InMemoryAuditSink();
+    const secrets = { COMPOSIO_WEBHOOK_SECRET: SECRET };
+    const ok = await ingestWebhook(env.registry, 'composio.gmail.new_message', hook.body, hook.headers, secrets, { audit });
+    if (ok.status !== 'accepted') throw new Error(JSON.stringify(ok));
+    const webhookId = hook.headers.get('webhook-id') ?? '';
+    expect(ok.event).toMatchObject({ name: 'composio/gmail.new_message', id: `composio.gmail.new_message:${webhookId}`, data: { trigger: 'gmail.new_message', eventId: webhookId, data: { fromAddress: VENDOR } } });
+    const forged = new Headers(hook.headers);
+    forged.set('webhook-signature', 'v1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=');
+    expect(await ingestWebhook(env.registry, 'composio.gmail.new_message', hook.body, forged, secrets, { audit })).toMatchObject({ status: 'rejected', reason: 'bad_signature', httpStatus: 401 });
+    expect(await ingestWebhook(env.registry, 'composio.gmail.new_message', hook.body, hook.headers, {}, { audit })).toMatchObject({ status: 'rejected', reason: 'missing_secret' });
+    expect(audit.events.map((e) => e.type)).toEqual(['trigger.received', 'trigger.rejected', 'trigger.rejected']);
   });
 
   test('an injection reply arrives flagged suspicious', async () => {

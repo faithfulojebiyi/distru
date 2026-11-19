@@ -23,3 +23,15 @@ export { velocityReportTool, VelocityReportInput, VelocityReportOutput } from '.
 export { inventoryTool, productsGetTool, productsSearchTool, vendorsTool, estimateLeadTimes } from './tools/catalog';
 export { vendorPurchaseHistoryTool, openOrdersTool, stripIdempotencyMarkers } from './tools/orders';
 export { complianceCheckTool, evaluateTestResult, packageProblem, ACTION_LEVELS, type ProductCompliance } from './tools/compliance';
+export {
+  distruOrderCreatedTrigger,
+  DistruOrderCreatedEventSchema,
+  DistruWebhookSchema,
+  DISTRU_ORDER_TRIGGER_ID,
+  DISTRU_WEBHOOK_SECRET,
+  restockScopeFor,
+  signDistruBody,
+  verifyDistruSignature,
+  type DistruOrderCreatedEvent,
+  type DistruWebhook,
+} from './webhooks';

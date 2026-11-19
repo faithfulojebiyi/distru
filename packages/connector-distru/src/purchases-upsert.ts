@@ -16,7 +16,7 @@ import {
   type PurchaseItemRequest,
   type UpsertPurchaseBody,
 } from '@ops/distru-client';
-import { defineAction, InputValidationError, matchesExpected } from '@ops/harness';
+import { defineAction, InputValidationError, matchesExpected, type CompensableOp, type CompensationPlan, type OpResult } from '@ops/harness';
 import { z } from 'zod';
 import { money, must, num0, type DistruCtx } from './shared';
 import { stripIdempotencyMarkers } from './tools/orders';
@@ -200,6 +200,11 @@ export const purchasesUpsertAction = defineAction({
   outputs: (record) => ({ purchase_number: record.purchase_number, status: record.status }),
   vendorIdsOf: (payload) => (payload.company_id ? [payload.company_id] : []),
 
+  // Undo (harness.undo → a compensating proposal): see "Undo" below.
+  canCompensate: canCompensatePurchase,
+  planCompensation: planPurchaseCompensation,
+  compensate: compensatePurchase,
+
   summarize: async (input, payload, ctx: DistruCtx, before) => {
     let vendor = before?.vendor_name ?? null;
     if (!vendor) {
@@ -215,3 +220,106 @@ export const purchasesUpsertAction = defineAction({
     return before ? `Update ${before.purchase_number} (${vendor}): ${what}` : `PO to ${vendor}: ${what}`;
   },
 });
+
+// ── Undo ─────────────────────────────────────────────────────────────────────────────────────
+//
+// Distru purchases have no cancelled status, so undoing a *created* PO is `DELETE /purchases/{id}`
+// (hard delete; lines, charges, payments and linked tasks go with it; the QuickBooks bill is deleted
+// by Distru's sync). We only do that while the PO never touched inventory (DRAFT, PENDING,
+// PROCESSING, DELIVERING); a received PO is refused (Distru would pull the stock back out, which a
+// human should decide in Distru). Undoing an *update* restores the `before` line set and notes while
+// the PO is still editable. Both are idempotent by value (a 404 on delete = already undone).
+
+const NEVER_RECEIVED = new Set(['DRAFT', 'PENDING', 'PROCESSING', 'DELIVERING']);
+const MARKERS_RE = /\[ops-agent:idem=[^\]]+\]/g;
+
+const asPurchaseRecord = (v: unknown): PurchaseRecord | null =>
+  v && typeof v === 'object' && 'id' in v && 'items' in v && Array.isArray(v.items) ? (v as PurchaseRecord) : null;
+
+/** What the approver sees of a PO in an undo diff (and what verify compares). */
+const undoView = (po: PurchaseRecord) => ({
+  purchase_number: po.purchase_number,
+  status: po.status,
+  vendor_name: po.vendor_name,
+  description: po.description,
+  items: po.items.map((i) => ({ id: i.id, product_id: i.product_id, quantity: i.quantity, price: i.price })),
+  total: po.total,
+});
+
+function canCompensatePurchase(op: CompensableOp) {
+  const before = asPurchaseRecord(op.before);
+  if (op.before !== null && !before) return { ok: false as const, reason: 'The PO as it was before the update was not recorded, so it cannot be restored.' };
+  if (before && !EDITABLE_STATUSES.has(before.status)) return { ok: false as const, reason: `The PO was ${before.status} before the update and can no longer be edited.` };
+  return { ok: true as const };
+}
+
+/** The restore target for an update undo: the `before` lines, keeping current line ids for the same products. */
+function restoreTarget(before: PurchaseRecord, current: PurchaseRecord) {
+  const ids = new Map(current.items.filter((i) => i.product_id).map((i) => [i.product_id, i.id]));
+  return {
+    description: before.description,
+    items: before.items.map((i) => {
+      const id = i.product_id ? ids.get(i.product_id) : undefined;
+      return { ...(id ? { id } : {}), product_id: i.product_id, quantity: i.quantity, price: i.price };
+    }),
+  };
+}
+
+async function planPurchaseCompensation(ctx: DistruCtx, op: CompensableOp, result: OpResult): Promise<CompensationPlan> {
+  const id = result.recordId;
+  if (!id) throw new InputValidationError('The PO op recorded no purchase id');
+  const raw = await getPurchaseOrNull(ctx, id);
+  const current = raw ? normalizePurchase(raw) : null;
+  const before = asPurchaseRecord(op.before);
+  if (!before) {
+    if (!current) return { current: null, target: null, summary: `PO ${id} is already deleted`, value: 0 };
+    if (!NEVER_RECEIVED.has(current.status)) {
+      throw new InputValidationError(`${current.purchase_number} is ${current.status}: received stock would have to be pulled back out, so it is not undone automatically (handle it in Distru)`);
+    }
+    return {
+      current: undoView(current),
+      target: null,
+      summary: `Delete ${current.purchase_number} (${current.status}, never received) with its lines and linked tasks`,
+      value: 0,
+    };
+  }
+  if (!current) throw new InputValidationError(`Purchase order ${before.purchase_number} no longer exists`);
+  if (!EDITABLE_STATUSES.has(current.status)) throw new InputValidationError(`${current.purchase_number} is ${current.status} and can no longer be edited`);
+  const target = restoreTarget(before, current);
+  return {
+    current: { description: current.description, items: undoView(current).items },
+    target,
+    summary: `Restore ${current.purchase_number} to its previous ${before.items.length} line(s), ${money(before.total)}`,
+    value: Math.round(before.items.reduce((sum, i) => sum + i.quantity * i.price, 0) * 100) / 100,
+  };
+}
+
+async function compensatePurchase(ctx: DistruCtx, op: CompensableOp, result: OpResult) {
+  const client = ctx.connectors.distru;
+  const id = result.recordId;
+  if (!id) throw new InputValidationError('The PO op recorded no purchase id');
+  const before = asPurchaseRecord(op.before);
+  if (!before) {
+    try {
+      await client.deletePurchase(id);
+    } catch (err) {
+      if (!(err instanceof DistruApiError && err.isNotFound)) throw err; // already deleted = undone
+    }
+    return { recordId: id, record: null };
+  }
+  const raw = await getPurchaseOrNull(ctx, id);
+  if (!raw) throw new InputValidationError(`Purchase order ${before.purchase_number} no longer exists`);
+  const target = restoreTarget(before, normalizePurchase(raw));
+  // Keep idempotency markers already on the PO (its creating proposal finds it by them).
+  const markers = raw.description?.match(MARKERS_RE) ?? [];
+  const description = [target.description, ...markers].filter((s): s is string => Boolean(s)).join('\n') || undefined;
+  const items: PurchaseItemRequest[] = target.items.map((i) => ({
+    ...(i.id ? { id: i.id } : {}),
+    ...(i.product_id ? { product_id: i.product_id } : {}),
+    location_id: before.location_id ?? undefined,
+    quantity: i.quantity,
+    price: i.price,
+  }));
+  const po = must((await client.upsertPurchase(buildPurchaseUpdate(id, { ...(description !== undefined ? { description } : {}), items }))).data, 'upsertPurchase');
+  return { recordId: po.id, record: normalizePurchase(po) };
+}

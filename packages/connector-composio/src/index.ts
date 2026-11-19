@@ -30,6 +30,8 @@ export {
   normalizeComposioEvent,
   inngestEventFor,
   gmailNewMessageTrigger,
+  composioGmailNewMessageTrigger,
+  COMPOSIO_WEBHOOK_SECRET,
   GMAIL_NEW_MESSAGE_SLUG,
   ComposioEventSchema,
   GmailNewMessageEventSchema,
@@ -38,7 +40,6 @@ export {
   type ComposioEvent,
   type GmailNewMessageEvent,
   type ComposioWebhookVerification,
-  type ComposioTriggerDefinition,
   type HeaderBag,
 } from './triggers';
 export { SendEmailInput, ReplyToThreadInput, FetchEmailsInput, SentEmailRecordSchema, type SendEmailPayload, type ReplyToThreadPayload, type SentEmailRecord } from './gmail';

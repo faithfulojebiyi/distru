@@ -54,6 +54,18 @@ by listing tasks updated in the free 30-day window; verify reads the task back (
 linked purchase, description, due instant). `location_id` must be one of a *company's* locations
 (Distru refuses your own). Exports `{ task_name, owner_id }`.
 
+## Undo (harness `compensate`)
+
+- `purchases.upsert`: Distru purchases have no cancelled status, so undoing a **created** PO is
+  `DELETE /purchases/{id}` (hard delete: lines, charges, payments and linked tasks go too; QuickBooks
+  bill deleted by Distru's sync), only while the PO never touched inventory (DRAFT, PENDING, PROCESSING,
+  DELIVERING); a received PO is refused ("handle it in Distru"). Undoing an **update** restores the
+  `before` line set and notes while the PO is editable (current line ids kept, idempotency markers on
+  the PO preserved). A 404 on delete counts as already undone.
+- `tasks.create`: `DELETE /tasks/{id}` (404 = already gone, e.g. deleted with its PO).
+- `@ops/distru-client` exposes `deletePurchase` (added to the filtered spec; the mock implements
+  `DELETE /public/v1/purchases/:id` with Distru's refusal rules).
+
 ## Compliance derivation
 
 Distru has no pass/fail field. A test result fails when its title contains FAILED or an analyte in
@@ -61,6 +73,17 @@ Distru has no pass/fail field. A test result fails when its title contains FAILE
 detected); a Metrc package is a problem when ONHOLD, `lab_testing_state` contains "Fail", or it
 requires remediation. Blocked = failed test on the newest batch or any held/failed package;
 unknown = no batches or no verdict on the newest batch; failures on older batches are warnings.
+
+## Trigger: `distru.order_created`
+
+`distruOrderCreatedTrigger` (registered on the connector, harness `defineTrigger`) verifies Distru's
+`x-distru-signature: sha256=<hex HMAC-SHA256 of the raw body>` (secret `DISTRU_WEBHOOK_SECRET`,
+constant-time), and normalizes an ORDER CREATE envelope into
+`{ source: 'distru', eventId, orderId, productIds, locationIds }` (event `distru/order.created`; dedupe id
+`distru.order_created:ORDER:CREATE:<order id>`). Other events are acknowledged and ignored; a bad
+signature is a 401 `invalid_signature`, a non-JSON / non-envelope body a 400 `invalid_body`. Also
+exported: `signDistruBody`, `verifyDistruSignature`, `DistruWebhookSchema`, `restockScopeFor`. Apps run
+it with `ingestWebhook` (apps/agent: POST /api/webhooks/distru).
 
 ## Untrusted ERP text
 

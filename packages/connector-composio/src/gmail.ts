@@ -171,6 +171,8 @@ export function gmailActions<TCtx>(clientOf: ClientOf<TCtx>) {
       verify: async (ctx: TCtx, recordId, expected) =>
         verifySent(await fetchMessage(clientOf(ctx), recordId), { to: toRecipients(expected), subject: expected.subject }),
       valueOf: undefined,
+      // Email moves no money: value 0, so a total-value cap still evaluates a proposal that includes it.
+      moneyless: true,
       summarize: (_input, p) => `Email "${p.subject}" to ${p.recipient_email}${p.cc?.length ? ` (cc ${p.cc.length})` : ''}`,
     }),
     GMAIL_REPLY_TO_THREAD: defineAction({
@@ -193,6 +195,8 @@ export function gmailActions<TCtx>(clientOf: ClientOf<TCtx>) {
       verify: async (ctx: TCtx, recordId, expected) =>
         verifySent(await fetchMessage(clientOf(ctx), recordId), { to: toRecipients(expected), threadId: expected.thread_id }),
       valueOf: undefined,
+      // Email moves no money: value 0, so a total-value cap still evaluates a proposal that includes it.
+      moneyless: true,
       summarize: (_input, p) => `Reply in thread ${p.thread_id} to ${p.recipient_email}${p.cc?.length ? ` (cc ${p.cc.length})` : ''}`,
     }),
   };

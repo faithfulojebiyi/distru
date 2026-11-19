@@ -16,7 +16,11 @@ import {
   diff,
   type AnyAction,
   type AnyReadTool,
+  type CompensableOp,
+  type CompensationCheck,
+  type CompensationPlan,
   type ConnectorContext,
+  type OpResult,
   type ConnectorDefinition,
   type ConnectorSystem,
   type ErrorClassifier,
@@ -68,6 +72,26 @@ export interface McpToolHooks {
    */
   moneyless?: boolean;
   vendorIdsOf?(payload: JsonObject): string[];
+  /**
+   * Undo support: the compensating call to the *same* tool (e.g. `UPDATE` back to the `before`
+   * values). The bridge makes the write itself (hooks stay read-only), with the injected fields and
+   * an idempotency key derived from the undone op. Leave unset when the server has no real undo.
+   */
+  undo?: McpUndoHooks;
+  /** Why ops of this tool cannot be undone (shown in the undo preview), when `undo` is unset. */
+  irreversible?: string;
+}
+
+/** A planned compensating call: `args` for the same tool (null = nothing left to undo). */
+export interface McpUndoPlan extends CompensationPlan {
+  args: JsonObject | null;
+}
+
+export interface McpUndoHooks {
+  /** Pure check on the executed op (default: undoable). */
+  canUndo?(op: CompensableOp): CompensationCheck;
+  /** Reads the record now and plans the compensating call (throw `InputValidationError` to refuse). */
+  plan(h: McpHookContext, op: CompensableOp, result: OpResult): Promise<McpUndoPlan>;
 }
 
 export interface IntentArgs {
@@ -315,6 +339,11 @@ export function buildMcpConnector<const TId extends string>(config: McpConnector
           ...(hooks.moneyless && !hooks.value ? { moneyless: true } : {}),
           ...(hooks.vendorIdsOf ? { vendorIdsOf: (p: JsonObject) => hooks.vendorIdsOf!(p) } : {}),
 
+          ...undoHooksFor(hooks, v.deletes, (ctx: Ctx) => hookContext(ctx), async (ctx: Ctx, args: JsonObject, key: string) => {
+            const { parsed } = await clientOf(ctx).callWrite(tool.name, { ...args, ...injectedFor(ctx, tool, 'write', args) }, key);
+            return parsed;
+          }),
+
           summarize: (_input, payload, _ctx, before) => {
             if (hooks.summarize) return hooks.summarize(payload, before);
             const act = typeof payload.action === 'string' ? `${payload.action} ` : '';
@@ -341,6 +370,37 @@ export function buildMcpConnector<const TId extends string>(config: McpConnector
     },
   });
   return { connector, tools: bridged };
+}
+
+/**
+ * The harness rollback hooks for one bridged write action, from its `McpToolHooks.undo`. The
+ * compensating write goes to the same tool with an idempotency key derived from the undone op.
+ */
+function undoHooksFor<Ctx>(
+  hooks: McpToolHooks,
+  deletes: boolean,
+  hookContext: (ctx: Ctx) => McpHookContext,
+  write: (ctx: Ctx, args: JsonObject, key: string) => Promise<unknown>,
+) {
+  const undo = hooks.undo;
+  if (!undo || deletes) {
+    const irreversible = deletes ? 'A DELETE through the MCP server cannot be undone (the record is gone for good).' : hooks.irreversible;
+    return irreversible ? { irreversible } : {};
+  }
+  return {
+    canCompensate: (op: CompensableOp): CompensationCheck => undo.canUndo?.(op) ?? { ok: true },
+    planCompensation: async (ctx: Ctx, op: CompensableOp, result: OpResult): Promise<CompensationPlan> => {
+      const { args: _args, ...plan } = await undo.plan(hookContext(ctx), op, result);
+      return plan;
+    },
+    compensate: async (ctx: Ctx, op: CompensableOp, result: OpResult): Promise<WrittenRecord<unknown>> => {
+      const plan = await undo.plan(hookContext(ctx), op, result);
+      const recordId = result.recordId ?? `undo:${op.action}:${op.index}`;
+      if (!plan.args) return { recordId, record: plan.current };
+      const parsed = await write(ctx, plan.args, `undo:${result.recordId ?? 'none'}:${op.index}`);
+      return { recordId, record: parsed };
+    },
+  };
 }
 
 export interface McpBridge<TId extends string> {
