@@ -167,7 +167,7 @@ so a redelivery is a no-op) → function `vendor-reply-on-email` → Mastra work
 ## Agents and the restock workflow
 
 - Agents (`src/mastra/agents/`): Ops Lead (supervisor via Mastra `agents` subagents, Memory, read-only +
-  `start_restock_run`), Inventory Analyst, Procurement Planner (only one with `propose_*`), Compliance Reviewer,
+  `start_restock_run`; answers AR questions from `distru_invoices_overdue` / `distru_invoices_search`), Inventory Analyst, Procurement Planner (only one with `propose_*`), Compliance Reviewer,
   Policy Critic, and the Vendor Liaison (vendor-reply loop only). Scopes, tool allowlists and budgets in `roster.ts`; models per agent from env (`*_MODEL`, default
   `OPS_AGENT_MODEL`). Tools are generated from `registry.catalog(principal)` (`src/mastra/tools/harness-tools.ts`).
 - `propose_*` tools never write: inside a workflow run they add an op to the run's draft (same vendor + location
@@ -276,12 +276,15 @@ The server speaks MCP 2026-07-28 and serves 2025-era clients (that open with `in
   (`CONTEXT_SYNC_CRON`, default every 30 min; empty disables): `sync.run()` → `buildProfile()` → learning
   from any decided proposal not learned yet. Distru PRODUCT / PURCHASE / ORDER / COMPANY webhooks →
   `distru/record.changed` → `context-record-sync` (`sync.handleWebhook`, deduped on type, id, occurred_datetime).
-  `bun run context:sync` runs one pass by hand and prints the profile and memories.
+  `bun run context:sync` runs one pass by hand and prints the profile and memories (`-- --reconcile` forces
+  a full re-read, e.g. after the mock was reseeded). `bun run db:seed:history` (`db:seed:history:reset` to
+  recreate) adds ~12 backdated decided proposals and a cap revision, so the next pass learns 5 memories.
 - Memories: after every decision `ingestHarnessEvents(signalsFromAudit(...))` (approver edits are compared
   with `meta.originalOps`, which the harness keeps on edited approvals); `policy.changed` →
-  `policy_rule_changed` signals.
+  `policy_rule_changed` signals, both live (learning audit sink) and in the batch pass (`learnFromHistory`).
 - Agents: the `context` connector is registered; the Planner and the Vendor Liaison get
-  `context_context_for` and a bounded (~1,600 chars) ACCOUNT CONTEXT block in their prompts.
+  `context_context_for` and a bounded (~1,600 chars) ACCOUNT CONTEXT block in their prompts; the Ops Lead
+  gets `context_vendor_profile` and `context_memories_search` for Copilot questions.
 - API: `GET /api/context/profile`, `GET /api/context/memories`, `GET /api/onboarding`.
 
 ## Restock quality and cost
@@ -442,6 +445,7 @@ cp apps/agent/.env.example apps/agent/.env # then set BETTER_AUTH_SECRET (openss
 cd apps/agent
 bun run db:push                            # drizzle-kit push (public schema; see Known issues for renames)
 bun run db:seed                            # operator@demo.dev / approver@demo.dev, password demo-password
+bun run db:seed:history                    # optional: decision history → memories on the next context:sync
 bun run dev                                # http://localhost:4111
 
 # second terminal: Inngest dev server (UI on http://localhost:8288)

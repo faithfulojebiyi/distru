@@ -46,8 +46,8 @@ export function createAppContextSync(store: ContextStore, config: { baseUrl: str
 export const createAppContextStore = (db: DB): ContextStore => new DrizzleContextStore(db);
 
 /** One scheduled pass: incremental sync (all streams + inventory) then a fresh profile. */
-export async function syncAndProfile(sync: AppContextSync, store: ContextStore, learn?: () => Promise<unknown>) {
-  const run = await sync.run();
+export async function syncAndProfile(sync: AppContextSync, store: ContextStore, learn?: () => Promise<unknown>, opts: { mode?: 'auto' | 'reconcile' } = {}) {
+  const run = await sync.run(opts.mode ? { mode: opts.mode } : {});
   const profile = await buildProfile(store);
   // Pick up decisions not learned yet (seeded history, or learning that failed at decision time).
   const learned = learn ? await learn().catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) })) : null;

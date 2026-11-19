@@ -44,9 +44,12 @@ export const AGENT_TOOLS: Record<AgentKey, readonly string[]> = {
     'distru.compliance_check',
     'headset.retail_trends',
     'headset.top_movers',
-    // AR questions ("Which invoices are overdue? Sum by customer."): present once the Distru connector registers them.
+    // AR questions ("Which invoices are overdue? Sum by customer.").
     'distru.invoices_overdue',
     'distru.invoices_search',
+    // Account context (packages/context): vendor reliability from synced history, and learned / told memories.
+    'context.vendor_profile',
+    'context.memories_search',
   ],
   inventoryAnalyst: ['distru.velocity_report', 'distru.inventory', 'distru.open_orders', 'distru.products_get', 'headset.retail_trends', 'headset.demand_signal'],
   // `distru_mcp.mutate_product` (per-buyer menu cap) is only present while the MCP bridge is connected.

@@ -2,14 +2,18 @@
  * One context pass outside Inngest (what the `context-sync` cron does): Distru sync (DISTRU_BASE_URL),
  * account profile, then learning from every decided proposal and policy edit. Prints a short report.
  *
- *   bun run --cwd apps/agent context:sync
+ *   bun run --cwd apps/agent context:sync [-- --reconcile]
+ *
+ * `--reconcile` forces a full re-read of every stream (e.g. after the mock was reseeded with older
+ * history, which an incremental pass keyed on updated_datetime would not pick up).
  */
 import { sql } from '../src/db/client';
 import { db } from '../src/db/client';
 import { appContextStore, appContextSync } from '../src/context';
 import { learnFromHistory, memoriesList, onboarding, profileSummary, syncAndProfile } from '../src/context/app-context';
 
-const out = await syncAndProfile(appContextSync, appContextStore, () => learnFromHistory(db, appContextStore));
+const reconcile = process.argv.includes('--reconcile');
+const out = await syncAndProfile(appContextSync, appContextStore, () => learnFromHistory(db, appContextStore), reconcile ? { mode: 'reconcile' } : {});
 console.log(JSON.stringify(out, null, 2));
 const profile = await profileSummary(appContextStore);
 console.log(`profile v${profile.version}: ${profile.vendors.length} vendors, ${profile.products.length} products`);
