@@ -70,12 +70,12 @@ Five agents work it like a small purchasing team:
    because the latest batch failed a pesticide test and is on hold.
 4. If the total breaks a spending rule, a **Policy Critic** explains why and the Planner revises the order,
    at most twice.
-5. Everything becomes **one proposal**. In the screenshot below it's 14 changes across four systems: four
-   purchase orders in Distru, two order limits on the online menu so one big customer can't take all the
-   remaining stock before the delivery arrives, four emails to vendors, and four "receive this PO" tasks for
-   the warehouse team.
+5. Everything becomes **one proposal**. A typical one holds 14 changes across four systems: four purchase
+   orders in Distru, two order limits on the online menu so one big customer can't take all the remaining
+   stock before the delivery arrives, four emails to vendors, and four "receive this PO" tasks for the
+   warehouse team.
 
-![A 14-change proposal across four systems, ready for a person to review](.github/assets/proposal-changes.png)
+![The Changes tab: every purchase order in a proposal, with its risk, whether it has been written, and its value](.github/assets/proposal-changes.png)
 
 The run pauses there. An approver opens it, reads the changes, checks the rules, and approves it, either in
 the dashboard or from a button in Slack. The changes run one by one, each one verified, and the emails go out
@@ -92,7 +92,14 @@ data, never as instructions. Code checks every number it pulled out against the 
 another proposal: change the order to 200, tighten the menu limit until the backorder arrives, reply to the
 vendor, and create a task for the buyer.
 
-![Every rule the proposal was checked against](.github/assets/proposal-policy.png)
+Sometimes the answer is no before a person ever looks. In the proposal below the agents wanted 14 purchase
+orders worth $28,082, which is over the $25,000 limit, so the rules refused it outright. It can't be approved
+until the agents revise it. The same page shows what the agents noticed along the way: the batch they vetoed
+for a failed lab test, and the product description that tried to give them orders.
+
+![A proposal the spending rule refused, with the compliance vetoes and a flagged prompt injection](.github/assets/proposal-flagged.png)
+
+![Every rule the proposal was checked against: over the cap, so denied](.github/assets/proposal-policy.png)
 
 ## Things worth knowing about how it's built
 
