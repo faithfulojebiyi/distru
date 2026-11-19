@@ -11,6 +11,7 @@ import type {
   Companies,
   CompanyResponse,
   CreateCustomFieldBody,
+  CreateInvoicePaymentBody,
   CustomFieldDefinitionResponse,
   CustomFieldDefinitions,
   DeletedRecords,
@@ -20,15 +21,20 @@ import type {
   GetRecordHistoryParams,
   Inventories,
   InventoryVelocityReport,
+  InvoiceResponse,
+  Invoices,
   ListActivityParams,
   ListBatchesParams,
   ListCompaniesParams,
   ListCustomFieldsParams,
   ListDeletedRecordsParams,
   ListInventoryParams,
+  ListInvoicesParams,
   ListLocationsParams,
   ListMetrcPackagesParams,
   ListOrdersParams,
+  ListPaymentMethodsParams,
+  ListPaymentsParams,
   ListProductsParams,
   ListPurchasesParams,
   ListTasksParams,
@@ -38,6 +44,10 @@ import type {
   MetrcPackages,
   OrderResponse,
   Orders,
+  PaymentMethodResponse,
+  PaymentMethods,
+  PaymentResponse,
+  Payments,
   PdfResponse,
   ProductResponse,
   Products,
@@ -1330,6 +1340,286 @@ export const getGetRecordHistoryUrl = (params: GetRecordHistoryParams,) => {
 export const getRecordHistory = async (params: GetRecordHistoryParams, options?: Parameters<typeof distruFetch>[1]): Promise<RecordHistoryEntries> => {
 
   return distruFetch<RecordHistoryEntries>(getGetRecordHistoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListInvoicesUrl = (params?: ListInvoicesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["ids","statuses","order_ids","order_numbers","order_statuses","company_ids","company_group_ids","owner_ids","invoice_numbers","batch_ids","package_ids","package_compliance_labels","package_batch_numbers","batch_batch_numbers","product_ids","product_category_ids","product_subcategory_ids","product_group_ids","product_brand_ids","product_vendor_ids","product_strain_ids","product_tag_ids","product_skus"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/public/v1/invoices?${stringifiedParams}` : `/public/v1/invoices`
+}
+
+/**
+ * List the company's invoices, newest first (sorted by invoice date, descending), with the given filters applied. All filters combine with AND; each returned invoice matches every filter you pass. This is a read-only operation with no side effects.
+ *
+ * Results are paginated. The response carries a `next_page` URL only while more pages remain; follow it to walk the full result set. Page size is fixed by the server and is not client-controllable.
+ *
+ * This endpoint returns eventually consistent data: a just-created or just-updated invoice may take up to about 1 second to appear or reflect its latest values here.
+ *
+ * Required permission: `invoices_permissions_view`. Results are further narrowed to only the invoices the authenticated user is allowed to see under their team restrictions, so two API keys on the same company can see different subsets.
+ * @summary Get invoices
+ */
+export const listInvoices = async (params?: ListInvoicesParams, options?: Parameters<typeof distruFetch>[1]): Promise<Invoices> => {
+
+  return distruFetch<Invoices>(getListInvoicesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetInvoiceUrl = (id: string,) => {
+
+
+
+
+  return `/public/v1/invoices/${id}`
+}
+
+/**
+ * Fetch a single invoice by its ID, including its line items, charges, non-voided payments, and custom field values. Read-only, with no side effects. Returns 404 when no invoice with that ID exists in the caller's company. Required permission: `invoices_permissions_view`. The authenticated user must also have access to the requested invoice under their team restrictions, otherwise the request is rejected even though the invoice exists.
+ * @summary Get an invoice
+ */
+export const getInvoice = async (id: string, options?: Parameters<typeof distruFetch>[1]): Promise<InvoiceResponse> => {
+
+  return distruFetch<InvoiceResponse>(getGetInvoiceUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getCreateInvoicePaymentUrl = (id: string,) => {
+
+
+
+
+  return `/public/v1/invoices/${id}/payments`
+}
+
+/**
+ * Record a payment against an invoice. On success the invoice's `paid_amount`, `remaining_amount`, and payment `status` are recomputed to reflect the new payment.
+ *
+ * The recorded amount is capped at the invoice's outstanding balance (its `remaining_amount`): only the portion up to that balance is applied to the invoice, and any excess becomes a customer credit for the account. In the response, the payment's `amount` holds the applied (capped) portion and the generated credit appears in `overpayment_credits` with the excess as its `amount`. On the invoice, `paid_amount` grows by the applied portion only, so it ends equal to `total`, `remaining_amount` drops to `0`, and `status` becomes FULLY_PAID — an overpayment never produces OVER_PAID. For example, sending an `amount` of 150 against an invoice with a `remaining_amount` of "100.00" returns a payment with `amount` "100" and one entry in `overpayment_credits` with `amount` "50"; the invoice then reads `paid_amount` equal to `total`, `remaining_amount` "0.00", and `status` FULLY_PAID. A payment cannot be filed against an invoice that is already fully paid, or against a voided invoice — both are rejected. Returns 404 when the invoice does not exist in the caller's company, and 403 when the API key's user cannot see it under their team restrictions.
+ *
+ * If the company is connected to QuickBooks Online there are two extra behaviors. First, Distru synchronously pulls the latest payment and credit data from QuickBooks Online before recording, which can briefly fail with a "try again in a few seconds" error while that refresh runs — retry the request in that case. Second, the payment (or its invoice) is only queued for sync to QuickBooks Online once its dependencies are already synced there; otherwise the sync is deferred. A 200 is therefore not confirmation the payment reached QuickBooks Online — the response's `quickbooks_sync_enqueued` flag tells you whether a sync was queued, and you should poll QuickBooks Online to observe the final result. The payment may also be pushed to LeafLink when that integration is configured for the customer.
+ *
+ * Required permission: `invoices_permissions_receive_payment`. The authenticated user must also be allowed to view invoices under their team restrictions.
+ * @summary Insert a payment for an invoice
+ */
+export const createInvoicePayment = async (id: string,
+    createInvoicePaymentBody: CreateInvoicePaymentBody, options?: Parameters<typeof distruFetch>[1]): Promise<PaymentResponse> => {
+
+  return distruFetch<PaymentResponse>(getCreateInvoicePaymentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createInvoicePaymentBody)
+  }
+);}
+
+
+
+export const getListPaymentsUrl = (params?: ListPaymentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["ids","company_ids","invoice_ids","payment_method_ids","purchase_ids"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/public/v1/payments?${stringifiedParams}` : `/public/v1/payments`
+}
+
+/**
+ * Get a paginated list of your company's payments, newest first (ordered by creation time, then id).
+ *
+ * A payment is a single record of money moving, and comes in one of two kinds, reported in `payment_type`:
+ * • INVOICE — money received from a customer against an [invoice](#model-compactinvoice). The `invoice` field is populated and `purchase` is null.
+ * • PURCHASE — money paid to a vendor against a [purchase](#model-paymentpurchase). The `purchase` field is populated and `invoice` is null.
+ *
+ * At most one of `invoice` / `purchase` is populated on any payment; the other is always null. Only invoice payments carry `credit_uses` and `overpayment_credits` (both null on purchase payments).
+ *
+ * Payments are not team-restricted: every payment in your company is returned. What a payment points at is team-restricted: `invoice`, `purchase` and `company` are null when the authenticated user cannot view them under their team restrictions, a credit use's `credit` is null for a credit they cannot view, and `overpayment_credits` leaves such credits out. `payment_type` still says which kind of payment it is.
+ *
+ * Each payment has a `status` of POSTED or VOIDED. A voided payment is retained rather than deleted, so historical references to it still resolve. By default this endpoint returns both POSTED and VOIDED payments; pass `payment_status` to narrow. Soft-deleted payments are never returned.
+ *
+ * Narrow the result with `company_ids` (the customer/vendor), `invoice_ids` (INVOICE payments only), `purchase_ids` (PURCHASE payments only), `payment_method_ids`, `amount` range, `payment_number`, `payment_type`, `payment_status`, and the `inserted_datetime` / `payment_datetime` / `updated_datetime` windows. When several filters are supplied a payment must satisfy all of them (AND).
+ *
+ * Results are eventually consistent: a newly created, updated, or voided payment can take up to 1 second to appear here or to reflect its latest state.
+ *
+ * Required permission: `payments_permissions_view`.
+ * @summary Get payments
+ */
+export const listPayments = async (params?: ListPaymentsParams, options?: Parameters<typeof distruFetch>[1]): Promise<Payments> => {
+
+  return distruFetch<Payments>(getListPaymentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetPaymentUrl = (id: string,) => {
+
+
+
+
+  return `/public/v1/payments/${id}`
+}
+
+/**
+ * Get a single payment by its ID.
+ *
+ * The response carries the same shape as a list entry, plus `quickbooks_deposit_account_name` (the human-readable name of the QuickBooks Online deposit account, resolved only here — the list endpoint omits it). Like the list endpoint, at most one of `invoice` / `purchase` is populated depending on `payment_type`, and `status` is POSTED or VOIDED.
+ *
+ * Returns 404 if no payment with that ID exists within your company; soft-deleted payments return 404 too. Voided payments are returned normally with `status` VOIDED. A payment on an invoice or purchase the authenticated user cannot view under their team restrictions is still returned; the records they cannot view are null or left out, as in the list.
+ *
+ * Required permission: `payments_permissions_view`.
+ * @summary Get a payment
+ */
+export const getPayment = async (id: string, options?: Parameters<typeof distruFetch>[1]): Promise<PaymentResponse> => {
+
+  return distruFetch<PaymentResponse>(getGetPaymentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListPaymentMethodsUrl = (params?: ListPaymentMethodsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["ids"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/public/v1/payment-methods?${stringifiedParams}` : `/public/v1/payment-methods`
+}
+
+/**
+ * List the [payment methods](#model-payment_method) configured for your company. A payment method
+ * is how money changes hands on a payment — its `type` is one of CASH, CHECK, CREDIT_CARD,
+ * BANK_REMITTANCE, or BANK_TRANSFER, and each method has a company-chosen `name` on top of that
+ * type. Use this to resolve the payment method a payment references, or to discover the set of
+ * methods available when recording payments.
+ *
+ * Payment methods can be linked to a QuickBooks Online payment method; when they are, the response's
+ * `qb_payment_method_id` holds the QuickBooks Online identifier the method is mapped to (null when it
+ * isn't mapped).
+ *
+ * This endpoint does not paginate: it returns every matching payment method in a single `data` array,
+ * and `next_page` is always null. Results are scoped to your company only.
+ *
+ * Note: this endpoint returns eventually consistent data — a create, edit, or delete can take up to
+ * 1 second to be reflected here.
+ *
+ * Required permission: `settings_permissions_payment_methods`.
+ * @summary Get payment methods
+ */
+export const listPaymentMethods = async (params?: ListPaymentMethodsParams, options?: Parameters<typeof distruFetch>[1]): Promise<PaymentMethods> => {
+
+  return distruFetch<PaymentMethods>(getListPaymentMethodsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetPaymentMethodUrl = (id: string,) => {
+
+
+
+
+  return `/public/v1/payment-methods/${id}`
+}
+
+/**
+ * Fetch a single [payment method](#model-payment_method) by its ID. Use this to resolve the method a
+ * payment references, or to read one method's current `name`, `type`, `active` flag, and QuickBooks
+ * Online mapping (`qb_payment_method_id`).
+ *
+ * Returns 404 if no payment method with that ID exists within your company — the lookup is scoped to
+ * your company, so an ID belonging to another company reads as not found. A soft-deleted method is
+ * still returned here (with its `deleted_at` set); deletion hides a method from new use but does not
+ * remove it.
+ *
+ * Required permission: `settings_permissions_payment_methods`.
+ * @summary Get a payment method
+ */
+export const getPaymentMethod = async (id: string, options?: Parameters<typeof distruFetch>[1]): Promise<PaymentMethodResponse> => {
+
+  return distruFetch<PaymentMethodResponse>(getGetPaymentMethodUrl(id),
   {
     ...options,
     method: 'GET'

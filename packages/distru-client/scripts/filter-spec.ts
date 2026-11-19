@@ -43,6 +43,14 @@ export const KEEP: Record<string, Record<string, string>> = {
   '/public/v1/deleted-records': { get: 'listDeletedRecords' },
   '/public/v1/activity': { get: 'listActivity' },
   '/public/v1/record-history': { get: 'getRecordHistory' },
+  // accounts receivable (added 2026-11-19)
+  '/public/v1/invoices': { get: 'listInvoices' },
+  '/public/v1/invoices/{id}': { get: 'getInvoice' },
+  '/public/v1/invoices/{id}/payments': { post: 'createInvoicePayment' },
+  '/public/v1/payments': { get: 'listPayments' },
+  '/public/v1/payments/{id}': { get: 'getPayment' },
+  '/public/v1/payment-methods': { get: 'listPaymentMethods' },
+  '/public/v1/payment-methods/{id}': { get: 'getPaymentMethod' },
 };
 
 /**
