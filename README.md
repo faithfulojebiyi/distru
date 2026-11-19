@@ -139,6 +139,13 @@ really is (promised versus actual lead times, how often deliveries come up short
 treat proposals. For example: *"Approver trims Mojave Pre-Roll orders by about 20% (4 of 5 times)."* Every
 memory links back to the decisions it came from.
 
+Some history only exists as prose, though: a vendor's email saying their extraction line is down, a price
+notice, a note on an old purchase order. So the agents can also search the purchasing mailbox and PO notes by
+meaning. Ask *"Has Sierra Extracts mentioned supply problems before?"* and the Copilot finds the November 10
+email about the extraction line and quotes it with the date. When the Planner orders from Sierra, it writes
+that into the PO note. Recalled text is treated like any other outside text: it's quoted and cited, never
+obeyed, and the numbers in a proposal still come from Distru and code, not from an email.
+
 **It's tested like a product.** About 20 scenarios run the real agents against the emulated systems: the
 failed lab test, the prompt injection, the partial shipment, a storm of rate-limit errors, undoing a 14-change
 proposal, Slack approvals, and Copilot questions like *"Which invoices are overdue?"* Model calls are recorded
@@ -229,6 +236,7 @@ docker compose up -d                                  # Postgres
 cp apps/agent/.env.example apps/agent/.env            # then add your ANTHROPIC_API_KEY
 bun run --cwd apps/agent db:push && bun run --cwd apps/agent db:seed
 bun run --cwd apps/agent db:seed:history              # optional: past decisions, so memories show up
+bun run --cwd apps/agent recall:index                 # optional: index vendor emails (needs dev:emulators)
 ```
 
 Then start each piece in its own terminal:
@@ -302,15 +310,17 @@ caching.
   next to it (`bun run studio`).
 - **Inngest keeps runs alive.** A run waiting for approval survives restarts and deploys, and each change is
   a step that's never repeated once it's done.
-- **Structured data lives in tables, not a vector store.** Purchase orders, lead times and quantities are
-  numbers, so the profiles and memories are computed and explainable, and each one points to its evidence.
+- **Facts in tables, prose in a search index, never the other way round.** Purchase orders, lead times and
+  quantities are numbers, so profiles and memories are computed, explainable and point to their evidence.
+  Emails and notes go into a vector index (pgvector) next to them, using a small embedding model that runs
+  locally, so search works offline, in CI and without another API key.
 - **Everything external is emulated from public docs.** That's what lets the whole system, tests included,
   run offline and in CI. Pointing it at the real services is a configuration change.
 
 ## Status
 
 Working today: the restock and vendor-reply flows, Slack approvals, the MCP server, undo, the context layer
-and its memories, the eval suite, the dashboard, prompt caching, and receivables answers in the Copilot.
+and its memories, searching past vendor emails and PO notes by meaning, the eval suite, the dashboard, prompt
+caching, and receivables answers in the Copilot.
 
-Still to come: searching past vendor emails by meaning (semantic recall, in progress), and a public demo
-deployment.
+Still to come: multiple Copilot chats with history in the sidebar (in progress), and a public demo deployment.
