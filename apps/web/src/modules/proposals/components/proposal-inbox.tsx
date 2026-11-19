@@ -16,7 +16,6 @@ import type {
   ProposalSummary,
   Risk,
 } from '../../../api/generated/opsAgentAPI.schemas';
-import { useConnectors } from '../../settings/settings-api';
 import { lineTableStyles as t } from '../../system/components/admin-table';
 import {
   DATE_RANGES,
@@ -37,6 +36,7 @@ import {
   type InboxTab,
 } from '../proposal-values';
 import { useProposals } from '../proposals-api';
+import { titleParts } from '../proposal-record';
 import { PolicyBadge, RiskBadge, StatusBadge } from './badges';
 
 const KIND_ICONS: Record<Principal['kind'], keyof typeof Icons> = {
@@ -79,20 +79,23 @@ const EMPTY: Record<InboxTab, { title: string; hint: string }> = {
   },
 };
 
-const RowTitle = ({ proposal }: { proposal: ProposalSummary }) => (
+const RowTitle = ({ proposal }: { proposal: ProposalSummary }) => {
+  const { title, summary } = titleParts(proposal);
+  return (
   <Flex direction="column" gap="0.5" minW="0">
-    <Span fontWeight="500" fontSize="1.5" truncate>
-      {proposal.title ?? 'Untitled proposal'}
+    <Span fontWeight="500" fontSize="1.5" truncate title={proposal.title ?? undefined}>
+      {title}
     </Span>
     <HStack gap="2.5" minW="0" fontSize="1" color="text.muted">
-      <Span truncate flexShrink="1">
-        {opsSummary(proposal)}
+      <Span truncate flexShrink="1" title={summary ?? undefined}>
+        {summary ?? opsSummary(proposal)}
       </Span>
       <Box w="1px" h="3" bg="border.subtle" flexShrink="0" />
       <CreatedBy principal={proposal.createdBy} />
     </HStack>
   </Flex>
-);
+  );
+};
 
 const rowClass = css({
   alignItems: 'center',
@@ -195,24 +198,6 @@ type InboxFilters = {
   range: DateRange;
 };
 
-const RISK_ORDER: Record<Risk, number> = { low: 0, medium: 1, high: 2 };
-
-/** The highest risk among a proposal's actions, from the connector catalogue (summaries carry no per-op risk). */
-const useRiskOf = () => {
-  const connectors = useConnectors();
-  const risks = useMemo(() => {
-    const map = new Map<string, Risk>();
-    for (const connector of connectors.data ?? [])
-      for (const tool of connector.tools) if (tool.kind === 'action' && tool.risk) map.set(tool.name, tool.risk);
-    return map;
-  }, [connectors.data]);
-  return (proposal: ProposalSummary): Risk | null =>
-    proposal.actions.reduce<Risk | null>((top, action) => {
-      const risk = risks.get(action);
-      return risk && (!top || RISK_ORDER[risk] > RISK_ORDER[top]) ? risk : top;
-    }, null);
-};
-
 /** A status tab as the mockup's segmented counts: "All 214  Needs attention 7". */
 const SegTab = ({
   label,
@@ -273,7 +258,6 @@ export const ProposalInbox = ({ tab }: { tab: InboxTab }) => {
   const proposals = useProposals();
   const navigate = useNavigate();
   const now = useNow(30_000);
-  const riskOf = useRiskOf();
   const [filters, setFilters] = useState<InboxFilters>({
     q: '',
     status: null,
@@ -306,7 +290,7 @@ export const ProposalInbox = ({ tab }: { tab: InboxTab }) => {
       inTab(tab, proposal.status) &&
       (!term || (proposal.title ?? '').toLowerCase().includes(term) || proposal.id.startsWith(term)) &&
       (!filters.status || proposal.status === filters.status) &&
-      (!filters.risk || riskOf(proposal) === filters.risk) &&
+      (!filters.risk || proposal.maxRisk === filters.risk) &&
       (!filters.createdBy || actorName(proposal.createdBy) === filters.createdBy) &&
       inRange(proposal.createdAt, filters.range, now),
   );
@@ -411,7 +395,7 @@ export const ProposalInbox = ({ tab }: { tab: InboxTab }) => {
             </thead>
             <tbody>
               {visible.map((proposal) => {
-                const risk = riskOf(proposal);
+                const risk = proposal.maxRisk;
                 return (
                   <tr
                     key={proposal.id}

@@ -338,7 +338,7 @@ export const OverviewPage = () => {
                 <StatCard
                   label="Proposed this week"
                   value={formatMoneyShort(stats.proposedWeek)}
-                  note={`${formatMoneyShort(stats.approvedWeek)} approved`}
+                  note={`${formatMoneyShort(stats.approvedWeek)} approved · ${stats.proposedWeekCount} proposal${stats.proposedWeekCount === 1 ? '' : 's'}${stats.undoWeek ? ` · ${stats.undoWeek} undo` : ''}`}
                 />
               </>
             )}

@@ -26,6 +26,13 @@ export const AUDIT_TYPES: Record<
   'proposal.executed': { verb: 'finished executing', label: 'Executed', tone: TONES.good, icon: 'checkCircle' },
   'proposal.failed': { verb: 'failed executing', label: 'Execution failed', tone: TONES.bad, icon: 'alertCircle' },
   'budget.exceeded': { verb: 'hit a run budget', label: 'Budget exceeded', tone: TONES.bad, icon: 'gauge' },
+  'proposal.undo_proposed': { verb: 'proposed undoing', label: 'Undo proposed', tone: TONES.waiting, icon: 'undo' },
+  'policy.changed': { verb: 'changed a policy rule', label: 'Policy changed', tone: TONES.info, icon: 'shieldCheck' },
+  'mcp_token.created': { verb: 'created an MCP token', label: 'MCP token created', tone: TONES.info, icon: 'key' },
+  'mcp_token.revoked': { verb: 'revoked an MCP token', label: 'MCP token revoked', tone: TONES.bad, icon: 'ban' },
+  'mcp.tool_called': { verb: 'called an MCP tool', label: 'MCP tool called', tone: TONES.muted, icon: 'tools' },
+  'trigger.received': { verb: 'received a trigger', label: 'Trigger received', tone: TONES.info, icon: 'lightning' },
+  'trigger.rejected': { verb: 'rejected a trigger', label: 'Trigger rejected', tone: TONES.bad, icon: 'unplug' },
 };
 
 const FALLBACK: { verb: string; label: string; tone: Tone; icon: keyof typeof Icons } = { verb: 'recorded', label: 'Event', tone: TONES.muted, icon: 'infoCircle' };
@@ -105,6 +112,34 @@ export const auditDetail = (event: AuditEvent): string | null => {
     }
     case 'budget.exceeded':
       return `${str(data.dimension) ?? 'budget'}: used ${num(data.used) ?? '?'} of ${num(data.limit) ?? '?'}`;
+    case 'proposal.undo_proposed': {
+      const ops = Array.isArray(data.opIndexes) ? data.opIndexes.length : 0;
+      const kept = Array.isArray(data.notUndoable) ? data.notUndoable.length : 0;
+      const reason = str(data.reason);
+      return [
+        `${ops} op${ops === 1 ? '' : 's'} to reverse`,
+        kept ? `${kept} can't be undone` : null,
+        reason ? `“${reason}”` : null,
+      ].filter(Boolean).join(' · ');
+    }
+    case 'policy.changed':
+      return str(data.key) ? `Rule ${str(data.key)}` : null;
+    case 'mcp_token.created': {
+      const scopes = Array.isArray(data.scopes) ? data.scopes.filter((s) => typeof s === 'string') : [];
+      return `${str(data.name) ?? 'token'}${scopes.length ? ` · ${scopes.join(', ')}` : ''}`;
+    }
+    case 'mcp_token.revoked':
+      return str(data.name);
+    case 'mcp.tool_called': {
+      const error = str(data.error);
+      return [str(data.tool), str(data.intent) ? `“${str(data.intent)}”` : null, data.outcome === 'error' ? `failed${error ? `: ${error}` : ''}` : null]
+        .filter(Boolean)
+        .join(' · ') || null;
+    }
+    case 'trigger.received':
+      return [str(data.eventName), str(data.source), data.ignored === true ? 'acknowledged, nothing queued' : null].filter(Boolean).join(' · ') || null;
+    case 'trigger.rejected':
+      return [str(data.source), str(data.reason), str(data.message)].filter(Boolean).join(' · ') || null;
     default:
       return null;
   }

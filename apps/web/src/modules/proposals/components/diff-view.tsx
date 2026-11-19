@@ -1,11 +1,17 @@
+// Field-level diff (Ops Agent's own view; carbonme has no diff). Value chips and the muted monospace id with a copy
+// button follow carbonme modules/integrations/mcp-setup-card.tsx CopyField and modules/chats/chat-tool-runs.tsx
+// ValueBlock; `{{op:N.field}}` chips reuse modules/audit/audit-refs.ts.
+import { createContext, useContext } from 'react';
 import { css } from '@ops/ui/css';
 import { Box, Flex, HStack, styled } from '@ops/ui/jsx';
 
 import { Icons } from '@ops/ui/icons/base';
+import { toast } from '@ops/ui/primitives/toast/toast';
 import type {
   FieldChange,
   FieldChangeKind,
 } from '../../../api/generated/opsAgentAPI.schemas';
+import { refFieldLabel, splitRefs, type OpRefMatch, type Resolution } from '../../audit/audit-refs';
 import {
   fieldOf,
   formatMoney,
@@ -79,6 +85,137 @@ const lineTotal = (row: Row) => {
 const numericAlign = (key: string) =>
   isMoneyField(key) || isQuantityField(key) ? 'right' : 'left';
 
+/** What the diff knows beyond the values: names for ids, and what `{{op:N.field}}` placeholders resolved to. */
+export type DiffContextValue = {
+  names: ReadonlyMap<string, string>;
+  resolveRef: (ref: OpRefMatch) => Resolution;
+};
+
+const DiffContext = createContext<DiffContextValue>({ names: new Map(), resolveRef: () => null });
+
+export const DiffContextProvider = DiffContext.Provider;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const formatWhen = (value: string) => {
+  const date = ISO_DATE.test(value) ? new Date(`${value}T12:00:00`) : new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return ISO_DATE.test(value)
+    ? date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+    : date.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
+
+/** A long id: the name when one is known, the id muted in monospace, and a copy button. */
+const IdValue = ({ id }: { id: string }) => {
+  const { names } = useContext(DiffContext);
+  const name = names.get(id);
+  return (
+    <styled.span display="inline-flex" alignItems="center" gap="1.5" maxW="full" minW="0" verticalAlign="middle">
+      {name ? <styled.span fontWeight="500">{name}</styled.span> : null}
+      <styled.code fontFamily="mono" fontSize="1" color="text.muted" truncate title={id}>
+        {name ? id.slice(0, 8) : id}
+      </styled.code>
+      <styled.button
+        type="button"
+        aria-label="Copy id"
+        title="Copy id"
+        color="text.muted"
+        cursor="pointer"
+        display="inline-flex"
+        flexShrink="0"
+        _hover={{ color: 'text.app' }}
+        onClick={(event) => {
+          event.stopPropagation();
+          void navigator.clipboard
+            .writeText(id)
+            .then(() => toast.success('Id copied.'))
+            .catch(() => toast.error('Copy failed. Select the text and copy it.'));
+        }}
+      >
+        <Icons.copy size={11} />
+      </styled.button>
+    </styled.span>
+  );
+};
+
+/** `{{op:0.purchase_number}}` as "PO number from op 1", with the value once that op has written it. */
+const RefChip = ({ match }: { match: OpRefMatch }) => {
+  const { resolveRef } = useContext(DiffContext);
+  const resolution = resolveRef(match);
+  return (
+    <styled.span
+      display="inline-flex"
+      alignItems="center"
+      gap="1"
+      px="1.5"
+      mx="0.5"
+      rounded="md"
+      bg="brand.panel.5"
+      color="text.label"
+      fontSize="1"
+      fontWeight="500"
+      whiteSpace="nowrap"
+      verticalAlign="baseline"
+      title={match.token}
+      data-op-ref={match.token}
+    >
+      <Icons.link size={10} />
+      {refFieldLabel(match.field)} from op {match.index + 1}
+      {resolution ? (
+        <styled.span color="palette.green.11" fontFamily="mono">
+          · {String(resolution.value)}
+        </styled.span>
+      ) : null}
+    </styled.span>
+  );
+};
+
+const Chip = ({ children }: { children: React.ReactNode }) => (
+  <styled.span display="inline-flex" alignItems="center" px="1.5" rounded="md" bg="brand.panel.4" fontSize="1" whiteSpace="nowrap">
+    {children}
+  </styled.span>
+);
+
+/** One scalar as a person reads it: refs as chips, dates formatted (raw on hover), ids named, money formatted. */
+export const ScalarValue = ({ field, value }: { field: string; value: unknown }) => {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <styled.span color="text.muted" fontStyle="italic">none</styled.span>;
+    if (value.every((item) => item === null || typeof item !== 'object'))
+      return (
+        <styled.span display="inline-flex" flexWrap="wrap" gap="1">
+          {value.map((item, index) => (
+            <Chip key={index}>
+              <ScalarValue field={field} value={item} />
+            </Chip>
+          ))}
+        </styled.span>
+      );
+  }
+  if (typeof value === 'string') {
+    const parts = splitRefs(value);
+    if (parts.some((part) => typeof part !== 'string'))
+      return (
+        <>
+          {parts.map((part, index) =>
+            typeof part === 'string' ? <span key={index}>{part}</span> : <RefChip key={index} match={part} />,
+          )}
+        </>
+      );
+    if (UUID.test(value)) return <IdValue id={value} />;
+    if (ISO_DATETIME.test(value) || ISO_DATE.test(value))
+      return (
+        <styled.span title={value} textDecoration="underline dotted" textUnderlineOffset="3px">
+          {formatWhen(value)}
+        </styled.span>
+      );
+    if (value === '') return <styled.span color="text.muted" fontStyle="italic">empty</styled.span>;
+  }
+  if (value === null) return <styled.span color="text.muted" fontStyle="italic">none</styled.span>;
+  return <>{formatScalar(field, value)}</>;
+};
+
 /** Arrays of records (Distru order lines) as a small table, with a line total when it can be computed. */
 const LineTable = ({ rows, className }: { rows: Row[]; className: string }) => {
   const columns = columnsOf(rows);
@@ -119,7 +256,7 @@ const LineTable = ({ rows, className }: { rows: Row[]; className: string }) => {
             <tr key={typeof row.id === 'string' ? row.id : index}>
               {columns.map((key) => (
                 <td key={key} style={{ textAlign: numericAlign(key) }}>
-                  {formatScalar(key, row[key])}
+                  <ScalarValue field={key} value={row[key]} />
                 </td>
               ))}
               {showTotal && (
@@ -170,7 +307,9 @@ const Value = ({
         {entries.map(([key, item]) => (
           <Box key={key} display="contents">
             <styled.dt opacity={0.75}>{key}</styled.dt>
-            <styled.dd>{formatScalar(key, item)}</styled.dd>
+            <styled.dd minW="0">
+              <ScalarValue field={key} value={item} />
+            </styled.dd>
           </Box>
         ))}
         {total !== null && (
@@ -185,15 +324,16 @@ const Value = ({
 
   return (
     <styled.span
-      fontFamily={typeof value === 'string' ? undefined : 'mono'}
+      fontFamily={typeof value === 'number' ? 'mono' : undefined}
       fontSize="1.5"
       fontVariantNumeric="tabular-nums"
       className={color}
       fontWeight={old ? '400' : '500'}
       textDecoration={old ? 'line-through' : undefined}
-            overflowWrap="anywhere"
+      overflowWrap="anywhere"
+      whiteSpace="pre-wrap"
     >
-      {formatScalar(field, value)}
+      <ScalarValue field={field} value={value} />
     </styled.span>
   );
 };

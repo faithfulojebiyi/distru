@@ -93,3 +93,30 @@ export const opRefs = (
   visit(event.data.resolved && typeof event.data.resolved === 'object' ? Object.keys(event.data.resolved).join(' ') : null);
   return [...seen.values()].map((ref) => ({ ref, resolution: resolveRef(ref, event, op, ops) }));
 };
+
+/**
+ * What a placeholder resolved to with no audit event in hand (the proposal page's diff): any op's recorded
+ * `result.resolved`, else what the referenced op exported once written.
+ */
+export const resolveOpRef = (ref: OpRefMatch, ops: readonly ProposalOp[]): Resolution => {
+  for (const op of ops) {
+    const recorded = asResolved(op.result?.resolved);
+    if (Object.hasOwn(recorded, ref.token)) return { value: recorded[ref.token] ?? null, applied: true };
+  }
+  const source = ops.find((item) => item.index === ref.index);
+  if (!source?.result || source.status !== 'executed') return null;
+  if (ref.field === 'recordId') return source.result.recordId === null ? null : { value: source.result.recordId, applied: true };
+  const outputs = asResolved(source.result.outputs);
+  return Object.hasOwn(outputs, ref.field) ? { value: outputs[ref.field] ?? null, applied: true } : null;
+};
+
+/** "purchase_number" → "PO number": how a referenced field reads on a chip. */
+const REF_FIELD_LABELS: Record<string, string> = {
+  purchase_number: 'PO number',
+  recordId: 'Record id',
+  task_name: 'Task name',
+  owner_id: 'Owner',
+  status: 'Status',
+};
+
+export const refFieldLabel = (field: string) => REF_FIELD_LABELS[field] ?? field.replace(/_/g, ' ');

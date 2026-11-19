@@ -10,7 +10,11 @@ import type {
   DecisionResponse,
   ListProposalsParams,
   ProposalDetail,
-  ProposalList
+  ProposalList,
+  ResumeRequest,
+  ResumeResponse,
+  UndoRequest,
+  UndoResponse
 } from '../opsAgentAPI.schemas';
 
 import { apiFetch } from '../../client';
@@ -109,6 +113,56 @@ export const decideProposal = async (id: string,
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(decisionRequest)
+  }
+);}
+
+
+export const getResumeProposalUrl = (id: string,) => {
+
+
+
+
+  return `/api/proposals/${id}/resume`
+}
+
+/**
+ * Records `proposal.resume_requested` and queues `proposal-execute` (Inngest, one durable step per op). The executor skips ops that already executed and dedupes every write by its idempotency key, so only the failed op and the ones after it run. 409 `not_resumable` unless the proposal is `failed` (see `resumable` on the detail). When the queue is unreachable the request is kept as a pending-execution marker (`queued: false`) and the sweeper retries it within a minute.
+ * @summary Resume a failed proposal (approver only), including a failed undo, through the same durable executor
+ */
+export const resumeProposal = async (id: string,
+    resumeRequest?: ResumeRequest, options?: Parameters<typeof apiFetch>[1]): Promise<ResumeResponse> => {
+
+  return apiFetch<ResumeResponse>(getResumeProposalUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(resumeRequest)
+  }
+);}
+
+
+export const getUndoProposalUrl = (id: string,) => {
+
+
+
+
+  return `/api/proposals/${id}/undo`
+}
+
+/**
+ * Calls harness.undo: the executed ops that can be undone become compensating ops of a new proposal (reverse order, `meta.undoOf`), which goes through policy, a human decision (never auto-approved; separation of duties applies) and the executor. Ops that cannot be undone (e.g. a sent email) are listed in `meta.notUndoable`. 409 `undo_unavailable` with the per-op reasons when nothing (or a requested op) can be undone.
+ * @summary Propose undoing an executed proposal (operator or approver). Creates a NEW proposal that still needs approval
+ */
+export const undoProposal = async (id: string,
+    undoRequest: UndoRequest, options?: Parameters<typeof apiFetch>[1]): Promise<UndoResponse> => {
+
+  return apiFetch<UndoResponse>(getUndoProposalUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(undoRequest)
   }
 );}
 

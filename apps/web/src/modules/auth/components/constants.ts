@@ -1,4 +1,31 @@
-import type { WelcomeTask } from './types';
+// Adapted from clarkia apps/dashboard/src/modules/auth/components/constants.ts: OTP_PURPOSE_COPY and otpErrorMessage
+// are copied as is; the welcome panel data is Ops Agent's own.
+import type { OtpPurpose, WelcomeTask } from './types';
+
+/** The code step's wording for each purpose: why the code was sent, and the submit button. */
+export const OTP_PURPOSE_COPY: Record<OtpPurpose, { title: string; detail: string; submit: string }> = {
+  'sign-in': {
+    title: 'Check your inbox',
+    detail: 'Enter it to sign in.',
+    submit: 'Continue',
+  },
+  'email-verification': {
+    title: 'Verify your email',
+    detail: 'Enter it to confirm your email and open your account.',
+    submit: 'Verify',
+  },
+};
+
+/** Plain wording for the server's code errors, keyed by its error code; anything else shows the server's message. */
+const OTP_ERROR_MESSAGES = new Map<string, string>([
+  ['INVALID_OTP', 'That code is not right. Check it, or send a new one.'],
+  ['OTP_EXPIRED', 'That code has expired. Send a new one.'],
+  ['TOO_MANY_ATTEMPTS', 'Too many tries with that code. Send a new one.'],
+]);
+
+/** The message to show for a failed code check. */
+export const otpErrorMessage = (error: { code?: string; message?: string }, fallback: string) =>
+  OTP_ERROR_MESSAGES.get(error.code ?? '') ?? error.message ?? fallback;
 
 /** Faint ERP records behind the welcome copy: example data, shaped like inventory and purchase order rows. */
 export const LEDGER_LINES = [

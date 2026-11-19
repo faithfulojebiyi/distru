@@ -2,6 +2,7 @@ import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 
 import {
   apiErrorMessage,
+  isNetworkError,
   isNotFoundError,
   isSessionExpiredError,
 } from '../api/errors';
@@ -12,8 +13,13 @@ export const makeQueryClient = () =>
     defaultOptions: {
       queries: {
         refetchOnWindowFocus: false,
-        // A missing resource does not come back on a second try.
-        retry: (failures, error) => !isNotFoundError(error) && failures < 1,
+        // A missing resource does not come back on a second try; an unreachable server usually does (a restart),
+        // so network errors retry three times with backoff (1s, 2s, 4s, capped at 8s) before the screen shows it.
+        retry: (failures, error) => {
+          if (isNetworkError(error)) return failures < 3;
+          return !isNotFoundError(error) && failures < 1;
+        },
+        retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
         // above zero so SSR does not refetch everything immediately on hydrate
         staleTime: 30_000,
       },
@@ -27,6 +33,8 @@ export const makeQueryClient = () =>
     queryCache: new QueryCache({
       onError: (error, query) => {
         if (isSessionExpiredError(error)) return;
+        // The offline banner reports an unreachable server once, instead of a toast per query.
+        if (isNetworkError(error)) return;
         if (query.meta?.suppressErrorToast) return;
         if (query.meta?.suppressNotFoundToast && isNotFoundError(error)) return;
 
@@ -38,6 +46,7 @@ export const makeQueryClient = () =>
       onError: (error, _variables, _context, mutation) => {
         if (isSessionExpiredError(error)) return;
         if (mutation.options.onError) return;
+        if (isNetworkError(error)) return void toast.error('Can’t reach the agent server. Nothing was saved; try again in a moment.');
 
         toast.error(apiErrorMessage(error));
       },

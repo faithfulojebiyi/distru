@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Box, Flex } from '@ops/ui/jsx';
 
 import { Icons } from '@ops/ui/icons/base';
+import { isNetworkError } from '../../../api/errors';
 import { Illustrations } from '@ops/ui/illustrations';
 import { Button } from '@ops/ui/primitives/button';
 import { Span } from '@ops/ui/primitives/text';
@@ -51,14 +52,21 @@ export const EmptyState = ({
 
 /** A failed load: what failed, and a way to try again. */
 export const ErrorState = ({
-  title,
-  hint = 'Check that the agent server is running, then try again.',
+  title: given,
+  hint: givenHint = 'Check that the agent server is running, then try again.',
   retry,
+  error,
 }: {
   title: string;
   hint?: string;
   retry?: () => void;
-}) => (
+  /** When it is a network error (no response), the state says the server is unreachable and retrying. */
+  error?: unknown;
+}) => {
+  const offline = error !== undefined && isNetworkError(error);
+  const title = offline ? 'Can’t reach the agent server' : given;
+  const hint = offline ? 'It may be restarting. This retries on its own; check that it is running.' : givenHint;
+  return (
   <Flex
     direction="column"
     align="center"
@@ -84,4 +92,5 @@ export const ErrorState = ({
       </Button>
     ) : null}
   </Flex>
-);
+  );
+};

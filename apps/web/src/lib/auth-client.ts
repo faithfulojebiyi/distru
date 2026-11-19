@@ -1,4 +1,4 @@
-import { inferAdditionalFields } from 'better-auth/client/plugins';
+import { emailOTPClient, inferAdditionalFields } from 'better-auth/client/plugins';
 import { createAuthClient } from 'better-auth/react';
 
 import { apiUrl } from '../config/api-url';
@@ -10,6 +10,8 @@ import { apiUrl } from '../config/api-url';
 export const authClient = createAuthClient({
   baseURL: apiUrl,
   plugins: [
+    // Sign-in by emailed code, email verification and password reset (clarkia's lib/auth-client.ts).
+    emailOTPClient(),
     /**
      * Declared rather than inferred from the server's Auth type, which lives in
      * the agent app this package does not compile against.

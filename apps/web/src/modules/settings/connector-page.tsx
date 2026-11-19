@@ -14,7 +14,7 @@ import { SettingsPage } from './settings-page';
 
 const FIRST_TOOLS = 8;
 
-const RISK_TONES: Record<Risk, { bg: string | { base: string; _dark: string }; color: string }> = {
+const RISK_TONES: Record<NonNullable<Risk>, { bg: string | { base: string; _dark: string }; color: string }> = {
   low: { bg: 'palette.green.3', color: 'palette.green.11' },
   medium: { bg: { base: 'palette.orange.3', _dark: 'palette.amber.3' }, color: 'palette.amber.11' },
   high: { bg: 'brand.error.3', color: 'text.error' },

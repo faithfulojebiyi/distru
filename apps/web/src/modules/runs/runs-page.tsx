@@ -1,18 +1,12 @@
 // Rows adapted from carbonme modules/layout/components/workspace-home.tsx (ChatList: a Link per row with an icon, a
 // title, a status label and the time, separated by subtle borders), with a column header added for the run figures.
-import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { css } from '@ops/ui/css';
 import { Box, Flex, styled } from '@ops/ui/jsx';
 
-import type {
-  RunDetail,
-  RunSummary,
-} from '../../api/generated/opsAgentAPI.schemas';
-import { getRun } from '../../api/generated/runs/runs';
+import type { RunSummary } from '../../api/generated/opsAgentAPI.schemas';
 import { Icons } from '@ops/ui/icons/base';
 import { Skeleton } from '@ops/ui/primitives/skeleton';
-import { getQueryScope } from '../../lib/query';
 import { StatusBadge } from '../proposals/components/badges';
 import { formatAge } from '../proposals/proposal-values';
 import {
@@ -24,11 +18,8 @@ import { EmptyState, ErrorState } from '../system/components/states';
 import { useNow } from '../system/use-now';
 import { triggerOf } from './run-activity';
 import { RunStatusBadge } from './run-badges';
-import { LIVE_RUN_STATUSES, runKeys, useRuns } from './runs-api';
+import { LIVE_RUN_STATUSES, useRuns } from './runs-api';
 import { StartRunButton } from './start-run-dialog';
-
-/** Figures the list has no field for come from each run's detail; only the newest this many are read. */
-const DETAILED_RUNS = 30;
 
 const COLUMNS =
   'minmax(0, 1.8fr) 8.5rem 6rem 5rem 7rem 4.5rem 4.5rem minmax(0, 1.4fr)';
@@ -73,18 +64,10 @@ const runDuration = (run: RunSummary, now: number) => {
   return durationText(end - Date.parse(run.createdAt));
 };
 
-const RunRow = ({
-  run,
-  detail,
-  now,
-}: {
-  run: RunSummary;
-  detail: RunDetail | undefined;
-  now: number;
-}) => {
+const RunRow = ({ run, now }: { run: RunSummary; now: number }) => {
   const trigger = triggerOf(run.triggeredBy);
   const TriggerIcon = Icons[TRIGGER_ICONS[trigger.kind]];
-  const totals = detail?.totals;
+  const { totals } = run;
   return (
     <li>
       <Link to="/runs/$runId" params={{ runId: run.runId }} className={rowClass} data-run-row={run.runId}>
@@ -138,28 +121,9 @@ const RunRow = ({
 
 const HEADERS = ['Run', 'Status', 'Started', 'Duration', 'Agents · tools', 'Tokens', 'Cost', 'Proposal'];
 
-/** The newest runs' details for the figures the list route does not carry (tokens, cost, calls). */
-const useRunDetails = (runs: readonly RunSummary[]) => {
-  const client = useQueryClient();
-  const scope = getQueryScope(client);
-  return useQueries({
-    queries: runs.slice(0, DETAILED_RUNS).map((run) => ({
-      queryKey: runKeys.detail(scope, run.runId),
-      queryFn: ({ signal }: { signal: AbortSignal }) => getRun(run.runId, { signal }),
-      staleTime: LIVE_RUN_STATUSES.has(run.status) ? 2_000 : 10 * 60_000,
-      meta: { suppressErrorToast: true },
-    })),
-    combine: (results) =>
-      new Map(
-        results.flatMap((result) => (result.data ? [[result.data.runId, result.data] as const] : [])),
-      ),
-  });
-};
-
 export const RunsList = () => {
   const runs = useRuns();
   const now = useNow(5_000);
-  const details = useRunDetails(runs.data ?? []);
 
   if (runs.isPending)
     return (
@@ -202,7 +166,7 @@ export const RunsList = () => {
       </Box>
       <styled.ul display="flex" flexDirection="column" data-testid="runs-list">
         {runs.data.map((run) => (
-          <RunRow key={run.runId} run={run} detail={details.get(run.runId)} now={now} />
+          <RunRow key={run.runId} run={run} now={now} />
         ))}
       </styled.ul>
     </Box>

@@ -193,6 +193,9 @@ export const formatTime = (iso: string) =>
 const ACTION_LABELS: Record<string, string> = {
   'distru.purchases.upsert': 'Purchase order',
   'email.send_vendor_po': 'Vendor email',
+  'distru.tasks.create': 'Receiving task',
+  'distru_mcp.mutate_product': 'Buyer cap',
+  'composio.gmail_reply_to_thread': 'Gmail reply',
 };
 
 export const actionLabel = (action: string) => ACTION_LABELS[action] ?? action;

@@ -25,7 +25,7 @@ import {
   type DecisionFailure,
 } from '../proposals-api';
 import { AMBER_TINT, StatusBadge } from './badges';
-import { AppLogo } from '../../settings/connectors-page';
+import { RecordIcon } from '../../system/components/record-tabs';
 import { ToolRunBadge } from '../../steps/tool-runs';
 import { PolicyReasons } from './policy-panel';
 
@@ -79,16 +79,15 @@ const WriteWarning = ({ proposal }: { proposal: ProposalDetail }) => (
   </HStack>
 );
 
-/** Approve / reject with an optional reason, for approvers; operators see why they cannot. */
-const DecisionForm = ({ proposal }: { proposal: ProposalDetail }) => {
+/**
+ * One decision in progress, shared by the record header's Approve / Reject and the Decision section's form, so
+ * both send the same reason and spin together.
+ */
+export const useDecision = (proposal: ProposalDetail) => {
   const me = useMe();
   const decide = useDecideProposal(proposal.id);
   const [reason, setReason] = useState('');
   const [pending, setPending] = useState<DecisionKind | null>(null);
-  const allowed = me.data?.canApprove ?? false;
-  const failure = decide.error ? decisionFailureOf(decide.error) : null;
-  const busy = decide.isPending;
-
   const send = (decision: DecisionKind) => {
     setPending(decision);
     decide.mutate(
@@ -96,33 +95,41 @@ const DecisionForm = ({ proposal }: { proposal: ProposalDetail }) => {
       { onSettled: () => setPending(null) },
     );
   };
+  return {
+    reason,
+    setReason,
+    pending,
+    send,
+    allowed: me.data?.canApprove ?? false,
+    busy: decide.isPending,
+    failure: decide.error ? decisionFailureOf(decide.error) : null,
+  };
+};
 
-  const spinner = (decision: DecisionKind) =>
-    pending === decision ? <Icons.loading size={13} /> : null;
+export type Decision = ReturnType<typeof useDecision>;
 
-  const buttons = (
+/** Reject / Approve $X as small buttons that spin while their decision is sent (ToolApprovalCard's actions). */
+export const DecisionButtons = ({ proposal, decision, size = 'xs' }: { proposal: ProposalDetail; decision: Decision; size?: 'xs' | 'sm' }) => {
+  const spinner = (kind: DecisionKind) => (decision.pending === kind ? <Icons.loading size={13} /> : null);
+  return (
     <HStack gap="2" justify="flex-end" flexWrap="wrap">
-      <Button
-        size="xs"
-        variant="ghost"
-        disabled={!allowed || busy}
-        onClick={() => send('reject')}
-        data-decide="reject"
-      >
+      <Button size={size} variant={size === 'sm' ? 'outline' : 'ghost'} disabled={!decision.allowed || decision.busy} onClick={() => decision.send('reject')} data-decide="reject">
         {spinner('reject')}
         Reject
       </Button>
-      <Button
-        size="xs"
-        disabled={!allowed || busy}
-        onClick={() => send('approve')}
-        data-decide="approve"
-      >
+      <Button size={size} disabled={!decision.allowed || decision.busy} onClick={() => decision.send('approve')} data-decide="approve">
         {spinner('approve')}
         Approve {formatMoney(proposal.totalValue)}
       </Button>
     </HStack>
   );
+};
+
+/** Approve / reject with an optional reason, for approvers; operators see why they cannot. */
+const DecisionForm = ({ proposal, decision }: { proposal: ProposalDetail; decision: Decision }) => {
+  const { reason, setReason, allowed, failure, busy } = decision;
+
+  const buttons = <DecisionButtons proposal={proposal} decision={decision} />;
 
   return (
     <Flex direction="column" gap="3">
@@ -217,7 +224,7 @@ const NOTES: Partial<Record<ProposalDetail['status'], string>> = {
 };
 
 /** What a person can do with this proposal now: decide it, or see who did and when (ToolApprovalCard's frame). */
-export const DecisionPanel = ({ proposal }: { proposal: ProposalDetail }) => {
+export const DecisionPanel = ({ proposal, decision }: { proposal: ProposalDetail; decision: Decision }) => {
   const note = NOTES[proposal.status];
   const pending = proposal.status === 'pending_approval';
   return (
@@ -232,7 +239,7 @@ export const DecisionPanel = ({ proposal }: { proposal: ProposalDetail }) => {
       data-testid="decision-panel"
     >
       <HStack gap="2.5" minW="0">
-        <AppLogo icon="checkCircle" name="Decision" />
+        <RecordIcon icon="checkCircle" size="sm" />
         <Box minW="0" flex="1">
           <styled.p fontSize="1.5" fontWeight="500" truncate>
             {pending ? 'Your decision' : 'Decision'}
@@ -244,7 +251,7 @@ export const DecisionPanel = ({ proposal }: { proposal: ProposalDetail }) => {
         {pending ? <ToolRunBadge status="awaiting_approval" /> : <StatusBadge status={proposal.status} />}
       </HStack>
       {pending ? (
-        <DecisionForm proposal={proposal} />
+        <DecisionForm proposal={proposal} decision={decision} />
       ) : (
         <>
           <DecisionRecord proposal={proposal} />

@@ -37,7 +37,8 @@ export const useAgentHealth = () =>
   useQuery({
     queryKey: sessionKeys.health,
     queryFn: ({ signal }) => getHealth({ signal }),
-    refetchInterval: 30_000,
+    // Every 30s while up; every 5s while down, so the offline banner clears soon after a restart.
+    refetchInterval: (query) => (query.state.status === 'error' ? 5_000 : 30_000),
     retry: false,
     meta: { suppressErrorToast: true },
   });

@@ -1,3 +1,5 @@
+// Copied from clarkia apps/dashboard/src/modules/auth/components/auth-form.tsx (AuthHeading, AuthField, PasswordInput,
+// OrDivider, SwitchPrompt, CodeInput).
 import { useState, type ReactNode } from 'react';
 import { Box, Flex, HStack, styled } from '@ops/ui/jsx';
 
@@ -5,6 +7,8 @@ import { Icons } from '@ops/ui/icons/base';
 import type { TIcon } from '@ops/ui/icons/types';
 import { Input } from '@ops/ui/primitives/input';
 import { Heading, Span, Text } from '@ops/ui/primitives/text';
+
+const CODE_SLOTS = [0, 1, 2, 3, 4, 5];
 
 /** A plain glyph over the title and one line of subtitle; every auth step opens with it. */
 export const AuthHeading = ({
@@ -129,6 +133,63 @@ export const OrDivider = () => (
     Or
   </styled.div>
 );
+
+/** Six boxes over one real input, so paste, autofill and screen readers see a single code field. */
+export const CodeInput = ({
+  value,
+  onChange,
+  invalid,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  invalid: boolean;
+}) => {
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <Box position="relative">
+      <styled.div display="grid" gap="2" gridTemplateColumns="repeat(6, 1fr)">
+        {CODE_SLOTS.map((slot) => (
+          <styled.span
+            key={slot}
+            bg={invalid ? 'brand.error.3' : 'brand.panel.5'}
+            color={invalid ? 'brand.error.11' : 'text.app'}
+            display="grid"
+            fontFamily="mono"
+            fontSize="4"
+            fontWeight="600"
+            h="2.875rem"
+            placeItems="center"
+            ring={focused && slot === Math.min(value.length, 5) ? '2px' : '0'}
+            ringColor="brand.panel.15"
+            rounded="lg"
+          >
+            {value[slot] ?? ''}
+          </styled.span>
+        ))}
+      </styled.div>
+      <styled.input
+        aria-invalid={invalid}
+        aria-label="Code"
+        autoComplete="one-time-code"
+        autoFocus
+        caretColor="transparent"
+        color="transparent"
+        inputMode="numeric"
+        inset="0"
+        maxLength={6}
+        onBlur={() => setFocused(false)}
+        onChange={(event) => onChange(event.target.value.replace(/\D/g, ''))}
+        onFocus={() => setFocused(true)}
+        opacity="0"
+        position="absolute"
+        required
+        value={value}
+        w="full"
+      />
+    </Box>
+  );
+};
 
 /** The top-right prompt with a small outline button to the other auth page. */
 export const SwitchPrompt = ({

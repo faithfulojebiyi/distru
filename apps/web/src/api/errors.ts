@@ -10,6 +10,12 @@ export class ApiError extends Error {
   }
 }
 
+/** No response at all (server down or restarting, network gone): an ApiError with status 0 and code `network`. */
+export const NETWORK_ERROR_MESSAGE = 'Can’t reach the agent server. Retrying…';
+
+export const isNetworkError = (error: unknown): boolean =>
+  (error instanceof ApiError && error.status === 0) || (error instanceof TypeError && /fetch|network|load failed/i.test(error.message));
+
 const statusOf = (error: unknown): number | null =>
   error instanceof ApiError ? error.status : null;
 
@@ -41,3 +47,12 @@ export const apiErrorCode = (error: unknown): string | null => {
   if (!body || typeof body !== 'object' || !('code' in body)) return null;
   return typeof body.code === 'string' ? body.code : null;
 };
+
+/**
+ * A 404 from a route the server does not have yet (Hono's plain "404 Not Found"), as opposed to a JSON
+ * `{ error: 'not_found' }` for a missing record. Screens built ahead of their route show "not available yet".
+ */
+export const isRouteMissingError = (error: unknown): boolean =>
+  error instanceof ApiError &&
+  error.status === 404 &&
+  !(error.body && typeof error.body === 'object' && 'error' in error.body);

@@ -8,10 +8,7 @@
     "start": "bun .output/server/index.mjs",
     "typecheck": "tsc --noEmit",
     "prepare": "bun run --cwd ../../packages/ui lib && panda codegen",
-    "api:generate": "orval --config ./orval.config.ts",
-    "seed:demo": "bun scripts/seed-proposals.ts --reset",
-    "seed:demo:clean": "bun scripts/seed-proposals.ts --clean",
-    "seed:demo:execute": "bun scripts/seed-proposals.ts --execute"
+    "api:generate": "orval --config ./orval.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

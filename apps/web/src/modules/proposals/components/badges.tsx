@@ -67,7 +67,7 @@ const POLICY_TONES: Record<PolicyOutcome, Tone> = {
   deny: TONES.bad,
 };
 
-const RISK_TONES: Record<Risk, Tone> = {
+const RISK_TONES: Record<NonNullable<Risk>, Tone> = {
   low: TONES.muted,
   medium: TONES.waiting,
   high: TONES.bad,
@@ -121,7 +121,7 @@ export const PolicyBadge = ({ outcome }: { outcome: PolicyOutcome }) => (
   />
 );
 
-export const RiskBadge = ({ risk }: { risk: Risk }) => (
+export const RiskBadge = ({ risk }: { risk: NonNullable<Risk> }) => (
   <Pill
     tone={RISK_TONES[risk]}
     label={`${risk[0]?.toUpperCase()}${risk.slice(1)} risk`}

@@ -1,6 +1,10 @@
+// Ported from clarkia apps/dashboard/src/routes/sign-in.tsx: the credentials step with password or emailed code
+// (method toggle), "Forgot password?" into PasswordReset, the code step (OtpStep, purpose sign-in) and the
+// verify-email step when the password sign-in answers EMAIL_NOT_VERIFIED, plus the reset notice. Clarkia's
+// workspace-invitation completion is left out (Ops Agent has no workspaces); the demo account buttons are Ops Agent's.
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useState, type ComponentProps, type FormEvent } from 'react';
-import { HStack, VStack } from '@ops/ui/jsx';
+import { HStack, VStack, styled } from '@ops/ui/jsx';
 
 import { authClient } from '../lib/auth-client';
 import { clearSessionQueries, getQueryClient } from '../lib/query';
@@ -13,6 +17,9 @@ import {
   SwitchPrompt,
 } from '../modules/auth/components/auth-form';
 import { AuthShell, WelcomeAside } from '../modules/auth/components/auth-shell';
+import { OtpStep } from '../modules/auth/components/otp-step';
+import { PasswordReset } from '../modules/auth/components/password-reset';
+import type { OtpPurpose, SignInStep } from '../modules/auth/components/types';
 import { Icons } from '@ops/ui/icons/base';
 import { Button } from '@ops/ui/primitives/button';
 import { Input } from '@ops/ui/primitives/input';
@@ -21,6 +28,8 @@ import { Span, Text } from '@ops/ui/primitives/text';
 type Search = { redirect?: string };
 
 type Credentials = { email: string; password: string };
+
+type SignInMethod = 'password' | 'otp';
 
 export const Route = createFileRoute('/sign-in')({
   validateSearch: (search: Record<string, unknown>): Search => ({
@@ -99,11 +108,68 @@ const DemoAccounts = ({
   </VStack>
 );
 
+const SignInNotice = ({ notice }: { notice: string | null }) => {
+  if (!notice) {
+    return null;
+  }
+
+  return (
+    <Text color="brand.success.11" fontSize="1.5" role="status" textAlign="center">
+      {notice}
+    </Text>
+  );
+};
+
+const submitLabel = (method: SignInMethod, pending: boolean) => {
+  if (pending) {
+    return 'Working…';
+  }
+
+  if (method === 'password') {
+    return 'Sign in';
+  }
+
+  return 'Email me a code';
+};
+
+const methodToggleLabel = (method: SignInMethod) => {
+  if (method === 'password') {
+    return 'Email me a code instead';
+  }
+
+  return 'Use my password';
+};
+
+const OtpView = ({
+  email,
+  error,
+  purpose,
+  onBack,
+  onVerified,
+}: {
+  email: string;
+  error: string | null;
+  purpose: OtpPurpose;
+  onBack: () => void;
+  onVerified: () => void;
+}) => (
+  <AuthShell aside={<WelcomeAside />} switchTo={<SignUpSwitch />}>
+    <VStack alignItems="stretch" gap="3">
+      <OtpStep email={email} purpose={purpose} onBack={onBack} onVerified={onVerified} />
+      <SignInError error={error} />
+    </VStack>
+  </AuthShell>
+);
+
 const CredentialsView = ({
   email,
   error,
+  method,
+  notice,
   onDemoSignIn,
   onEmailChange,
+  onForgotPassword,
+  onMethodChange,
   onPasswordChange,
   onSubmit,
   password,
@@ -111,8 +177,12 @@ const CredentialsView = ({
 }: {
   email: string;
   error: string | null;
+  method: SignInMethod;
+  notice: string | null;
   onDemoSignIn: (credentials: Credentials) => void;
   onEmailChange: (email: string) => void;
+  onForgotPassword: () => void;
+  onMethodChange: () => void;
   onPasswordChange: (password: string) => void;
   onSubmit: ComponentProps<'form'>['onSubmit'];
   password: string;
@@ -121,9 +191,15 @@ const CredentialsView = ({
   <AuthShell aside={<WelcomeAside />} switchTo={<SignUpSwitch />}>
     <form onSubmit={onSubmit}>
       <VStack alignItems="stretch" gap="3">
-        <AuthHeading icon={Icons.user} title="Welcome back">
-          Sign in to review what the agents have proposed.
+        <AuthHeading
+          icon={method === 'password' ? Icons.user : Icons.sms}
+          title={method === 'password' ? 'Welcome back' : 'Sign in with a code'}
+        >
+          {method === 'password'
+            ? 'Sign in to review what the agents have proposed.'
+            : 'We’ll email you a six digit code. No password needed.'}
         </AuthHeading>
+        <SignInNotice notice={notice} />
         <AuthField label="Work email">
           <Input
             aria-label="Work email"
@@ -136,20 +212,38 @@ const CredentialsView = ({
             value={email}
           />
         </AuthField>
-        <AuthField label="Password">
-          <PasswordInput
-            autoComplete="current-password"
+        {method === 'password' && (
+          <AuthField
             label="Password"
-            onChange={onPasswordChange}
-            placeholder="Your password"
-            value={password}
-          />
-        </AuthField>
+            aside={
+              <styled.button
+                color="text.muted"
+                fontWeight="400"
+                onClick={onForgotPassword}
+                type="button"
+                _hover={{ color: 'text.app' }}
+              >
+                Forgot password?
+              </styled.button>
+            }
+          >
+            <PasswordInput
+              autoComplete="current-password"
+              label="Password"
+              onChange={onPasswordChange}
+              placeholder="Your password"
+              value={password}
+            />
+          </AuthField>
+        )}
         <SignInError error={error} />
         <Button disabled={pending || !email} size="md" type="submit">
-          {pending ? 'Working…' : 'Sign in'}
+          {submitLabel(method, pending)}
         </Button>
         <OrDivider />
+        <Button onClick={onMethodChange} size="md" type="button" variant="outline">
+          {methodToggleLabel(method)}
+        </Button>
         <DemoAccounts pending={pending} onSignIn={onDemoSignIn} />
       </VStack>
     </form>
@@ -164,20 +258,60 @@ function SignIn() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [method, setMethod] = useState<SignInMethod>('password');
+  const [step, setStep] = useState<SignInStep>('credentials');
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /** Signed in (password, code or a confirmed email): drop the previous account's cache and open the app. */
+  const finishSignIn = async () => {
+    setError(null);
+    try {
+      clearSessionQueries(getQueryClient());
+      await navigate({ to: destination });
+    } catch {
+      setError('Signed in, but could not open your account');
+    }
+  };
+
+  const sendCode = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      const { error: sendError } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: 'sign-in',
+      });
+      if (sendError) {
+        return setError(sendError.message ?? 'Could not send a code');
+      }
+
+      setStep('code');
+    } catch {
+      setError('Could not send a code');
+    } finally {
+      setPending(false);
+    }
+  };
 
   const signIn = async (credentials: Credentials) => {
     setPending(true);
     setError(null);
+    setNotice(null);
     try {
       const { error: signInError } = await authClient.signIn.email(credentials);
+
+      // The server has just emailed a code to confirm the address; confirming it signs the account in.
+      if (signInError?.code === 'EMAIL_NOT_VERIFIED') {
+        setStep('verify-email');
+
+        return;
+      }
 
       if (signInError) {
         return setError(signInError.message ?? 'Could not sign in');
       }
 
-      // A previous account's cached reads must not show under this one.
-      clearSessionQueries(getQueryClient());
-      await navigate({ to: destination });
+      await finishSignIn();
     } catch {
       setError('Could not sign in');
     } finally {
@@ -187,23 +321,96 @@ function SignIn() {
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (method === 'otp') {
+      return void sendCode();
+    }
+
     void signIn({ email, password });
   };
 
-  return (
-    <CredentialsView
-      email={email}
-      error={error}
-      onDemoSignIn={(credentials) => {
-        setEmail(credentials.email);
-        setPassword(credentials.password);
-        void signIn(credentials);
-      }}
-      onEmailChange={setEmail}
-      onPasswordChange={setPassword}
-      onSubmit={onSubmit}
-      password={password}
-      pending={pending}
-    />
-  );
+  const changeMethod = () => {
+    setMethod(method === 'password' ? 'otp' : 'password');
+    setError(null);
+  };
+
+  const backToCredentials = () => {
+    setError(null);
+
+    setStep('credentials');
+  };
+
+  const passwordReset = (resetEmail: string) => {
+    setEmail(resetEmail);
+
+    setPassword('');
+
+    setMethod('password');
+
+    setError(null);
+
+    setNotice('Your password was changed. Sign in with your new password.');
+
+    setStep('credentials');
+  };
+
+  switch (step) {
+    case 'code':
+      return (
+        <OtpView
+          email={email}
+          error={error}
+          purpose="sign-in"
+          onBack={backToCredentials}
+          onVerified={() => void finishSignIn()}
+        />
+      );
+
+    case 'verify-email':
+      return (
+        <OtpView
+          email={email}
+          error={error}
+          purpose="email-verification"
+          onBack={backToCredentials}
+          onVerified={() => void finishSignIn()}
+        />
+      );
+
+    case 'reset':
+      return (
+        <AuthShell aside={<WelcomeAside />} switchTo={<SignUpSwitch />}>
+          <PasswordReset initialEmail={email} onBack={backToCredentials} onDone={passwordReset} />
+        </AuthShell>
+      );
+
+    case 'credentials':
+      return (
+        <CredentialsView
+          email={email}
+          error={error}
+          method={method}
+          notice={notice}
+          onDemoSignIn={(credentials) => {
+            setEmail(credentials.email);
+            setPassword(credentials.password);
+            setMethod('password');
+            void signIn(credentials);
+          }}
+          onEmailChange={setEmail}
+          onForgotPassword={() => {
+            setError(null);
+
+            setNotice(null);
+
+            setStep('reset');
+          }}
+          onMethodChange={changeMethod}
+          onPasswordChange={setPassword}
+          onSubmit={onSubmit}
+          password={password}
+          pending={pending}
+        />
+      );
+  }
 }

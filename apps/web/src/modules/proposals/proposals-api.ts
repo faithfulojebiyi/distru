@@ -7,16 +7,20 @@ import {
 
 import { ApiError, apiErrorMessage } from '../../api/errors';
 import { listAuditEvents } from '../../api/generated/audit/audit';
+import { listLocations } from '../../api/generated/distru/distru';
 import {
   decideProposal,
   getProposal,
   listProposals,
+  resumeProposal,
+  undoProposal,
 } from '../../api/generated/proposals/proposals';
 import type {
   DecisionRequest,
   ListAuditEventsParams,
   PolicyEvaluation,
   ProposalDetail,
+  UndoRequest,
 } from '../../api/generated/opsAgentAPI.schemas';
 import { getQueryScope } from '../../lib/query';
 import { toast } from '@ops/ui/primitives/toast/toast';
@@ -167,5 +171,61 @@ export const useDecideProposal = (id: string) => {
       }
       if (failure.kind === 'other') toast.error(failure.message);
     },
+  });
+};
+
+/**
+ * Propose undoing an executed proposal: the server answers with a NEW pending proposal of compensating ops,
+ * which still needs an approver. The caller navigates to it; the original refetches so its undo block shows
+ * the link.
+ */
+export const useUndoProposal = (id: string) => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UndoRequest) => undoProposal(id, body),
+    onSuccess: ({ proposal }) => {
+      client.setQueryData(proposalKeys.detail(getQueryScope(client), proposal.id), proposal);
+      toast.success('Undo proposed. It needs an approver before anything changes.');
+      void invalidateProposals(client);
+    },
+    // The form shows the failure inline.
+    onError: () => undefined,
+  });
+};
+
+/** The undo route's refusal (409 `undo_unavailable`, or 400 when a record moved on), as one line. */
+export const undoFailureOf = (error: unknown): string => {
+  if (error instanceof ApiError && error.body && typeof error.body === 'object') {
+    const body = error.body as { message?: unknown; undo?: { reason?: unknown } };
+    if (typeof body.undo?.reason === 'string' && body.undo.reason) return body.undo.reason;
+    if (typeof body.message === 'string' && body.message) return body.message;
+  }
+  return apiErrorMessage(error);
+};
+
+/** Resume a failed proposal from the first op that did not finish (`POST /api/proposals/:id/resume`). */
+export const useResumeProposal = (id: string) => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => resumeProposal(id, {}),
+    onSuccess: (result) => {
+      client.setQueryData(proposalKeys.detail(getQueryScope(client), id), result.proposal);
+      toast.success('Resuming. The executor picks up from the op that failed.');
+      void invalidateProposals(client);
+    },
+    // The form shows the failure inline.
+    onError: () => undefined,
+  });
+};
+
+/** Own Distru locations (cached 5 min on the server), so a diff can show "Oakland Warehouse" for a location id. */
+export const useLocationNames = () => {
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: ['locations', getQueryScope(client)] as const,
+    queryFn: ({ signal }) => listLocations({ signal }),
+    select: (data) => data.items.map((item) => ({ id: item.id, name: item.name })),
+    staleTime: 10 * 60_000,
+    meta: { suppressErrorToast: true },
   });
 };

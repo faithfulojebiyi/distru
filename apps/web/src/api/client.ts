@@ -1,6 +1,6 @@
 import { apiUrl } from '../config/api-url';
 import { handleSessionExpiry } from '../lib/session-expiry';
-import { ApiError } from './errors';
+import { ApiError, NETWORK_ERROR_MESSAGE } from './errors';
 
 const messageOf = (body: unknown, status: number): string => {
   if (body && typeof body === 'object') {
@@ -38,11 +38,19 @@ export const apiFetch = async <T>(
   const headers = new Headers(init?.headers);
   if (!headers.has('Accept')) headers.set('Accept', 'application/json');
 
-  const response = await fetch(`${apiUrl}${url}`, {
-    ...init,
-    headers,
-    credentials: 'include',
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}${url}`, {
+      ...init,
+      headers,
+      credentials: 'include',
+    });
+  } catch (error) {
+    // An abort is the caller's own doing (TanStack Query cancelling); rethrow it as is.
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    // No response at all: the server is down or restarting. One shape for screens and retries.
+    throw new ApiError(0, { code: 'network' }, NETWORK_ERROR_MESSAGE);
+  }
 
   const body = parseBody(
     await response.text(),

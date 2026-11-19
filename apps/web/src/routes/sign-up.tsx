@@ -1,3 +1,6 @@
+// Ported from clarkia apps/dashboard/src/routes/sign-up.tsx: the details step, then the verify-email step (OtpStep,
+// purpose email-verification) whose code confirms the address and signs the account in. Clarkia's invitation and
+// invite-only branches are left out (Ops Agent has no workspaces); sign-up is disabled in production server-side.
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useState, type ComponentProps, type FormEvent } from 'react';
 import { VStack } from '@ops/ui/jsx';
@@ -11,6 +14,8 @@ import {
   SwitchPrompt,
 } from '../modules/auth/components/auth-form';
 import { AuthShell, WelcomeAside } from '../modules/auth/components/auth-shell';
+import { OtpStep } from '../modules/auth/components/otp-step';
+import type { SignUpStep } from '../modules/auth/components/types';
 import { Icons } from '@ops/ui/icons/base';
 import { Button } from '@ops/ui/primitives/button';
 import { Input } from '@ops/ui/primitives/input';
@@ -111,7 +116,7 @@ const DetailsView = ({
           {pending ? 'Creating…' : 'Create account'}
         </Button>
         <Span color="text.placeholder" fontSize="1" textAlign="center">
-          New accounts start as operators. Approvals need an approver.
+          We’ll email a code to confirm your address. New accounts start as operators.
         </Span>
       </VStack>
     </form>
@@ -125,15 +130,28 @@ function SignUp() {
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<SignUpStep>('details');
+
+  /** Runs once the emailed code has confirmed the address and signed the account in. */
+  const finishSignUp = async () => {
+    setError(null);
+
+    try {
+      clearSessionQueries(getQueryClient());
+      await navigate({ to: '/' });
+    } catch {
+      setError('Account created, but the app could not be opened');
+    }
+  };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     setPending(true);
+
     setError(null);
 
     try {
-      // Email verification is off, so Better Auth signs the new account straight in.
       const { error: signUpError } = await authClient.signUp.email({
         name,
         email,
@@ -146,8 +164,8 @@ function SignUp() {
         return;
       }
 
-      clearSessionQueries(getQueryClient());
-      await navigate({ to: '/' });
+      // The account has no session until its email is confirmed; the server has sent the code.
+      setStep('verify-email');
     } catch {
       setError('Could not create your account');
     } finally {
@@ -155,17 +173,39 @@ function SignUp() {
     }
   };
 
-  return (
-    <DetailsView
-      email={email}
-      error={error}
-      name={name}
-      onEmailChange={setEmail}
-      onNameChange={setName}
-      onPasswordChange={setPassword}
-      onSubmit={(event) => void onSubmit(event)}
-      password={password}
-      pending={pending}
-    />
-  );
+  switch (step) {
+    case 'details':
+      return (
+        <DetailsView
+          email={email}
+          error={error}
+          name={name}
+          onEmailChange={setEmail}
+          onNameChange={setName}
+          onPasswordChange={setPassword}
+          onSubmit={(event) => void onSubmit(event)}
+          password={password}
+          pending={pending}
+        />
+      );
+
+    case 'verify-email':
+      return (
+        <AuthShell aside={<WelcomeAside />} switchTo={<SignInSwitch />}>
+          <VStack alignItems="stretch" gap="3">
+            <OtpStep
+              email={email}
+              purpose="email-verification"
+              onBack={() => {
+                setError(null);
+
+                setStep('details');
+              }}
+              onVerified={finishSignUp}
+            />
+            <SignUpError error={error} />
+          </VStack>
+        </AuthShell>
+      );
+  }
 }

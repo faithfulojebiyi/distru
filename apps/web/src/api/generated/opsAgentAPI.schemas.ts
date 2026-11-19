@@ -95,6 +95,49 @@ export const PolicyOutcome = {
   deny: 'deny',
 } as const;
 
+/**
+ * @nullable
+ */
+export type Risk = typeof Risk[keyof typeof Risk] | null;
+
+
+export const Risk = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+} as const;
+
+export type OpStatus = typeof OpStatus[keyof typeof OpStatus];
+
+
+export const OpStatus = {
+  pending: 'pending',
+  executed: 'executed',
+  failed: 'failed',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OpConnector = {
+  id: string;
+  system: string;
+} | null;
+
+export interface ProposalOpSummary {
+  index: number;
+  action: string;
+  /** @nullable */
+  summary: string | null;
+  risk: Risk | null;
+  status: OpStatus;
+  /** @nullable */
+  value: number | null;
+  connector: OpConnector | null;
+  /** @nullable */
+  reaches: string[] | null;
+}
+
 export interface ProposalSummary {
   id: string;
   version: number;
@@ -107,6 +150,10 @@ export interface ProposalSummary {
   totalValue: number | null;
   opCount: number;
   actions: string[];
+  maxRisk: Risk | null;
+  opSummaries: ProposalOpSummary[];
+  /** @nullable */
+  undoOf: string | null;
   /** @nullable */
   workflowRunId: string | null;
   createdAt: string;
@@ -118,15 +165,6 @@ export interface ProposalList {
 }
 
 export type ProposalDetailMeta = {[key: string]: unknown};
-
-export type Risk = typeof Risk[keyof typeof Risk];
-
-
-export const Risk = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-} as const;
 
 export type FieldChangeKind = typeof FieldChangeKind[keyof typeof FieldChangeKind];
 
@@ -143,15 +181,6 @@ export interface FieldChange {
   before?: unknown;
   after?: unknown;
 }
-
-export type OpStatus = typeof OpStatus[keyof typeof OpStatus];
-
-
-export const OpStatus = {
-  pending: 'pending',
-  executed: 'executed',
-  failed: 'failed',
-} as const;
 
 export interface Mismatch {
   path: (string | number)[];
@@ -191,7 +220,7 @@ export interface ProposalOp {
   index: number;
   action: string;
   resource: string;
-  risk: Risk;
+  risk: Risk | null;
   input?: unknown;
   before?: unknown;
   payload?: unknown;
@@ -269,6 +298,31 @@ export type Execution = {
   error: SerializedError | null;
 } | null;
 
+export interface UndoOpInfo {
+  opIndex: number;
+  action: string;
+  /** @nullable */
+  summary: string | null;
+  canUndo: boolean;
+  /** @nullable */
+  reason: string | null;
+  /** @nullable */
+  undoProposalId: string | null;
+}
+
+export interface UndoInfo {
+  available: boolean;
+  /** @nullable */
+  reason: string | null;
+  ops: UndoOpInfo[];
+  /** @nullable */
+  undoProposalId: string | null;
+  /** @nullable */
+  undoOf: string | null;
+  /** @nullable */
+  until: string | null;
+}
+
 export interface ProposalDetail {
   id: string;
   version: number;
@@ -281,6 +335,10 @@ export interface ProposalDetail {
   totalValue: number | null;
   opCount: number;
   actions: string[];
+  maxRisk: Risk | null;
+  opSummaries: ProposalOpSummary[];
+  /** @nullable */
+  undoOf: string | null;
   /** @nullable */
   workflowRunId: string | null;
   createdAt: string;
@@ -292,6 +350,8 @@ export interface ProposalDetail {
   policy: PolicyEvaluation;
   decision: Decision | null;
   execution: Execution | null;
+  undo: UndoInfo;
+  resumable: boolean;
 }
 
 export interface DecisionResponse {
@@ -355,6 +415,12 @@ export interface AuditEvent {
   opIndex: number | null;
   data: AuditEventData;
   at: string;
+  /** @nullable */
+  requestId: string | null;
+  /** @nullable */
+  idempotencyKey: string | null;
+  /** @nullable */
+  diff: FieldChange[] | null;
 }
 
 export interface AuditEventList {
@@ -390,6 +456,19 @@ export type RunProposalLink = {
   totalValue: number | null;
 } | null;
 
+export interface RunTokenUsage {
+  input: number;
+  output: number;
+  total: number;
+}
+
+export interface RunTotals {
+  tokens: RunTokenUsage;
+  costUsd: number;
+  agentCalls: number;
+  toolCalls: number;
+}
+
 export interface RunSummary {
   runId: string;
   workflowId: string;
@@ -399,6 +478,7 @@ export interface RunSummary {
   createdAt: string;
   updatedAt: string;
   proposal: RunProposalLink | null;
+  totals: RunTotals;
 }
 
 export interface RunList {
@@ -414,19 +494,6 @@ export type RunDetailInput = {[key: string]: unknown} | null;
  * @nullable
  */
 export type RunDetailResult = {[key: string]: unknown} | null;
-
-export interface RunTokenUsage {
-  input: number;
-  output: number;
-  total: number;
-}
-
-export type RunDetailTotals = {
-  tokens: RunTokenUsage;
-  costUsd: number;
-  agentCalls: number;
-  toolCalls: number;
-};
 
 /**
  * @nullable
@@ -448,6 +515,8 @@ export interface RunToolCall {
   ok: boolean;
   /** @nullable */
   error: string | null;
+  args?: unknown;
+  result?: unknown;
 }
 
 export interface RunAgentCall {
@@ -496,6 +565,7 @@ export interface RunDetail {
   createdAt: string;
   updatedAt: string;
   proposal: RunProposalLink | null;
+  totals: RunTotals;
   /** @nullable */
   input: RunDetailInput;
   /** @nullable */
@@ -503,7 +573,6 @@ export interface RunDetail {
   /** @nullable */
   error: string | null;
   steps: RunStep[];
-  totals: RunDetailTotals;
   /** @nullable */
   suspendPayload: RunDetailSuspendPayload;
 }
@@ -554,7 +623,7 @@ export interface ConnectorTool {
   name: string;
   kind: ConnectorToolKind;
   requiredScope: Scope;
-  risk: Risk & (string | null);
+  risk: Risk | null;
   description: string;
 }
 
@@ -591,6 +660,470 @@ export interface WebhookResponse {
   action: WebhookResponseAction;
   /** @nullable */
   reason: string | null;
+  contextSync: boolean;
+}
+
+export interface McpToken {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: Scope[];
+  createdBy: string;
+  createdAt: string;
+  /** @nullable */
+  lastUsedAt: string | null;
+  /** @nullable */
+  revokedAt: string | null;
+}
+
+export interface CreateMcpTokenResponse {
+  token: string;
+  record: McpToken;
+  mcpUrl: string;
+}
+
+export interface CreateMcpTokenRequest {
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  name: string;
+  /**
+     * @minItems 1
+     * @maxItems 3
+     */
+  scopes: Scope[];
+}
+
+export interface McpTokenList {
+  items: McpToken[];
+}
+
+export interface ResumeResponse {
+  proposal: ProposalDetail;
+  queued: boolean;
+}
+
+export type NotResumableResponseError = typeof NotResumableResponseError[keyof typeof NotResumableResponseError];
+
+
+export const NotResumableResponseError = {
+  not_resumable: 'not_resumable',
+} as const;
+
+export interface NotResumableResponse {
+  error: NotResumableResponseError;
+  message: string;
+  status: string;
+}
+
+export interface ResumeRequest {
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  reason?: string;
+}
+
+export interface UndoResponse {
+  proposal: ProposalDetail;
+}
+
+export type UndoUnavailableResponseError = typeof UndoUnavailableResponseError[keyof typeof UndoUnavailableResponseError];
+
+
+export const UndoUnavailableResponseError = {
+  undo_unavailable: 'undo_unavailable',
+} as const;
+
+export interface UndoUnavailableResponse {
+  error: UndoUnavailableResponseError;
+  message: string;
+  undo: UndoInfo;
+}
+
+export interface UndoRequest {
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  reason: string;
+  /**
+     * @minItems 1
+     * @maxItems 200
+     * @items.minimum 0
+     */
+  opIndexes?: number[];
+}
+
+export type PolicyRuleParams = {[key: string]: unknown};
+
+export interface PolicyRule {
+  key: string;
+  params: PolicyRuleParams;
+  enabled: boolean;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  updatedAt: string | null;
+}
+
+export type PolicyRuleTypeParamsSchema = {[key: string]: unknown};
+
+export interface PolicyRuleType {
+  key: string;
+  description: string;
+  paramsSchema: PolicyRuleTypeParamsSchema;
+}
+
+export interface PolicyRuleList {
+  items: PolicyRule[];
+  available: PolicyRuleType[];
+}
+
+export type PolicyValidationErrorError = typeof PolicyValidationErrorError[keyof typeof PolicyValidationErrorError];
+
+
+export const PolicyValidationErrorError = {
+  invalid_policy: 'invalid_policy',
+} as const;
+
+export type PolicyValidationErrorIssuesItem = {
+  key: string;
+  message: string;
+};
+
+export interface PolicyValidationError {
+  error: PolicyValidationErrorError;
+  message: string;
+  issues: PolicyValidationErrorIssuesItem[];
+}
+
+export type PolicyRuleInputParams = {[key: string]: unknown};
+
+export interface PolicyRuleInput {
+  /** @minLength 1 */
+  key: string;
+  params?: PolicyRuleInputParams;
+  enabled?: boolean;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  description?: string | null;
+}
+
+export interface UpdatePolicyRulesRequest {
+  /** @maxItems 50 */
+  rules: PolicyRuleInput[];
+}
+
+export interface Location {
+  id: string;
+  name: string;
+  /** @nullable */
+  licenseNumber: string | null;
+  /** @nullable */
+  address: string | null;
+}
+
+export interface LocationList {
+  items: Location[];
+  fetchedAt: string;
+}
+
+export type EvalResultScores = {[key: string]: number};
+
+export interface EvalResult {
+  id: string;
+  /** @nullable */
+  batchId: string | null;
+  scenario: string;
+  passed: boolean;
+  scores: EvalResultScores;
+  details?: unknown;
+  createdAt: string;
+}
+
+export interface EvalList {
+  /** Latest row per scenario, by scenario name */
+  items: EvalResult[];
+}
+
+export interface EvalHistory {
+  scenario: string;
+  /** Newest first */
+  items: EvalResult[];
+}
+
+/**
+ * @nullable
+ */
+export type ContextProfileCounts = {
+  vendors: number;
+  products: number;
+  customers: number;
+  purchases: number;
+  orders: number;
+} | null;
+
+export type ContextProfileVendorsItemPriceTrendsItem = {
+  productId: string;
+  /** @nullable */
+  sku: string | null;
+  /** @nullable */
+  name: string | null;
+  lastPrice: number;
+  lastOrderedAt: string;
+  /** @nullable */
+  avg90d: number | null;
+  /** @nullable */
+  changePct: number | null;
+  samples90d: number;
+};
+
+export type ContextProfileVendorsItem = {
+  vendorId: string;
+  name: string;
+  /** @nullable */
+  promisedLeadTimeDays: number | null;
+  /** @nullable */
+  actualLeadTimeDays: number | null;
+  /** @nullable */
+  leadTimeP90Days: number | null;
+  leadTimeSamples: number;
+  /** @nullable */
+  onTimePct: number | null;
+  /** @nullable */
+  fillRatePct: number | null;
+  purchaseCount: number;
+  openPurchaseCount: number;
+  /** @nullable */
+  avgPurchaseTotal: number | null;
+  /** @nullable */
+  lastOrderedAt: string | null;
+  priceTrends: ContextProfileVendorsItemPriceTrendsItem[];
+};
+
+export type ContextProfileProductsItemDemandDirection = typeof ContextProfileProductsItemDemandDirection[keyof typeof ContextProfileProductsItemDemandDirection];
+
+
+export const ContextProfileProductsItemDemandDirection = {
+  up: 'up',
+  down: 'down',
+  flat: 'flat',
+  none: 'none',
+} as const;
+
+export type ContextProfileProductsItemRetailMetrics = {[key: string]: number};
+
+/**
+ * @nullable
+ */
+export type ContextProfileProductsItemRetail = {
+  source: string;
+  observedAt: string;
+  metrics: ContextProfileProductsItemRetailMetrics;
+} | null;
+
+export type ContextProfileProductsItem = {
+  productId: string;
+  /** @nullable */
+  sku: string | null;
+  name: string;
+  /** @nullable */
+  vendorId: string | null;
+  isActive: boolean;
+  unitsPerDay28d: number;
+  unitsPerDayPrior28d: number;
+  /** @nullable */
+  demandTrendPct: number | null;
+  demandDirection: ContextProfileProductsItemDemandDirection;
+  weekdayIndex: number[];
+  /** @nullable */
+  seasonalityHint: string | null;
+  /** @nullable */
+  available: number | null;
+  /** @nullable */
+  daysOfSupply: number | null;
+  /** @nullable */
+  retail: ContextProfileProductsItemRetail;
+};
+
+export type ContextProfileSyncCursorsItem = {
+  stream: string;
+  cursorAt: string;
+  lastFullAt: string;
+  lastRunAt: string;
+};
+
+export type ContextProfileSync = {
+  /** @nullable */
+  lastRunAt: string | null;
+  /** @nullable */
+  lastStatus: string | null;
+  cursors: ContextProfileSyncCursorsItem[];
+};
+
+export interface ContextProfile {
+  available: boolean;
+  /** @nullable */
+  version: number | null;
+  /** @nullable */
+  computedAt: string | null;
+  /** @nullable */
+  source: string | null;
+  /** @nullable */
+  counts: ContextProfileCounts;
+  vendors: ContextProfileVendorsItem[];
+  products: ContextProfileProductsItem[];
+  sync: ContextProfileSync;
+}
+
+export type ContextMemoryScope = typeof ContextMemoryScope[keyof typeof ContextMemoryScope];
+
+
+export const ContextMemoryScope = {
+  vendor: 'vendor',
+  product: 'product',
+  customer: 'customer',
+  global: 'global',
+} as const;
+
+export type ContextMemoryOrigin = typeof ContextMemoryOrigin[keyof typeof ContextMemoryOrigin];
+
+
+export const ContextMemoryOrigin = {
+  learned: 'learned',
+  explicit: 'explicit',
+} as const;
+
+export type ContextMemoryStatus = typeof ContextMemoryStatus[keyof typeof ContextMemoryStatus];
+
+
+export const ContextMemoryStatus = {
+  active: 'active',
+  expired: 'expired',
+  retracted: 'retracted',
+} as const;
+
+export type ContextMemoryEvidence = {
+  proposalIds: string[];
+  auditIds: string[];
+  refs: string[];
+};
+
+export type ContextMemoryData = {[key: string]: number | string | null};
+
+export interface ContextMemory {
+  id: string;
+  scope: ContextMemoryScope;
+  /** @nullable */
+  scopeId: string | null;
+  key: string;
+  statement: string;
+  evidence: ContextMemoryEvidence;
+  evidenceCount: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  confidence: number;
+  origin: ContextMemoryOrigin;
+  status: ContextMemoryStatus;
+  data: ContextMemoryData;
+  createdAt: string;
+  lastConfirmedAt: string;
+  /** @nullable */
+  expiresAt: string | null;
+  effectiveConfidence: number;
+}
+
+export interface ContextMemoryList {
+  items: ContextMemory[];
+}
+
+export type OnboardingReportCompletenessProducts = {
+  total: number;
+  active: number;
+  withSku: number;
+  withVendor: number;
+  withCost: number;
+};
+
+export type OnboardingReportCompletenessCompanies = {
+  vendors: number;
+  customers: number;
+  other: number;
+};
+
+export type OnboardingReportCompletenessPurchases = {
+  total: number;
+  completed: number;
+  withOrderDate: number;
+  withReceipt: number;
+  /** @nullable */
+  from: string | null;
+  /** @nullable */
+  to: string | null;
+};
+
+export type OnboardingReportCompletenessOrders = {
+  total: number;
+  withLines: number;
+  /** @nullable */
+  from: string | null;
+  /** @nullable */
+  to: string | null;
+  historyDays: number;
+};
+
+export type OnboardingReportCompletenessInventory = {
+  /** @nullable */
+  snapshotAt: string | null;
+  rows: number;
+};
+
+export type OnboardingReportCompleteness = {
+  score: number;
+  products: OnboardingReportCompletenessProducts;
+  companies: OnboardingReportCompletenessCompanies;
+  purchases: OnboardingReportCompletenessPurchases;
+  orders: OnboardingReportCompletenessOrders;
+  inventory: OnboardingReportCompletenessInventory;
+  issues: string[];
+};
+
+export type OnboardingReportVendorsMissingLeadTimesItem = {
+  vendorId: string;
+  name: string;
+  /** @nullable */
+  observedMedianDays: number | null;
+  samples: number;
+  suggestion: string;
+};
+
+export type OnboardingReportSuggestedPolicyItemRuleParams = {[key: string]: unknown};
+
+export type OnboardingReportSuggestedPolicyItemRule = {
+  key: string;
+  params?: OnboardingReportSuggestedPolicyItemRuleParams;
+  enabled?: boolean;
+};
+
+export type OnboardingReportSuggestedPolicyItemEvidence = {[key: string]: unknown};
+
+export type OnboardingReportSuggestedPolicyItem = {
+  rule: OnboardingReportSuggestedPolicyItemRule;
+  rationale: string;
+  evidence: OnboardingReportSuggestedPolicyItemEvidence;
+};
+
+export interface OnboardingReport {
+  generatedAt: string;
+  completeness: OnboardingReportCompleteness;
+  vendorsMissingLeadTimes: OnboardingReportVendorsMissingLeadTimesItem[];
+  suggestedPolicy: OnboardingReportSuggestedPolicyItem[];
 }
 
 export type ListProposalsParams = {
@@ -600,6 +1133,12 @@ export type ListProposalsParams = {
    * @maximum 200
    */
   limit?: number;
+  /**
+   * @minimum 0
+   * @maximum 100000
+   * @nullable
+   */
+  offset?: number | null;
 };
 
 export type ListAuditEventsParams = {
@@ -611,6 +1150,12 @@ export type ListAuditEventsParams = {
    * @maximum 500
    */
   limit?: number;
+  /**
+   * @minimum 0
+   * @maximum 1000000
+   * @nullable
+   */
+  offset?: number | null;
 };
 
 export type ListAuditEventsOrder = typeof ListAuditEventsOrder[keyof typeof ListAuditEventsOrder];
@@ -628,4 +1173,42 @@ export type ListRunsParams = {
    */
   limit?: number;
 };
+
+export type GetEvalHistoryParams = {
+  /**
+   * @minimum 1
+   * @maximum 200
+   */
+  limit?: number;
+};
+
+export type ListContextMemoriesParams = {
+  scope?: ListContextMemoriesScope;
+  scopeId?: string;
+  status?: ListContextMemoriesStatus;
+  /**
+   * @minimum 1
+   * @maximum 500
+   */
+  limit?: number;
+};
+
+export type ListContextMemoriesScope = typeof ListContextMemoriesScope[keyof typeof ListContextMemoriesScope];
+
+
+export const ListContextMemoriesScope = {
+  vendor: 'vendor',
+  product: 'product',
+  customer: 'customer',
+  global: 'global',
+} as const;
+
+export type ListContextMemoriesStatus = typeof ListContextMemoriesStatus[keyof typeof ListContextMemoriesStatus];
+
+
+export const ListContextMemoriesStatus = {
+  active: 'active',
+  expired: 'expired',
+  retracted: 'retracted',
+} as const;
 
