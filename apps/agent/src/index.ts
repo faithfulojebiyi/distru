@@ -1,0 +1,32 @@
+import { createApp } from './app';
+import { sql } from './db/client';
+import { env } from './env';
+import { mastra } from './mastra';
+
+const app = await createApp();
+
+const server = Bun.serve({
+  port: env.PORT,
+  fetch: app.fetch,
+  // Agent/workflow streams can be quiet for a while; Bun's default idle timeout is 10s.
+  idleTimeout: 255,
+});
+
+console.log(`ops-agent listening on ${server.url} (${env.NODE_ENV})`);
+if (!env.ANTHROPIC_API_KEY) console.warn('ANTHROPIC_API_KEY is not set: agent calls will fail until it is.');
+
+// Scheduled workflows, event listeners and the recovery loop only run once workers are started.
+await mastra.startWorkers();
+
+let shuttingDown = false;
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received, shutting down`);
+  await server.stop();
+  await mastra.shutdown();
+  await sql.end({ timeout: 5 });
+  process.exit(0);
+}
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));

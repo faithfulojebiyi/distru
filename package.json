@@ -9,7 +9,7 @@
     "dev:web": "bun run --cwd apps/web dev",
     "dev:agent": "bun run --cwd apps/agent dev",
     "dev:mock": "bun run --cwd apps/distru-mock dev",
-    "inngest:dev": "bunx inngest-cli@latest dev -u http://localhost:4111/api/inngest --no-discovery",
+    "inngest:dev": "bun run --cwd apps/agent inngest:dev",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "typecheck": "bun run --filter '*' typecheck",

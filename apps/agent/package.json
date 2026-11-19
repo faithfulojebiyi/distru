@@ -1,0 +1,41 @@
+{
+  "name": "@ops/agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "NODE_ENV=production bun src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "bun src/db/seed.ts",
+    "verify:hello": "bun scripts/verify-hello-workflow.ts",
+    "inngest:dev": "npx --yes --ignore-scripts=false inngest-cli@latest dev -u http://localhost:4111/api/inngest --no-discovery"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.6.3",
+    "@mastra/core": "~1.85.0",
+    "@mastra/evals": "~1.10.11",
+    "@mastra/hono": "~1.7.27",
+    "@mastra/inngest": "~1.11.4",
+    "@mastra/mcp": "~2.10.0",
+    "@mastra/memory": "~1.41.2",
+    "@mastra/observability": "~1.24.2",
+    "@mastra/pg": "~1.37.0",
+    "better-auth": "1.7.7",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.19",
+    "inngest": "~4.26.2",
+    "postgres": "^3.4.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.31.11",
+    "mastra": "~1.40.1",
+    "typescript": "^6.0.3"
+  }
+}
