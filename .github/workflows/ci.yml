@@ -23,6 +23,9 @@ jobs:
       DATABASE_URL: postgres://ops:ops@127.0.0.1:5482/ops
       BETTER_AUTH_SECRET: ci-only-secret-not-used-anywhere-else
       VITE_API_URL: http://localhost:4111
+      # apps/agent's types (Mastra, Inngest, AI SDK) exceed Node's default ~2 GB heap.
+      NODE_OPTIONS: --max-old-space-size=8192
+      TEST_DATABASE_URL: postgres://ops:ops@127.0.0.1:5482/ops_test
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -31,14 +34,14 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Typecheck
         run: |
-          for p in packages/harness packages/distru-client packages/connector-* apps/distru-mock apps/agent; do
+          for p in packages/harness packages/distru-client packages/connector-* packages/context packages/emulators packages/evals apps/distru-mock apps/headset-mock apps/emulators apps/agent; do
             echo "::group::$p"; (cd "$p" && bunx tsc --noEmit) || exit 1; echo "::endgroup::"
           done
       - name: Prepare database
         run: bun run --cwd apps/agent db:push && bun run --cwd apps/agent db:seed
       - name: Test
         run: |
-          for p in packages/harness packages/distru-client packages/connector-* apps/distru-mock apps/agent; do
+          for p in packages/harness packages/distru-client packages/connector-* packages/context packages/emulators packages/evals apps/distru-mock apps/headset-mock apps/emulators apps/agent; do
             echo "::group::$p"; (cd "$p" && bun test) || exit 1; echo "::endgroup::"
           done
       - name: Evals (offline replay, no secrets)

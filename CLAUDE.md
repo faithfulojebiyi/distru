@@ -10,7 +10,7 @@ retries, read-after-write verification and an append-only audit trail.
 | Path | What |
 |---|---|
 | `packages/harness` | The harness: action registry, connectors, proposals + diffs, policy, scopes, decisions, executor, budgets, audit. Pure TS behind ports; no infra imports. |
-| `packages/connector-*` | One connector per external system (Distru ERP, email, generic MCP bridge). |
+| `packages/connector-*` | One connector per external system (Distru ERP, Headset retail analytics, email, generic MCP bridge). |
 | `packages/distru-client` | Orval-generated Distru REST client (fetch mutator, pagination, Retry-After). |
 | `packages/ui` | UI kit (`@ops/ui`, Panda CSS), adapted from carbonme. |
 | `apps/agent` | Mastra server on bun via `@mastra/hono`: agents, workflows on Inngest, Better Auth, Drizzle, typed API + OpenAPI. |
@@ -39,6 +39,8 @@ bun install
 docker compose up -d                       # Postgres on 127.0.0.1:5482
 bun run --cwd apps/agent db:push && bun run --cwd apps/agent db:seed
 bun run dev:mock                           # Distru mock on :4500 (REST /public/v1, MCP /mcp)
+bun run dev:headset                        # Headset retail mock on :4600
+bun run dev:emulators                      # Composio, Gmail, Slack, Resend emulators on :4700
 bun run dev:agent                          # agent server on :4111
 bun run inngest:dev                        # Inngest dev server on :8288
 bun run dev:web                            # dashboard on :3050
