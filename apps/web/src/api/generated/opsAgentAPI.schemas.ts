@@ -50,7 +50,10 @@ export type ProposalStatus = typeof ProposalStatus[keyof typeof ProposalStatus];
 
 
 export const ProposalStatus = {
+  draft: 'draft',
   pending_approval: 'pending_approval',
+  auto_approved: 'auto_approved',
+  denied: 'denied',
   approved: 'approved',
   rejected: 'rejected',
   executing: 'executing',
@@ -58,27 +61,54 @@ export const ProposalStatus = {
   failed: 'failed',
 } as const;
 
-export type ActorType = typeof ActorType[keyof typeof ActorType];
+export type PrincipalKind = typeof PrincipalKind[keyof typeof PrincipalKind];
 
 
-export const ActorType = {
+export const PrincipalKind = {
   user: 'user',
   agent: 'agent',
-  system: 'system',
+  'mcp-client': 'mcp-client',
+} as const;
+
+export type Scope = typeof Scope[keyof typeof Scope];
+
+
+export const Scope = {
+  read: 'read',
+  propose: 'propose',
+  approve: 'approve',
+} as const;
+
+export interface Principal {
+  kind: PrincipalKind;
+  id: string;
+  scopes: Scope[];
+  label?: string;
+}
+
+export type PolicyOutcome = typeof PolicyOutcome[keyof typeof PolicyOutcome];
+
+
+export const PolicyOutcome = {
+  allow: 'allow',
+  needs_approval: 'needs_approval',
+  deny: 'deny',
 } as const;
 
 export interface ProposalSummary {
   id: string;
-  title: string;
-  /** @nullable */
-  summary: string | null;
+  version: number;
   status: ProposalStatus;
   /** @nullable */
-  workflowRunId: string | null;
-  createdByType: ActorType;
+  title: string | null;
+  createdBy: Principal;
+  policyOutcome: PolicyOutcome;
   /** @nullable */
-  createdByUserId: string | null;
+  totalValue: number | null;
   opCount: number;
+  actions: string[];
+  /** @nullable */
+  workflowRunId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -87,118 +117,238 @@ export interface ProposalList {
   items: ProposalSummary[];
 }
 
-export type ProposalOpOp = typeof ProposalOpOp[keyof typeof ProposalOpOp];
+export type ProposalDetailMeta = {[key: string]: unknown};
+
+export type Risk = typeof Risk[keyof typeof Risk];
 
 
-export const ProposalOpOp = {
-  upsert: 'upsert',
-  create: 'create',
-  update: 'update',
-  delete: 'delete',
+export const Risk = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
 } as const;
 
-export type ProposalOpStatus = typeof ProposalOpStatus[keyof typeof ProposalOpStatus];
+export type FieldChangeKind = typeof FieldChangeKind[keyof typeof FieldChangeKind];
 
 
-export const ProposalOpStatus = {
-  pending: 'pending',
-  applied: 'applied',
-  verified: 'verified',
-  failed: 'failed',
-  skipped: 'skipped',
+export const FieldChangeKind = {
+  added: 'added',
+  removed: 'removed',
+  changed: 'changed',
 } as const;
 
-export type ProposalOpPayload = {[key: string]: unknown};
-
-/**
- * @nullable
- */
-export type ProposalOpBefore = {[key: string]: unknown} | null;
-
-export interface ProposalOp {
-  id: string;
-  seq: number;
-  resource: string;
-  op: ProposalOpOp;
-  payload: ProposalOpPayload;
-  /** @nullable */
-  before: ProposalOpBefore;
-  diff?: unknown;
-  idempotencyKey: string;
-  status: ProposalOpStatus;
-  result?: unknown;
-  /** @nullable */
-  distruRecordId: string | null;
+export interface FieldChange {
+  path: (string | number)[];
+  kind: FieldChangeKind;
+  before?: unknown;
+  after?: unknown;
 }
 
-export type ApprovalDecision = typeof ApprovalDecision[keyof typeof ApprovalDecision];
+export type OpStatus = typeof OpStatus[keyof typeof OpStatus];
 
 
-export const ApprovalDecision = {
-  approved: 'approved',
-  rejected: 'rejected',
+export const OpStatus = {
+  pending: 'pending',
+  executed: 'executed',
+  failed: 'failed',
+} as const;
+
+export interface Mismatch {
+  path: (string | number)[];
+  expected?: unknown;
+  actual?: unknown;
+}
+
+/**
+ * @nullable
+ */
+export type SerializedError = {
+  name: string;
+  message: string;
+  code?: string;
+} | null;
+
+/**
+ * @nullable
+ */
+export type OpResult = {
+  /** @nullable */
+  recordId: string | null;
+  deduplicated: boolean;
+  attempts: number;
+  mismatches: Mismatch[];
+  error: SerializedError | null;
+  finishedAt: string;
+} | null;
+
+export interface ProposalOp {
+  index: number;
+  action: string;
+  resource: string;
+  risk: Risk;
+  input?: unknown;
+  before?: unknown;
+  payload?: unknown;
+  diff: FieldChange[];
+  /** @nullable */
+  summary: string | null;
+  /** @nullable */
+  value: number | null;
+  /** @nullable */
+  vendorIds: string[] | null;
+  idempotencyKey: string;
+  status: OpStatus;
+  result: OpResult | null;
+}
+
+export type PolicyReasonOutcome = typeof PolicyReasonOutcome[keyof typeof PolicyReasonOutcome];
+
+
+export const PolicyReasonOutcome = {
+  pass: 'pass',
+  allow: 'allow',
+  needs_approval: 'needs_approval',
+  deny: 'deny',
+} as const;
+
+export type PolicyReasonSeverity = typeof PolicyReasonSeverity[keyof typeof PolicyReasonSeverity];
+
+
+export const PolicyReasonSeverity = {
+  info: 'info',
+  warning: 'warning',
+  error: 'error',
+} as const;
+
+export interface PolicyReason {
+  rule: string;
+  outcome: PolicyReasonOutcome;
+  severity: PolicyReasonSeverity;
+  message: string;
+}
+
+export interface PolicyEvaluation {
+  outcome: PolicyOutcome;
+  reasons: PolicyReason[];
+}
+
+export type DecisionKind = typeof DecisionKind[keyof typeof DecisionKind];
+
+
+export const DecisionKind = {
+  approve: 'approve',
+  reject: 'reject',
 } as const;
 
 /**
  * @nullable
  */
-export type Approval = {
-  id: string;
-  proposalId: string;
-  decision: ApprovalDecision;
-  decidedBy: string;
+export type Decision = {
+  decision: DecisionKind;
+  by: Principal;
   /** @nullable */
   reason: string | null;
-  decidedAt: string;
+  edited: boolean;
+  at: string;
+} | null;
+
+/**
+ * @nullable
+ */
+export type Execution = {
+  /** @nullable */
+  startedAt: string | null;
+  /** @nullable */
+  finishedAt: string | null;
+  error: SerializedError | null;
 } | null;
 
 export interface ProposalDetail {
   id: string;
-  title: string;
-  /** @nullable */
-  summary: string | null;
+  version: number;
   status: ProposalStatus;
   /** @nullable */
-  workflowRunId: string | null;
-  createdByType: ActorType;
+  title: string | null;
+  createdBy: Principal;
+  policyOutcome: PolicyOutcome;
   /** @nullable */
-  createdByUserId: string | null;
+  totalValue: number | null;
   opCount: number;
+  actions: string[];
+  /** @nullable */
+  workflowRunId: string | null;
   createdAt: string;
   updatedAt: string;
   /** @nullable */
-  reasoning: string | null;
-  policyChecks: unknown[];
+  rationale: string | null;
+  meta: ProposalDetailMeta;
   ops: ProposalOp[];
-  approval: Approval | null;
+  policy: PolicyEvaluation;
+  decision: Decision | null;
+  execution: Execution | null;
 }
 
 export interface DecisionResponse {
-  proposal: ProposalSummary;
-  approval: Approval | null;
+  proposal: ProposalDetail;
+}
+
+export type PolicyDeniedResponseError = typeof PolicyDeniedResponseError[keyof typeof PolicyDeniedResponseError];
+
+
+export const PolicyDeniedResponseError = {
+  policy_denied: 'policy_denied',
+} as const;
+
+export interface PolicyDeniedResponse {
+  error: PolicyDeniedResponseError;
+  message: string;
+  evaluation: PolicyEvaluation;
+}
+
+export interface OpEdit {
+  /** @minimum 0 */
+  opIndex: number;
+  input?: unknown;
 }
 
 export interface DecisionRequest {
-  decision: ApprovalDecision;
+  decision: DecisionKind;
   /** @maxLength 2000 */
   reason?: string;
+  /** @maxItems 100 */
+  edits?: OpEdit[];
+}
+
+export type ActorKind = typeof ActorKind[keyof typeof ActorKind];
+
+
+export const ActorKind = {
+  user: 'user',
+  agent: 'agent',
+  'mcp-client': 'mcp-client',
+  system: 'system',
+} as const;
+
+export interface Actor {
+  kind: ActorKind;
+  id: string;
+  scopes?: Scope[];
+  label?: string;
 }
 
 export type AuditEventData = {[key: string]: unknown};
 
 export interface AuditEvent {
   id: string;
-  actorType: ActorType;
+  seq: number;
+  type: string;
+  actor: Actor;
   /** @nullable */
-  actorUserId: string | null;
+  proposalId: string | null;
   /** @nullable */
-  actorAgentId: string | null;
-  action: string;
-  subjectType: string;
-  /** @nullable */
-  subjectId: string | null;
+  opIndex: number | null;
   data: AuditEventData;
-  createdAt: string;
+  at: string;
 }
 
 export interface AuditEventList {
@@ -240,14 +390,23 @@ export type ListProposalsParams = {
 };
 
 export type ListAuditEventsParams = {
-  subjectType?: string;
-  subjectId?: string;
+  proposalId?: string;
+  type?: string;
+  order?: ListAuditEventsOrder;
   /**
    * @minimum 1
    * @maximum 500
    */
   limit?: number;
 };
+
+export type ListAuditEventsOrder = typeof ListAuditEventsOrder[keyof typeof ListAuditEventsOrder];
+
+
+export const ListAuditEventsOrder = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type ListRunsParams = {
   workflowId?: string;

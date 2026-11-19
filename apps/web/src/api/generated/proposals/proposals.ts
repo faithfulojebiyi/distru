@@ -74,7 +74,7 @@ export const getGetProposalUrl = (id: string,) => {
 }
 
 /**
- * @summary Proposal detail with ops and decision
+ * @summary Proposal detail: ops with diffs, policy evaluation with reasons, status, version, decision
  */
 export const getProposal = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<ProposalDetail> => {
 
@@ -97,7 +97,8 @@ export const getDecideProposalUrl = (id: string,) => {
 }
 
 /**
- * @summary Approve or reject a proposal (approver only, one decision per proposal)
+ * Calls harness.decide with the session user as principal (role → scopes). Approve-only `edits` re-plan the edited ops and re-run policy; a deny blocks the approval (409 policy_denied, nothing recorded).
+ * @summary Approve or reject a proposal (approver only, exactly one decision per proposal)
  */
 export const decideProposal = async (id: string,
     decisionRequest: DecisionRequest, options?: Parameters<typeof apiFetch>[1]): Promise<DecisionResponse> => {

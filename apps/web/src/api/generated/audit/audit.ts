@@ -28,7 +28,7 @@ export const getListAuditEventsUrl = (params?: ListAuditEventsParams,) => {
 }
 
 /**
- * @summary Audit trail (newest first)
+ * @summary Audit trail (newest first by default; filter by proposal / type)
  */
 export const listAuditEvents = async (params?: ListAuditEventsParams, options?: Parameters<typeof apiFetch>[1]): Promise<AuditEventList> => {
 
