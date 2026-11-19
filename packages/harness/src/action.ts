@@ -45,8 +45,11 @@ export interface ActionDefinition<TCtx, TInput, TPayload, TRecord> {
   valueOf?(payload: TPayload): number;
   /** Vendor ids referenced by the payload, used by the vendor allowlist rule. */
   vendorIdsOf?(payload: TPayload): string[];
-  /** One-line human summary for inboxes ("PO for 120 × Blue Dream 3.5g from Acme"). */
-  summarize?(input: TInput, payload: TPayload): string;
+  /**
+   * One-line human summary for inboxes ("PO for 120 × Blue Dream 3.5g from Acme"). May be async
+   * and may use `ctx` / `before` (e.g. to resolve a vendor name); called at propose and edit time.
+   */
+  summarize?(input: TInput, payload: TPayload, ctx: TCtx, before: TRecord | null): string | Promise<string>;
 }
 
 /** Type-erased action, as stored in a registry. */

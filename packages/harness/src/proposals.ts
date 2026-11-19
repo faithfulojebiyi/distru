@@ -66,7 +66,7 @@ async function planOp<TCtx>(
     before,
     payload,
     diff: action.diff(before, payload),
-    summary: action.summarize?.(input, payload) ?? null,
+    summary: (await action.summarize?.(input, payload, ctx, before)) ?? null,
     value: action.valueOf?.(payload) ?? null,
     vendorIds: action.vendorIdsOf?.(payload) ?? null,
     idempotencyKey: await idempotencyKeyFor(proposalId, index),

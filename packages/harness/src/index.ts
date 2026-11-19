@@ -3,6 +3,7 @@ export * from './scopes';
 export * from './diff';
 export * from './verify';
 export * from './action';
+export * from './connector';
 export * from './registry';
 export * from './policy';
 export * from './proposal';

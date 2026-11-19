@@ -12,6 +12,7 @@ Postgres, Inngest or HTTP imports: every side effect goes through a port.
 |---|---|
 | Scopes & principals | `Scope = read \| propose \| approve`; `Principal { kind: user \| agent \| mcp-client, id, scopes }`. `userPrincipal(id, 'operator' \| 'approver')`, `agentPrincipal(id)`, `mcpClientPrincipal(id, scopes)`, `assertScope`. Agents can never approve (schema + runtime check). |
 | Actions & read tools | `defineAction({ name, resource, risk, input, loadBefore, plan, execute, verify, findByIdempotencyKey, valueOf?, vendorIdsOf?, diff? })`, `defineReadTool({ name, input, run })`, `new Registry({ actions, readTools })`, `registry.catalog(principal?)` → JSON Schemas for Mastra/MCP. |
+| Connectors | `defineConnector({ id, system, description, readTools, actions, health? })` plugs one system (`erp \| crm \| email \| calendar \| spreadsheet \| analytics \| compliance \| other`) into the registry. `Registry.fromConnectors([...])` (or `new Registry({ connectors })`) namespaces names by connector id (`distru.velocity_report` → tool `distru_velocity_report`, `distru.purchases.upsert` → `propose_distru_purchases_upsert`); catalog entries carry `connector: { id, system }`; `registry.connectors()`, `registry.connectorOf(name)`, `registry.health(ctx)`. |
 | Diff | `diff(before, payload)` → `[{ path, kind, before, after }]`; sparse-upsert aware; `items` keyed by `id` (unmatched = added as `new:i`, omitted ids = removed). `summarizeDiff`, `formatPath`, `matchesExpected` (read-after-write check). |
 | Policy | Rules are data `{ key, params, enabled }`. Built-ins: `max_total_value`, `allowed_actions`, `vendor_allowlist`, `auto_approve_below`, `high_risk_requires_approval`. deny > needs_approval > allow; default needs_approval; unknown/invalid rules fail closed. |
 | Proposals | `draft → pending_approval \| auto_approved \| denied`, `pending_approval → approved \| rejected`, `approved \| auto_approved → executing → executed \| failed`, `failed → executing` (resume). |
@@ -53,6 +54,34 @@ const p = await harness.propose({ ctx, principal: agentPrincipal('planner'), ops
 await harness.decide({ ctx, principal: userPrincipal(user.id, 'approver'), proposalId: p.id, decision: 'approve' });
 const done = await harness.execute({ ctx, proposalId: p.id, budget });  // 'executed' | 'failed'
 ```
+
+## Connectors and per-connector context
+
+Each connector declares the context slice it needs with `ConnectorContext<'id', Client>` =
+`{ connectors: { id: Client } }`, and its hooks read `ctx.connectors.<id>`. Contexts compose by
+intersection, so the app passes one object that satisfies all of them:
+
+```ts
+import { Registry, createHarness, defineConnector, type ConnectorContext } from '@ops/harness';
+
+type DistruCtx = ConnectorContext<'distru', DistruClient>;
+const distruConnector = defineConnector<DistruCtx>({
+  id: 'distru', system: 'erp', description: 'Distru ERP',
+  readTools: [velocityReport], actions: [upsertPurchase],          // connector-local names
+  health: async (ctx) => ({ ok: true, detail: `${(await ctx.connectors.distru.listLocations()).data?.length} locations` }),
+});
+
+const registry = Registry.fromConnectors([distruConnector, emailConnector]); // Registry<DistruCtx & EmailCtx>
+const ctx = { connectors: { distru: createDistruClient(cfg), email: mailer }, tenantId };   // must satisfy both
+const harness = createHarness({ registry, store, audit, policyRules, errors });
+await harness.propose({ ctx, principal, ops: [{ action: 'distru.purchases.upsert', input }] });
+```
+
+Type safety: `ConnectorDefinition<TCtx>` is contravariant in `TCtx` (via a type-only `__context`
+marker), so `new Registry<AppCtx>({ connectors: [c] })` only compiles when `AppCtx` provides what
+`c` needs, and `fromConnectors` infers the intersection (`ConnectorsContext<[...]>`). Plain
+`actions`/`readTools` can still be registered alongside connectors. `summarize(input, payload, ctx,
+before)` may be async (e.g. to resolve a vendor name).
 
 ## Ports the app implements
 
