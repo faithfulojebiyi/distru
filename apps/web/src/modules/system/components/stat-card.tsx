@@ -18,8 +18,12 @@ export const StatCard = ({
     className={css({
       bg: 'brand.panel.3',
       borderRadius: 'xl',
-      display: 'grid',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'flex-start',
       gap: '1',
+      h: 'full',
+      minW: '0',
       p: '4',
     })}
   >
@@ -35,7 +39,16 @@ export const StatCard = ({
       {value}
     </strong>
     {note ? (
-      <span className={css({ color: 'text.muted', fontSize: '1' })}>
+      <span
+        title={typeof note === 'string' ? note : undefined}
+        className={css({
+          color: 'text.muted',
+          fontSize: '1',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        })}
+      >
         {note}
       </span>
     ) : null}

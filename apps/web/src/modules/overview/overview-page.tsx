@@ -1,6 +1,7 @@
 // Adapted from carbonme modules/layout/components/workspace-home.tsx (header bar, date eyebrow, two-line greeting,
 // the large composer, then tabbed collections with TabButton) and workspace-home-data.ts (homeDate); the figures use
 // carbonme apps/admin/src/ui/stat-card.tsx. The composer hands its question to the Copilot.
+import { css } from '@ops/ui/css';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Box, Flex, Grid, HStack, styled } from '@ops/ui/jsx';
@@ -24,6 +25,7 @@ import { StartRunButton } from '../runs/start-run-dialog';
 import { useMe } from '../session/session-api';
 import { EmptyState, ErrorState } from '../system/components/states';
 import { StatCard } from '../system/components/stat-card';
+import { formatCost, formatTokens } from '../steps/step-activity-data';
 import { useNow } from '../system/use-now';
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'] as const;
@@ -39,23 +41,32 @@ const APPROVED: ReadonlySet<ProposalSummary['status']> = new Set([
   'executed',
 ]);
 
-/** The figures on the stat cards, computed from the proposal list until the server has a stats route. */
+/** The figures on the stat cards, from the proposal list's own fields (totalValue, maxRisk, opSummaries). */
 const statsOf = (proposals: readonly ProposalSummary[], now: number) => {
   const pending = proposals.filter((p) => p.status === 'pending_approval');
   const week = proposals.filter((p) => isThisWeek(p.createdAt, now));
   const sum = (items: readonly ProposalSummary[]) =>
     items.reduce((total, p) => total + (p.totalValue ?? 0), 0);
+  /** Ops the executor wrote, from each proposal's op summaries (a partly failed proposal still wrote some). */
+  const writes = (items: readonly ProposalSummary[]) =>
+    items.reduce((total, p) => total + p.opSummaries.filter((op) => op.status === 'executed').length, 0);
   const oldest = pending.at(-1);
+  const finishedToday = proposals.filter((p) => isToday(p.updatedAt, now));
+  const autoToday = proposals.filter((p) => p.policyOutcome === 'allow' && isToday(p.createdAt, now));
   return {
     pending: pending.length,
     pendingValue: sum(pending),
+    pendingHighRisk: pending.filter((p) => p.maxRisk === 'high').length,
     oldestPending: oldest ? formatAge(oldest.createdAt, now) : null,
-    autoToday: proposals.filter((p) => p.policyOutcome === 'allow' && isToday(p.createdAt, now)).length,
-    executedToday: proposals.filter((p) => p.status === 'executed' && isToday(p.updatedAt, now)).length,
-    failedToday: proposals.filter((p) => p.status === 'failed' && isToday(p.updatedAt, now)).length,
+    autoToday: autoToday.length,
+    autoTodayValue: sum(autoToday),
+    executedToday: finishedToday.filter((p) => p.status === 'executed').length,
+    writesToday: writes(finishedToday.filter((p) => p.status === 'executed' || p.status === 'failed')),
+    failedToday: finishedToday.filter((p) => p.status === 'failed').length,
     proposedWeek: sum(week),
     approvedWeek: sum(week.filter((p) => APPROVED.has(p.status))),
     proposedWeekCount: week.length,
+    undoWeek: week.filter((p) => p.undoOf !== null).length,
   };
 };
 
@@ -137,6 +148,9 @@ const RunList = ({ now }: { now: number }) => {
                 <styled.span color="text.muted" fontSize="1" ml="2">
                   {triggerOf(run.triggeredBy).label}
                 </styled.span>
+              </styled.span>
+              <styled.span fontSize="1" color="text.muted" flexShrink="0" fontVariantNumeric="tabular-nums" hideBelow="md">
+                {run.totals.agentCalls > 0 ? `${formatTokens(run.totals.tokens.total)} tok · ${formatCost(run.totals.costUsd)}` : ''}
               </styled.span>
               <RunStatusBadge status={run.status} />
               <styled.span fontSize="1" color="text.muted" flexShrink="0" w="5rem" textAlign="right">
@@ -295,19 +309,31 @@ export const OverviewPage = () => {
               )
             ) : (
               <>
-                <Link to="/approvals" search={{ status: 'pending' }} data-stat-card="Pending approvals">
+                <Link to="/approvals" search={{ status: 'pending' }} data-stat-card="Pending approvals" className={css({ display: 'block', h: 'full', minW: '0' })}>
                   <StatCard
                     label="Pending approvals"
                     value={stats.pending}
-                    note={stats.oldestPending ? `Oldest proposed ${stats.oldestPending}` : 'Inbox is clear'}
+                    note={
+                      stats.oldestPending
+                        ? `${stats.pendingHighRisk > 0 ? `${stats.pendingHighRisk} high risk · ` : ''}Oldest ${stats.oldestPending}`
+                        : 'Inbox is clear'
+                    }
                   />
                 </Link>
-                <StatCard label="Auto-approved today" value={stats.autoToday} note="Under the threshold" />
+                <StatCard
+                  label="Auto-approved today"
+                  value={stats.autoToday}
+                  note={stats.autoToday > 0 ? `${formatMoneyShort(stats.autoTodayValue)} under the threshold` : 'Under the threshold'}
+                />
                 <StatCard
                   label="Executed today"
                   value={stats.executedToday}
                   tone={stats.failedToday > 0 ? 'bad' : undefined}
-                  note={stats.failedToday > 0 ? `${stats.failedToday} failed today` : 'Written and verified'}
+                  note={
+                    stats.failedToday > 0
+                      ? `${stats.failedToday} failed · ${stats.writesToday} write${stats.writesToday === 1 ? '' : 's'}`
+                      : `${stats.writesToday} write${stats.writesToday === 1 ? '' : 's'} verified`
+                  }
                 />
                 <StatCard
                   label="Proposed this week"
