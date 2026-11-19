@@ -1,0 +1,31 @@
+{
+  "name": "@ops/emulators",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Provider emulators (Composio, Google Gmail/Calendar, Slack, Resend). Copied from danwo/packages/emulators (Apache-2.0, same author).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@composio/client": "2.0.0-rc.19",
+    "@composio/core": "0.25.0",
+    "@slack/bolt": "5.1.0",
+    "@slack/web-api": "8.2.0",
+    "@types/bun": "latest",
+    "@types/ws": "8.18.2",
+    "googleapis": "186.0.0",
+    "openid-client": "6.8.8",
+    "resend": "6.34.1",
+    "typescript": "^6.0.3",
+    "zod": "^4.6.7"
+  }
+}
