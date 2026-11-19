@@ -1,0 +1,22 @@
+{
+  "name": "@ops/distru-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./model": "./src/generated/model/index.ts"
+  },
+  "scripts": {
+    "spec:filter": "bun run scripts/filter-spec.ts",
+    "generate": "bun run spec:filter && orval --config orval.config.ts",
+    "smoke": "bun run scripts/smoke.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "orval": "^8.0.0",
+    "typescript": "^6.0.3"
+  }
+}
