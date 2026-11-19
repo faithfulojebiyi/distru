@@ -224,6 +224,32 @@ export const profileSnapshots = contextSchema.table(
   (t) => [uniqueIndex('profile_snapshots_version_idx').on(t.version)],
 );
 
+// ── semantic recall (vectors live in PgVector, schema `recall`; these are the ledger + cursors) ──
+
+/** One row per indexed document: dedupe by id (= source id) and skip unchanged content. */
+export const recallDocuments = contextSchema.table(
+  'recall_documents',
+  {
+    id: text('id').primaryKey(),
+    source: text('source', { enum: ['email', 'vendor_reply', 'po_note'] }).notNull(),
+    sourceId: text('source_id').notNull(),
+    contentHash: text('content_hash').notNull(),
+    chunkCount: integer('chunk_count').notNull(),
+    embedder: text('embedder').notNull(),
+    date: ts('date').notNull(),
+    indexedAt: ts('indexed_at').notNull(),
+  },
+  (t) => [index('recall_documents_source_idx').on(t.source, t.date)],
+);
+
+/** Incremental recall sources (e.g. the Gmail `after:` bound). */
+export const recallCursors = contextSchema.table('recall_cursors', {
+  stream: text('stream').primaryKey(),
+  cursorAt: ts('cursor_at').notNull(),
+  lastRunAt: ts('last_run_at').notNull(),
+  lastStats: jsonb('last_stats').$type<Record<string, number>>(),
+});
+
 /** Every table, for `drizzle(sql, { schema: { ...appSchema, ...contextTables } })`. */
 export const contextTables = {
   contextSchema,
@@ -241,4 +267,6 @@ export const contextTables = {
   harnessSignals,
   memories,
   profileSnapshots,
+  recallDocuments,
+  recallCursors,
 };

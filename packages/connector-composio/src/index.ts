@@ -44,6 +44,6 @@ export {
 } from './triggers';
 export { SendEmailInput, ReplyToThreadInput, FetchEmailsInput, SentEmailRecordSchema, type SendEmailPayload, type ReplyToThreadPayload, type SentEmailRecord } from './gmail';
 export { CreateEventInput, EventsListInput, CalendarEventSchema, type CreateEventPayload, type CalendarEvent } from './calendar';
-export { EmailSummarySchema, EmailMessageSchema, addressesIn, type EmailSummary, type EmailMessage } from './messages';
+export { EmailSummarySchema, EmailMessageSchema, RawGmailMessageSchema, addressesIn, messagesOf, type EmailSummary, type EmailMessage, type RawGmailMessage } from './messages';
 export { markerFor, stampBody, stripMarker } from './marker';
 export { untrusted, looksLikeInjection, UntrustedTextSchema, type UntrustedText } from './untrusted';

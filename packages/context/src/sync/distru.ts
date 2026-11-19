@@ -85,6 +85,13 @@ export interface DistruSyncOptions {
   /** Snapshot /inventory each run. Default true. */
   inventory?: boolean;
   ids?: () => string;
+  /**
+   * Free text the context layer itself never stores (PO internal / external notes): every raw purchase
+   * page is handed over here, e.g. to the semantic recall index (`purchaseNoteDocs`). Best effort: an
+   * error is reported to `onFreeTextError` and never fails the sync.
+   */
+  onFreeText?: (stream: 'purchases', raws: readonly unknown[], syncedAt: string) => Promise<unknown>;
+  onFreeTextError?: (err: unknown) => void;
 }
 
 export interface StreamResult {
@@ -193,6 +200,7 @@ export function createDistruSync(options: DistruSyncOptions) {
         const prev = new Map<string, PurchaseRow>((await store.list('purchase', { source: DISTRU_SOURCE, ids: idsOf, includeDeleted: true })).map((p) => [p.sourceId, p]));
         const rows = raws.map((r, i) => normalizePurchase(r, syncedAt, prev.get(idsOf[i]!) ?? null));
         await store.upsert('purchase', rows);
+        if (options.onFreeText) await options.onFreeText('purchases', raws, syncedAt).catch((err: unknown) => options.onFreeTextError?.(err));
         return rows.map((r) => r.sourceId);
       }
       case 'orders': {

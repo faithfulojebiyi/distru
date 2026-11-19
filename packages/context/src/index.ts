@@ -38,3 +38,4 @@ export { contextFor, relevantMemories, type ContextBlock, type ContextForInput }
 export { runUnifiedQuery, UnifiedQuerySchema, type UnifiedQuery, type UnifiedQueryResult } from './unified';
 export { onboardingReport, niceCeil, niceFloor, type OnboardingReport, type PolicySuggestion } from './onboarding';
 export { contextConnector, createContextContext, type ContextCtx, type ContextService } from './connector';
+export * from './recall';

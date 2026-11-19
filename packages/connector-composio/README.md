@@ -104,3 +104,8 @@ the real SDK pointed at it: listing, untrusted wrapping, injection flagging, sen
 through propose → policy → approve → execute → verify → re-execute (no second send), crash-after-send
 dedupe by marker, and signed webhook verify (valid, forged, wrong secret, tampered, missing headers)
 + normalization, and the harness trigger through `ingestWebhook` (accepted, forged, missing secret, audited). `bunx tsc --noEmit`.
+
+**Subpath `@ops/connector-composio/untrusted`**: `untrusted`, `looksLikeInjection`, `UntrustedTextSchema`
+without the Composio SDK, so other packages wrap external text with the same policy (the context layer's
+semantic recall wraps every recalled passage with it). `RawGmailMessageSchema` and `messagesOf` are exported
+for readers that need the full message view (recall's mailbox indexer).

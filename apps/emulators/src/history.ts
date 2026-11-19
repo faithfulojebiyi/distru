@@ -226,6 +226,50 @@ type HistoricalMail = IncomingMail & { messageIdHeader: string; references?: str
 
 const messageId = (thread: HistoryThread, i: number) => `<history.${thread.key}.${i}@${thread.messages[i]!.from === 'buyer' ? 'goldencoastdistro.com' : v(thread.vendor).email.split('@')[1]}>`;
 
+/** One historical message, addressed and dated (what `seedVendorHistory` delivers). */
+export interface HistoricalMessage {
+  thread: HistoryThread;
+  /** Position in its thread. */
+  index: number;
+  from: string;
+  to: string;
+  /** `Re: ` for replies. */
+  subject: string;
+  text: string;
+  date: Date;
+  /** RFC 5322 Message-ID (stable: `<history.<thread>.<index>@<domain>>`). */
+  messageIdHeader: string;
+  inReplyTo?: string;
+  references?: string;
+  fromBuyer: boolean;
+}
+
+/**
+ * The history as addressed, dated messages, oldest first: what the mailboxes receive. Also used by the
+ * evals to index the same mail for semantic recall without booting the emulators (`threads` can add
+ * scenario-specific threads).
+ */
+export function historyMessages(now: Date, threads: readonly HistoryThread[] = VENDOR_THREADS): HistoricalMessage[] {
+  const all = threads.flatMap((thread) => thread.messages.map((m, i) => ({ thread, m, i }))).sort((a, b) => b.m.daysAgo - a.m.daysAgo);
+  return all.map(({ thread, m, i }) => {
+    const vendor = v(thread.vendor);
+    const fromBuyer = m.from === 'buyer';
+    const refs = thread.messages.slice(0, i).map((_, k) => messageId(thread, k));
+    return {
+      thread,
+      index: i,
+      from: fromBuyer ? `"${BUYER.name} (${COMPANY.name})" <${PURCHASING.email}>` : `"${vendor.contact} (${vendor.name})" <${vendor.email}>`,
+      to: fromBuyer ? vendor.email : PURCHASING.email,
+      subject: i === 0 ? thread.subject : `Re: ${thread.subject}`,
+      text: m.text,
+      date: new Date(now.getTime() - Math.round(m.daysAgo * 86_400_000)),
+      messageIdHeader: messageId(thread, i),
+      ...(refs.length ? { inReplyTo: refs.at(-1)!, references: refs.join(' ') } : {}),
+      fromBuyer,
+    };
+  });
+}
+
 /**
  * Delivers the history into purchasing@ and the vendor mailboxes (SENT copy for the sender, INBOX copy
  * for the recipient, all read). Returns the Gmail ids of every historical message.
@@ -233,25 +277,18 @@ const messageId = (thread: HistoryThread, i: number) => `<history.${thread.key}.
 export function seedVendorHistory({ google, now }: Mailboxes): Set<string> {
   const ids = new Set<string>();
   const purchasing = gmailMailbox(google, PURCHASING.email);
-  // oldest first, so each mailbox's history reads in order
-  const all = VENDOR_THREADS.flatMap((thread) => thread.messages.map((m, i) => ({ thread, m, i }))).sort((a, b) => b.m.daysAgo - a.m.daysAgo);
-  for (const { thread, m, i } of all) {
-    const vendor = v(thread.vendor);
-    const vendorBox = gmailMailbox(google, vendor.email);
-    const fromBuyer = m.from === 'buyer';
-    const refs = thread.messages.slice(0, i).map((_, k) => messageId(thread, k));
-    const subject = i === 0 ? thread.subject : `Re: ${thread.subject}`;
-    const date = new Date(now.getTime() - Math.round(m.daysAgo * 86_400_000));
+  for (const h of historyMessages(now)) {
+    const vendorBox = gmailMailbox(google, v(h.thread.vendor).email);
     const mail: HistoricalMail = {
-      from: fromBuyer ? `"${BUYER.name} (${COMPANY.name})" <${PURCHASING.email}>` : `"${vendor.contact} (${vendor.name})" <${vendor.email}>`,
-      to: fromBuyer ? vendor.email : PURCHASING.email,
-      subject,
-      text: m.text,
-      date,
-      messageIdHeader: messageId(thread, i),
-      ...(refs.length ? { inReplyTo: refs.at(-1)!, references: refs.join(' ') } : {}),
+      from: h.from,
+      to: h.to,
+      subject: h.subject,
+      text: h.text,
+      date: h.date,
+      messageIdHeader: h.messageIdHeader,
+      ...(h.inReplyTo ? { inReplyTo: h.inReplyTo, references: h.references! } : {}),
     };
-    const [senderBox, recipientBox] = fromBuyer ? [purchasing, vendorBox] : [vendorBox, purchasing];
+    const [senderBox, recipientBox] = h.fromBuyer ? [purchasing, vendorBox] : [vendorBox, purchasing];
     ids.add(senderBox.deliver({ ...mail, labelIds: ['SENT'] } as HistoricalMail).id);
     ids.add(recipientBox.deliver({ ...mail, labelIds: ['INBOX'] } as HistoricalMail).id);
   }

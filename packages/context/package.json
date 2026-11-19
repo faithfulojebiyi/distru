@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ops/connector-composio": "workspace:*",
     "@ops/distru-client": "workspace:*",
     "@ops/harness": "workspace:*",
     "drizzle-orm": "^0.45.4",
