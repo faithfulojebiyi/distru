@@ -8,6 +8,7 @@ import { ThinkingOrb } from '@ops/ui/blocks/thinking-orb';
 import { Icons } from '@ops/ui/icons/base';
 import { Button } from '@ops/ui/primitives/button';
 import { MarkdownDocument } from '@ops/ui/primitives/markdown';
+import { ANSWER_COMPONENTS } from './answer-components';
 import { toast } from '@ops/ui/primitives/toast/toast';
 import { StatusBadge } from '../proposals/components/badges';
 import { ProposalStatus } from '../../api/generated/opsAgentAPI.schemas';
@@ -132,7 +133,7 @@ export const AssistantTurn = ({
       <ToolRuns runs={turn.tools} />
       {turn.answer ? (
         <Box css={ANSWER_HEADINGS} data-answer={live ? 'streaming' : 'answered'} aria-live="off">
-          <MarkdownDocument text={turn.answer} variant="answer" streaming={live} />
+          <MarkdownDocument text={turn.answer} variant="answer" streaming={live} components={ANSWER_COMPONENTS} />
         </Box>
       ) : null}
       {turn.links.length > 0 && (

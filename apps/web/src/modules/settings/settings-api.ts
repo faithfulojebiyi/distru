@@ -35,6 +35,8 @@ export const SYSTEM_LABELS: Record<string, string> = {
 /** A connector's mark: an integration icon when one exists, else a base icon for its kind of system. */
 export const connectorIcon = (connector: Pick<ConnectorSummary, 'id' | 'system'>) => {
   if (connector.id === 'email') return 'gmail';
+  if (connector.id === 'distru' || connector.id === 'distru_mcp') return 'img:/integrations/distru.png';
+  if (connector.id === 'headset') return 'img:/integrations/headset.png';
   switch (connector.system) {
     case 'erp':
       return 'database';

@@ -1,8 +1,10 @@
-import { Link } from '@tanstack/react-router';
+import { Link, useLocation, useNavigate } from '@tanstack/react-router';
+import { useEffect } from 'react';
 import { Box, Flex, Grid, HStack, styled } from '@ops/ui/jsx';
 
 import { Icons } from '@ops/ui/icons/base';
 import { MarkdownDocument } from '@ops/ui/primitives/markdown';
+import { ANSWER_COMPONENTS } from '../../copilot/answer-components';
 import { Skeleton } from '@ops/ui/primitives/skeleton';
 import { Heading, Span } from '@ops/ui/primitives/text';
 import { isNotFoundError } from '../../../api/errors';
@@ -14,6 +16,7 @@ import {
   AuditTimeline,
   AuditTimelineSkeleton,
 } from '../../audit/components/audit-timeline';
+import { AuditDrawer } from '../../audit/components/audit-drawer';
 import { EmptyState, ErrorState } from '../../system/components/states';
 import {
   LIVE_STATUSES,
@@ -160,6 +163,8 @@ const OpCard = ({ op, total }: { op: ProposalOp; total: number }) => {
       rounded="xl"
       bg="brand.panel.2"
       overflow="hidden"
+      id={`op-${op.index}`}
+      scrollMarginTop="4"
       data-op-index={op.index}
     >
       <Flex direction="column" gap="2" px="4" pt="3.5" pb="3">
@@ -263,12 +268,24 @@ const ExecutionError = ({ proposal }: { proposal: ProposalDetail }) => {
   );
 };
 
-const ProposalTrail = ({ proposal }: { proposal: ProposalDetail }) => {
+/** The proposal's audit trail; an event opens the same drawer as the audit log (?event=<id>, ↑/↓ steps). */
+const ProposalTrail = ({ proposal, openEventId }: { proposal: ProposalDetail; openEventId: string | null }) => {
   const live = LIVE_STATUSES.includes(proposal.status);
+  const navigate = useNavigate();
   const events = useAuditEvents(
     { proposalId: proposal.id, order: 'asc', limit: 500 },
     { live },
   );
+  const list = events.data ?? [];
+  const openIndex = openEventId ? list.findIndex((event) => event.id === openEventId) : -1;
+  const open = (id: string | undefined, replace = false) =>
+    void navigate({
+      to: '/approvals/$proposalId',
+      params: { proposalId: proposal.id },
+      search: id ? { event: id } : {},
+      replace,
+      resetScroll: false,
+    });
   return (
     <Flex direction="column" gap="3" p="4" rounded="xl" bg="brand.panel.2" data-testid="proposal-trail">
       <HStack justify="space-between">
@@ -292,8 +309,18 @@ const ProposalTrail = ({ proposal }: { proposal: ProposalDetail }) => {
           No events recorded yet.
         </Span>
       ) : (
-        <AuditTimeline events={events.data} />
+        <AuditTimeline events={events.data} selected={openEventId} onOpen={(event) => open(event.id)} />
       )}
+      <AuditDrawer
+        event={openIndex >= 0 ? (list[openIndex] ?? null) : null}
+        title={proposal.title}
+        onClose={() => open(undefined, true)}
+        onStep={(direction) => {
+          const next = list[openIndex + direction];
+          if (next) open(next.id, true);
+        }}
+        position={openIndex >= 0 ? { index: openIndex, total: list.length } : null}
+      />
     </Flex>
   );
 };
@@ -376,8 +403,15 @@ const DetailSkeleton = () => (
 );
 
 /** The proposal page: header, the agent's reasoning, every op's diff, and on the side the decision, policy and trail. */
-export const ProposalDetailView = ({ proposalId }: { proposalId: string }) => {
+export const ProposalDetailView = ({ proposalId, openEventId = null }: { proposalId: string; openEventId?: string | null }) => {
   const proposal = useProposal(proposalId);
+  const { hash } = useLocation();
+  const loaded = proposal.data !== undefined;
+  // "Jump to op" links (#op-N) from the audit drawer land before the ops have rendered; scroll once they have.
+  useEffect(() => {
+    if (!loaded || !hash.startsWith('op-')) return;
+    document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [loaded, hash]);
 
   if (proposal.isPending) return <DetailSkeleton />;
   if (proposal.isError)
@@ -411,7 +445,7 @@ export const ProposalDetailView = ({ proposalId }: { proposalId: string }) => {
                 Why the agent proposed this
               </HStack>
               <Box fontSize="1.5" css={{ '& table': { fontSize: '1' } }}>
-                <MarkdownDocument text={data.rationale} variant="answer" />
+                <MarkdownDocument text={data.rationale} variant="answer" components={ANSWER_COMPONENTS} />
               </Box>
             </Flex>
           ) : null}
@@ -424,7 +458,7 @@ export const ProposalDetailView = ({ proposalId }: { proposalId: string }) => {
         <Flex direction="column" gap="4" minW="0" position={{ xl: 'sticky' }} top={{ xl: '0' }}>
           <DecisionPanel proposal={data} />
           <PolicyPanel policy={data.policy} />
-          <ProposalTrail proposal={data} />
+          <ProposalTrail proposal={data} openEventId={openEventId} />
         </Flex>
       </Grid>
     </Flex>

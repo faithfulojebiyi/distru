@@ -26,8 +26,10 @@ export const AppLogo = ({
   name?: string;
   size?: 'sm' | 'md' | 'lg';
 }) => {
-  const box = { sm: '7', md: '8', lg: '12' }[size];
+  // Literal sizes: Panda only generates classes it can see, so a size picked at runtime collapsed the tile.
+  const box = { sm: '1.75rem', md: '2rem', lg: '3rem' }[size];
   const pixels = { sm: 16, md: 18, lg: 26 }[size];
+  const image = icon.startsWith('img:') ? icon.slice(4) : null;
   const Integration =
     icon in IntegrationIcons
       ? IntegrationIcons[icon as keyof typeof IntegrationIcons]
@@ -39,8 +41,8 @@ export const AppLogo = ({
       align="center"
       justify="center"
       flexShrink="0"
-      w={box}
-      h={box}
+      overflow="hidden"
+      style={{ width: box, height: box, minWidth: box }}
       rounded={size === 'lg' ? 'xl' : 'lg'}
       color="text.label"
       bg={
@@ -49,7 +51,9 @@ export const AppLogo = ({
           : 'brand.panel.4'
       }
     >
-      {Integration ? (
+      {image ? (
+        <styled.img src={image} alt="" style={{ width: pixels, height: pixels }} rounded="sm" objectFit="contain" />
+      ) : Integration ? (
         <Integration width={pixels} height={pixels} />
       ) : Base ? (
         <Base size={pixels * 0.85} />
