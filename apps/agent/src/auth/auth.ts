@@ -1,13 +1,16 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { bearer } from 'better-auth/plugins';
+import { bearer, emailOTP } from 'better-auth/plugins';
 import { db, schema } from '../db/client';
 import { env } from '../env';
+import { OTP_TTL_SECONDS, deliverAuthOtp, deliverResetLink } from './auth-mail';
 
 /**
  * Better Auth instance, mounted on the Hono app at /api/auth/*.
  *
- * - email + password only (demo users are seeded, sign-up stays open for local dev)
+ * - email + password, plus emailed six-digit codes (emailOTP, ported from clarkia libs/system/auth/auth.ts): sign in
+ *   by code, confirm a new account's email (required before its first session), and reset a password. Codes go through
+ *   Resend, or the Resend emulator in dev (see auth-mail.ts). Demo users are seeded verified.
  * - `role` is a server-owned user field: `input: false` means clients can never set it on sign-up
  * - `bearer()` lets non-browser clients (scripts, MCP) send `Authorization: Bearer <session token>`
  */
@@ -29,6 +32,15 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     disableSignUp: env.NODE_ENV === 'production',
+    requireEmailVerification: true,
+    sendResetPassword: async ({ user, url, token }) => {
+      await deliverResetLink({ email: user.email, url, token });
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    sendOnSignIn: true,
+    autoSignInAfterVerification: true,
   },
   user: {
     additionalFields: {
@@ -45,7 +57,26 @@ export const auth = betterAuth({
     // Bun.serve doesn't expose the peer IP to Better Auth; read it from the reverse proxy instead.
     ipAddress: { ipAddressHeaders: ['x-forwarded-for', 'x-real-ip'] },
   },
-  plugins: [bearer()],
+  plugins: [
+    bearer(),
+    emailOTP({
+      otpLength: 6,
+      expiresIn: OTP_TTL_SECONDS,
+      // Sent inline, not queued: a late code is worthless and a queue would hide the failure from sign-in.
+      // Email verification uses the same 6-digit code as sign-in, entered on the sign-up and sign-in pages.
+      overrideDefaultEmailVerification: true,
+      // Sign-in by code never creates an account; sign-up does (and needs the email confirmed).
+      disableSignUp: true,
+      async sendVerificationOTP({ email, otp, type }) {
+        try {
+          await deliverAuthOtp({ email, otp, purpose: type });
+        } catch (error) {
+          console.error(`[auth] failed to send a ${type} code: ${error instanceof Error ? error.message : String(error)}`);
+          throw error;
+        }
+      },
+    }),
+  ],
 });
 
 export type Auth = typeof auth;
