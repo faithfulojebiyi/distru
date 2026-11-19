@@ -1,16 +1,11 @@
+// The log page: filter pills (carbonme activity-settings FilterButton) over carbonme admin audit-table.tsx (audit-table.tsx
+// here) and admin ui/pager.tsx. AuditRow stays the compact row the Overview's Activity tab uses.
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { Box, Flex, HStack, styled } from '@ops/ui/jsx';
 
 import { Icons } from '@ops/ui/icons/base';
 import { Button } from '@ops/ui/primitives/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@ops/ui/primitives/dropdown-menu';
 import { Skeleton } from '@ops/ui/primitives/skeleton';
 import { Span } from '@ops/ui/primitives/text';
 import type {
@@ -23,48 +18,29 @@ import { ACTOR_KIND_LABELS, actorName } from '../../proposals/proposal-values';
 import { useAuditEvents, useProposals } from '../../proposals/proposals-api';
 import {
   AUDIT_TYPES,
-  auditDays,
   auditDetail,
   auditTime,
   auditTypeOf,
   auditVerb,
 } from '../audit-values';
+import {
+  DATE_RANGES,
+  FilterChip,
+  inRange,
+  type DateRange,
+} from '../../system/components/filter-chip';
+import { Pager } from '../../system/components/pager';
+import { AuditTable, outcomeOf, type AuditOutcome } from './audit-table';
 
 export type AuditSearch = {
   type?: string;
   actor?: ActorKind;
   proposalId?: string;
+  outcome?: AuditOutcome;
+  range?: DateRange;
 };
 
 const AUDIT_LIMIT = 500;
-
-const FilterButton = ({
-  label,
-  value,
-  icon,
-  active,
-  ...props
-}: {
-  label: string;
-  value: string;
-  icon?: ReactNode;
-  active: boolean;
-}) => (
-  <Button
-    {...props}
-    variant="soft"
-    size="sm"
-    fontWeight="400"
-    gap="1.5"
-    data-audit-filter={label}
-    data-active={active ? '' : undefined}
-  >
-    {icon}
-    <Span color="text.muted">{label}</Span>
-    <Span fontWeight={active ? '500' : '400'}>{value}</Span>
-    <Icons.caretDown size={12} />
-  </Button>
-);
 
 /** One event: its marker, who did what to which proposal, a line of detail and the time (carbonme ActivityRow). */
 const AuditRow = ({
@@ -145,7 +121,23 @@ const AuditSkeleton = () => (
   </Flex>
 );
 
-/** Every write and decision the harness recorded, newest first, filterable by event type and kind of actor. */
+const PAGE_SIZE = 25;
+
+const OUTCOMES = [
+  { value: 'succeeded', label: 'Succeeded' },
+  { value: 'refused', label: 'Refused or denied' },
+  { value: 'failed', label: 'Failed' },
+] as const satisfies readonly { value: AuditOutcome; label: string }[];
+
+const ACTORS = (Object.keys(ACTOR_KIND_LABELS) as ActorKind[]).map((kind) => ({
+  value: kind,
+  label: ACTOR_KIND_LABELS[kind],
+}));
+
+const EVENT_TYPES = Object.entries(AUDIT_TYPES).map(([value, type]) => ({ value, label: type.label }));
+
+/** Every write and decision the harness recorded, newest first, as admin-app-mockup 10: filter pills over a table
+ * whose rows open to the values before and after. */
 export const AuditLog = ({ search }: { search: AuditSearch }) => {
   const navigate = useNavigate();
   const events = useAuditEvents({
@@ -155,8 +147,9 @@ export const AuditLog = ({ search }: { search: AuditSearch }) => {
     ...(search.proposalId ? { proposalId: search.proposalId } : {}),
   });
   const proposals = useProposals();
-  const nowMs = useNow(30_000);
-  const now = useMemo(() => new Date(nowMs), [nowMs]);
+  const now = useNow(30_000);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const range = search.range ?? '7d';
 
   const titles = useMemo(
     () => new Map((proposals.data ?? []).map((p) => [p.id, p.title])),
@@ -164,67 +157,56 @@ export const AuditLog = ({ search }: { search: AuditSearch }) => {
   );
 
   const visible = (events.data ?? []).filter(
-    (event) => !search.actor || event.actor.kind === search.actor,
+    (event) =>
+      (!search.actor || event.actor.kind === search.actor) &&
+      (!search.outcome || outcomeOf(event).key === search.outcome) &&
+      inRange(event.at, range, now),
   );
+  const offset = Number(cursor ?? 0);
+  const page = visible.slice(offset, offset + PAGE_SIZE);
 
-  const setSearch = (next: AuditSearch) =>
+  const setSearch = (next: AuditSearch) => {
+    setCursor(undefined);
     void navigate({ to: '/audit', search: next });
+  };
 
-  const filtered = Boolean(search.type || search.actor || search.proposalId);
+  const filtered = Boolean(search.type || search.actor || search.proposalId || search.outcome || search.range);
   const proposalTitle = search.proposalId ? titles.get(search.proposalId) : null;
 
   return (
-    <Flex direction="column" gap="3" maxW="64rem" mx="auto" w="full">
+    <Flex direction="column" gap="4" maxW="70rem" mx="auto" w="full">
       <HStack gap="2" flexWrap="wrap">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <FilterButton
-              label="Event"
-              value={search.type ? auditTypeOf(search.type).label : 'Any'}
-              active={Boolean(search.type)}
-            />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" w="16rem" maxH="22rem" overflowY="auto">
-            <DropdownMenuItem onSelect={() => setSearch({ ...search, type: undefined })}>
-              Any event
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {Object.entries(AUDIT_TYPES).map(([type, value]) => {
-              const Icon = Icons[value.icon];
-              return (
-                <DropdownMenuItem key={type} onSelect={() => setSearch({ ...search, type })}>
-                  <Icon size={13} />
-                  {value.label}
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <FilterButton
-              label="Actor"
-              icon={<Icons.user size={13} />}
-              value={search.actor ? ACTOR_KIND_LABELS[search.actor] : 'Anyone'}
-              active={Boolean(search.actor)}
-            />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" w="12rem">
-            <DropdownMenuItem onSelect={() => setSearch({ ...search, actor: undefined })}>
-              Anyone
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {(Object.keys(ACTOR_KIND_LABELS) as ActorKind[]).map((kind) => (
-              <DropdownMenuItem key={kind} onSelect={() => setSearch({ ...search, actor: kind })}>
-                {ACTOR_KIND_LABELS[kind]}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <FilterChip
+          icon={<Icons.user size={13} />}
+          anyLabel="Anyone"
+          value={search.actor ?? null}
+          options={ACTORS}
+          onChange={(actor) => setSearch({ ...search, actor: actor ?? undefined })}
+        />
+        <FilterChip
+          label="Event"
+          value={search.type ?? null}
+          options={EVENT_TYPES}
+          onChange={(type) => setSearch({ ...search, type: type ?? undefined })}
+        />
+        <FilterChip
+          label="Outcome"
+          value={search.outcome ?? null}
+          options={OUTCOMES}
+          onChange={(outcome) => setSearch({ ...search, outcome: outcome ?? undefined })}
+        />
+        <FilterChip
+          icon={<Icons.calendar size={13} />}
+          anyLabel={null}
+          value={range}
+          options={DATE_RANGES}
+          onChange={(next) => setSearch({ ...search, range: next && next !== '7d' ? next : undefined })}
+        />
         {search.proposalId ? (
           <Button
             size="sm"
             variant="soft"
+            fontSize="1"
             fontWeight="400"
             gap="1.5"
             onClick={() => setSearch({ ...search, proposalId: undefined })}
@@ -238,7 +220,7 @@ export const AuditLog = ({ search }: { search: AuditSearch }) => {
           </Button>
         ) : null}
         {filtered ? (
-          <Button size="sm" variant="ghost" onClick={() => setSearch({})}>
+          <Button size="sm" variant="ghost" fontSize="1" onClick={() => setSearch({})}>
             Clear filters
           </Button>
         ) : null}
@@ -251,34 +233,23 @@ export const AuditLog = ({ search }: { search: AuditSearch }) => {
         <AuditSkeleton />
       ) : events.isError ? (
         <ErrorState title="Could not load the audit log" retry={() => void events.refetch()} />
-      ) : visible.length === 0 ? (
+      ) : visible.length === 0 && !filtered ? (
         <EmptyState
           illustration="reports"
-          title={filtered ? 'No events match these filters' : 'Nothing recorded yet'}
-          hint={
-            filtered
-              ? 'Try another event type or actor.'
-              : 'Every proposal, policy check, decision and write lands here as it happens.'
-          }
+          title="Nothing recorded in this window"
+          hint="Every proposal, policy check, decision and write lands here as it happens. Try a longer date range."
         />
       ) : (
-        <Flex direction="column" rounded="xl" bg="brand.panel.2" p="1.5" gap="1" data-testid="audit-log">
-          {auditDays(visible, now).map((group) => (
-            <Flex key={group.day} direction="column" gap="1">
-              <styled.p px="2" pt="2" pb="1" fontSize="1" color="text.muted" fontWeight="500">
-                {group.day}
-              </styled.p>
-              {group.events.map((event) => (
-                <AuditRow
-                  key={event.id}
-                  event={event}
-                  now={now}
-                  title={event.proposalId ? (titles.get(event.proposalId) ?? null) : null}
-                />
-              ))}
-            </Flex>
-          ))}
-        </Flex>
+        <>
+          <AuditTable key={`${offset}:${page[0]?.id ?? ''}`} events={page} titles={titles} />
+          {visible.length > PAGE_SIZE && (
+            <Pager
+              cursor={cursor}
+              nextCursor={offset + PAGE_SIZE < visible.length ? String(offset + PAGE_SIZE) : null}
+              onPage={setCursor}
+            />
+          )}
+        </>
       )}
       {events.data && events.data.length >= AUDIT_LIMIT ? (
         <Box textAlign="center">

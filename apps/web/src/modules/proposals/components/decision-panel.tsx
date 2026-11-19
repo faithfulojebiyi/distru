@@ -1,3 +1,6 @@
+// Rebased on carbonme modules/chats/chat-tool-runs.tsx ToolApprovalCard: a grey card with the tool heading and a
+// "Needs approval" pill, an amber note only where it warns about a write, and Deny / Allow buttons (here Reject /
+// Approve) that spin while their decision is sent.
 import { useState } from 'react';
 import { Box, Flex, HStack, styled } from '@ops/ui/jsx';
 
@@ -21,7 +24,9 @@ import {
   useDecideProposal,
   type DecisionFailure,
 } from '../proposals-api';
-import { AMBER_TINT } from './badges';
+import { AMBER_TINT, StatusBadge } from './badges';
+import { AppLogo } from '../../settings/connectors-page';
+import { ToolRunBadge } from '../../steps/tool-runs';
 import { PolicyReasons } from './policy-panel';
 
 const FailureNotice = ({ failure }: { failure: DecisionFailure }) => (
@@ -53,6 +58,27 @@ const FailureNotice = ({ failure }: { failure: DecisionFailure }) => (
   </Flex>
 );
 
+/** The write warning of ToolApprovalCard: what approving lets the executor do. */
+const WriteWarning = ({ proposal }: { proposal: ProposalDetail }) => (
+  <HStack
+    gap="2"
+    px="3"
+    py="2"
+    rounded="lg"
+    bg={AMBER_TINT}
+    color="palette.amber.11"
+    fontSize="1.5"
+    alignItems="start"
+    data-write-warning=""
+  >
+    <Icons.warn size={14} flexShrink="0" mt="0.5" />
+    <styled.span>
+      Approving lets the executor write {proposal.opCount} change{proposal.opCount === 1 ? '' : 's'} to Distru, each
+      with an idempotency key and a read-after-write check. Check the diff before you approve.
+    </styled.span>
+  </HStack>
+);
+
 /** Approve / reject with an optional reason, for approvers; operators see why they cannot. */
 const DecisionForm = ({ proposal }: { proposal: ProposalDetail }) => {
   const me = useMe();
@@ -77,8 +103,8 @@ const DecisionForm = ({ proposal }: { proposal: ProposalDetail }) => {
   const buttons = (
     <HStack gap="2" justify="flex-end" flexWrap="wrap">
       <Button
-        size="sm"
-        variant="soft"
+        size="xs"
+        variant="ghost"
         disabled={!allowed || busy}
         onClick={() => send('reject')}
         data-decide="reject"
@@ -87,12 +113,12 @@ const DecisionForm = ({ proposal }: { proposal: ProposalDetail }) => {
         Reject
       </Button>
       <Button
-        size="sm"
+        size="xs"
         disabled={!allowed || busy}
         onClick={() => send('approve')}
         data-decide="approve"
       >
-        {spinner('approve') ?? <Icons.check size={13} />}
+        {spinner('approve')}
         Approve {formatMoney(proposal.totalValue)}
       </Button>
     </HStack>
@@ -100,20 +126,29 @@ const DecisionForm = ({ proposal }: { proposal: ProposalDetail }) => {
 
   return (
     <Flex direction="column" gap="3">
-      <Textarea
-        placeholder={
-          allowed
-            ? 'Reason (optional): shown in the audit log'
-            : 'Only approvers can decide'
-        }
-        value={reason}
-        onChange={(event) => setReason(event.target.value)}
-        maxLength={2000}
-        rows={3}
-        disabled={!allowed || busy}
-        aria-label="Decision reason"
-        bg="background.app"
-      />
+      <WriteWarning proposal={proposal} />
+      <Box>
+        <styled.span fontSize="1" color="text.muted">
+          Reason
+        </styled.span>
+        <Textarea
+          mt="1"
+          placeholder={
+            allowed
+              ? 'Optional: saved to the audit log with your decision'
+              : 'Only approvers can decide'
+          }
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          maxLength={2000}
+          rows={2}
+          minH="0"
+          h="4.5rem"
+          disabled={!allowed || busy}
+          aria-label="Decision reason"
+          bg={{ base: 'background.app', _dark: 'brand.panel.4' }}
+        />
+      </Box>
       {failure && <FailureNotice failure={failure} />}
       {allowed ? (
         buttons
@@ -144,7 +179,7 @@ const DecisionRecord = ({ proposal }: { proposal: ProposalDetail }) => {
       px="3"
       py="2.5"
       rounded="lg"
-      bg="background.app"
+      bg={{ base: 'background.app', _dark: 'brand.panel.4' }}
       fontSize="1.5"
       data-decision={decision.decision}
     >
@@ -181,27 +216,34 @@ const NOTES: Partial<Record<ProposalDetail['status'], string>> = {
   draft: 'Still being planned. It can be decided once it is submitted.',
 };
 
-/** What a person can do with this proposal now: decide it, or see who did and when. */
+/** What a person can do with this proposal now: decide it, or see who did and when (ToolApprovalCard's frame). */
 export const DecisionPanel = ({ proposal }: { proposal: ProposalDetail }) => {
   const note = NOTES[proposal.status];
+  const pending = proposal.status === 'pending_approval';
   return (
     <Flex
       direction="column"
       gap="3"
-      p="4"
+      p="3"
       rounded="xl"
-      bg={proposal.status === 'pending_approval' ? AMBER_TINT : 'brand.panel.2'}
+      bg="brand.panel.3"
+      role="group"
+      aria-label={pending ? 'Your decision' : 'Decision'}
       data-testid="decision-panel"
     >
-      <HStack gap="2">
-        {proposal.status === 'pending_approval' ? (
-          <styled.span w="1.5" h="1.5" rounded="full" bg="palette.amber.9" />
-        ) : null}
-        <Span fontWeight="600" fontSize="1.5">
-          {proposal.status === 'pending_approval' ? 'Your decision' : 'Decision'}
-        </Span>
+      <HStack gap="2.5" minW="0">
+        <AppLogo icon="checkCircle" name="Decision" />
+        <Box minW="0" flex="1">
+          <styled.p fontSize="1.5" fontWeight="500" truncate>
+            {pending ? 'Your decision' : 'Decision'}
+          </styled.p>
+          <styled.p fontSize="1" color="text.muted" truncate>
+            {proposal.opCount} op{proposal.opCount === 1 ? '' : 's'} · {formatMoney(proposal.totalValue)}
+          </styled.p>
+        </Box>
+        {pending ? <ToolRunBadge status="awaiting_approval" /> : <StatusBadge status={proposal.status} />}
       </HStack>
-      {proposal.status === 'pending_approval' ? (
+      {pending ? (
         <DecisionForm proposal={proposal} />
       ) : (
         <>

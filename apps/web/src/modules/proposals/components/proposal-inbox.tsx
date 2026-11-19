@@ -1,20 +1,34 @@
+// The inbox is adapted from carbonme apps/admin/src/modules/customers/customers-page.tsx (search + filters over a
+// table) and ui/table.tsx, as admin-app-mockup 02-customers; ProposalRow stays the Overview's compact row.
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useMemo } from 'react';
-import { css } from '@ops/ui/css';
+import { useMemo, useState } from 'react';
+import { css, cx } from '@ops/ui/css';
 import { Box, Flex, HStack, styled } from '@ops/ui/jsx';
 
 import { Icons } from '@ops/ui/icons/base';
 import { Skeleton } from '@ops/ui/primitives/skeleton';
-import { Tabs, TabsList, TabTrigger } from '@ops/ui/primitives/tabs';
+import { Button } from '@ops/ui/primitives/button';
+import { Input } from '@ops/ui/primitives/input';
 import { Span } from '@ops/ui/primitives/text';
 import type {
   Principal,
+  ProposalStatus,
   ProposalSummary,
+  Risk,
 } from '../../../api/generated/opsAgentAPI.schemas';
+import { useConnectors } from '../../settings/settings-api';
+import { lineTableStyles as t } from '../../system/components/admin-table';
+import {
+  DATE_RANGES,
+  FilterChip,
+  inRange,
+  type DateRange,
+} from '../../system/components/filter-chip';
 import { useNow } from '../../system/use-now';
 import { EmptyState, ErrorState } from '../../system/components/states';
 import {
   INBOX_TABS,
+  STATUS_LABELS,
   actorName,
   formatAge,
   formatMoney,
@@ -23,7 +37,7 @@ import {
   type InboxTab,
 } from '../proposal-values';
 import { useProposals } from '../proposals-api';
-import { PolicyBadge, StatusBadge } from './badges';
+import { PolicyBadge, RiskBadge, StatusBadge } from './badges';
 
 const KIND_ICONS: Record<Principal['kind'], keyof typeof Icons> = {
   agent: 'aiChip',
@@ -173,30 +187,100 @@ export const ProposalListSkeleton = ({ rows = 5 }: { rows?: number }) => (
   </Flex>
 );
 
-const ColumnHeads = () => (
-  <styled.div
-    hideBelow="lg"
-    display="grid"
-    gridTemplateColumns="minmax(0, 1fr) 7.5rem 11rem 11rem"
-    columnGap="4"
-    px="3"
-    pt="1"
-    pb="0.5"
-    fontSize="1"
-    color="text.muted"
+type InboxFilters = {
+  q: string;
+  status: ProposalStatus | null;
+  risk: Risk | null;
+  createdBy: string | null;
+  range: DateRange;
+};
+
+const RISK_ORDER: Record<Risk, number> = { low: 0, medium: 1, high: 2 };
+
+/** The highest risk among a proposal's actions, from the connector catalogue (summaries carry no per-op risk). */
+const useRiskOf = () => {
+  const connectors = useConnectors();
+  const risks = useMemo(() => {
+    const map = new Map<string, Risk>();
+    for (const connector of connectors.data ?? [])
+      for (const tool of connector.tools) if (tool.kind === 'action' && tool.risk) map.set(tool.name, tool.risk);
+    return map;
+  }, [connectors.data]);
+  return (proposal: ProposalSummary): Risk | null =>
+    proposal.actions.reduce<Risk | null>((top, action) => {
+      const risk = risks.get(action);
+      return risk && (!top || RISK_ORDER[risk] > RISK_ORDER[top]) ? risk : top;
+    }, null);
+};
+
+/** A status tab as the mockup's segmented counts: "All 214  Needs attention 7". */
+const SegTab = ({
+  label,
+  count,
+  active,
+  urgent,
+  select,
+}: {
+  label: string;
+  count: number | undefined;
+  active: boolean;
+  urgent: boolean;
+  select: () => void;
+}) => (
+  <styled.button
+    type="button"
+    role="tab"
+    aria-selected={active}
+    onClick={select}
+    display="inline-flex"
+    alignItems="center"
+    gap="1.5"
+    h="7"
+    px="2.5"
+    rounded="md"
+    fontSize="1.5"
+    whiteSpace="nowrap"
+    cursor="pointer"
+    bg={active ? 'brand.panel.4' : 'transparent'}
+    color={active ? 'text.app' : 'text.label'}
+    fontWeight={active ? '500' : '400'}
+    _hover={{ bg: active ? 'brand.panel.4' : 'brand.panel.3' }}
+    data-inbox-tab={label}
   >
-    <span>Proposal</span>
-    <styled.span textAlign="right">Total</styled.span>
-    <span>Policy</span>
-    <styled.span textAlign="right">Status</styled.span>
-  </styled.div>
+    {label}
+    {count !== undefined && (
+      <styled.span color={urgent ? 'palette.amber.11' : 'text.muted'} fontVariantNumeric="tabular-nums">
+        {count}
+      </styled.span>
+    )}
+  </styled.button>
 );
 
-/** The approvals inbox: status tabs with live counts over one list of proposals. */
+const STATUS_OPTIONS = (Object.keys(STATUS_LABELS) as ProposalStatus[]).map((status) => ({
+  value: status,
+  label: STATUS_LABELS[status],
+}));
+
+const RISK_OPTIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+] as const satisfies readonly { value: Risk; label: string }[];
+
+/** The approvals inbox, as admin-app-mockup 02-customers: status tabs with counts, a search and filter pills, then
+ * one hairline table (carbonme admin customers-page.tsx filters, dashboard list rows). */
 export const ProposalInbox = ({ tab }: { tab: InboxTab }) => {
   const proposals = useProposals();
   const navigate = useNavigate();
   const now = useNow(30_000);
+  const riskOf = useRiskOf();
+  const [filters, setFilters] = useState<InboxFilters>({
+    q: '',
+    status: null,
+    risk: null,
+    createdBy: null,
+    range: 'all',
+  });
 
   const counts = useMemo(() => {
     const items = proposals.data ?? [];
@@ -208,71 +292,162 @@ export const ProposalInbox = ({ tab }: { tab: InboxTab }) => {
     ) as Record<InboxTab, number>;
   }, [proposals.data]);
 
-  const visible = (proposals.data ?? []).filter((proposal) =>
-    inTab(tab, proposal.status),
+  const creators = useMemo(
+    () =>
+      [...new Set((proposals.data ?? []).map((proposal) => actorName(proposal.createdBy)))]
+        .sort()
+        .map((name) => ({ value: name, label: name })),
+    [proposals.data],
   );
 
+  const term = filters.q.trim().toLowerCase();
+  const visible = (proposals.data ?? []).filter(
+    (proposal) =>
+      inTab(tab, proposal.status) &&
+      (!term || (proposal.title ?? '').toLowerCase().includes(term) || proposal.id.startsWith(term)) &&
+      (!filters.status || proposal.status === filters.status) &&
+      (!filters.risk || riskOf(proposal) === filters.risk) &&
+      (!filters.createdBy || actorName(proposal.createdBy) === filters.createdBy) &&
+      inRange(proposal.createdAt, filters.range, now),
+  );
+  const filtered = Boolean(term || filters.status || filters.risk || filters.createdBy || filters.range !== 'all');
+
   return (
-    <Flex direction="column" gap="4">
-      <Tabs
-        value={tab}
-        onValueChange={(value) =>
-          void navigate({ to: '/approvals', search: { status: value as InboxTab } })
-        }
-      >
-        <Box overflowX="auto" mx="-1" px="1" pb="0.5">
-          <TabsList>
-            {INBOX_TABS.map((item) => (
-              <TabTrigger key={item.key} value={item.key} gap="1.5" data-inbox-tab={item.key}>
-                {item.label}
-                {proposals.data ? (
-                  <styled.span
-                    fontSize="1"
-                    fontVariantNumeric="tabular-nums"
-                    px="1.5"
-                    rounded="full"
-                    minW="5"
-                    textAlign="center"
-                    bg={
-                      item.key === 'pending' && counts.pending > 0
-                        ? 'palette.amber.9'
-                        : 'brand.panel.6'
-                    }
-                    color={
-                      item.key === 'pending' && counts.pending > 0
-                        ? 'white'
-                        : 'text.muted'
-                    }
-                  >
-                    {counts[item.key]}
-                  </styled.span>
-                ) : null}
-              </TabTrigger>
-            ))}
-          </TabsList>
+    <Flex direction="column" gap="4" maxW="80rem" mx="auto" w="full">
+      <HStack gap="1" role="tablist" aria-label="Proposal status" overflowX="auto" pb="0.5">
+        {INBOX_TABS.map((item) => (
+          <SegTab
+            key={item.key}
+            label={item.label}
+            count={proposals.data ? counts[item.key] : undefined}
+            active={tab === item.key}
+            urgent={item.key === 'pending' && counts.pending > 0}
+            select={() => void navigate({ to: '/approvals', search: { status: item.key } })}
+          />
+        ))}
+      </HStack>
+      <HStack gap="2" flexWrap="wrap">
+        <Box pos="relative" w={{ base: 'full', md: '18rem' }}>
+          <styled.span
+            pos="absolute"
+            left="2.5"
+            top="50%"
+            transform="translateY(-50%)"
+            color="text.muted"
+            display="flex"
+            pointerEvents="none"
+          >
+            <Icons.searchNormal size={14} />
+          </styled.span>
+          <Input
+            aria-label="Search proposals"
+            placeholder="Search title or id"
+            value={filters.q}
+            onChange={(event) => setFilters({ ...filters, q: event.target.value })}
+            size="sm"
+            pl="8"
+          />
         </Box>
-      </Tabs>
+        <FilterChip
+          label="Status"
+          value={filters.status}
+          options={STATUS_OPTIONS}
+          onChange={(status) => setFilters({ ...filters, status })}
+        />
+        <FilterChip
+          label="Risk"
+          value={filters.risk}
+          options={RISK_OPTIONS}
+          onChange={(risk) => setFilters({ ...filters, risk })}
+        />
+        <FilterChip
+          label="Created by"
+          value={filters.createdBy}
+          options={creators}
+          onChange={(createdBy) => setFilters({ ...filters, createdBy })}
+        />
+        <FilterChip
+          icon={<Icons.calendar size={13} />}
+          anyLabel={null}
+          value={filters.range}
+          options={DATE_RANGES}
+          onChange={(range) => setFilters({ ...filters, range: range ?? 'all' })}
+        />
+        {filtered && (
+          <Button
+            size="sm"
+            variant="ghost"
+            fontSize="1"
+            onClick={() => setFilters({ q: '', status: null, risk: null, createdBy: null, range: 'all' })}
+          >
+            Clear filters
+          </Button>
+        )}
+      </HStack>
 
       {proposals.isPending ? (
         <ProposalListSkeleton />
       ) : proposals.isError ? (
-        <ErrorState
-          title="Could not load proposals"
-          retry={() => void proposals.refetch()}
-        />
-      ) : visible.length === 0 ? (
+        <ErrorState title="Could not load proposals" retry={() => void proposals.refetch()} />
+      ) : visible.length === 0 && !filtered ? (
         <EmptyState
           illustration={tab === 'pending' ? 'notification' : 'lists'}
           title={EMPTY[tab].title}
           hint={EMPTY[tab].hint}
         />
       ) : (
-        <Flex direction="column" gap="1" p="1.5" rounded="xl" bg="brand.panel.2" data-testid="proposal-list">
-          <ColumnHeads />
-          {visible.map((proposal) => (
-            <ProposalRow key={proposal.id} proposal={proposal} now={now} />
-          ))}
-        </Flex>
+        <div className={t.panel} data-testid="proposal-list">
+          <table className={t.table}>
+            <thead>
+              <tr>
+                <th className={t.th}>Proposal</th>
+                <th className={t.th}>Created by</th>
+                <th className={t.th}>Policy</th>
+                <th className={t.th}>Risk</th>
+                <th className={t.thNumber}>Total</th>
+                <th className={t.th}>Status</th>
+                <th className={t.thNumber}>Proposed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((proposal) => {
+                const risk = riskOf(proposal);
+                return (
+                  <tr
+                    key={proposal.id}
+                    className={cx(t.row, css({ cursor: 'pointer' }))}
+                    data-proposal-row={proposal.id}
+                    onClick={() => void navigate({ to: '/approvals/$proposalId', params: { proposalId: proposal.id } })}
+                  >
+                    <td className={t.td}>
+                      <Link
+                        to="/approvals/$proposalId"
+                        params={{ proposalId: proposal.id }}
+                        className={css({ fontWeight: '500', lineClamp: '1', maxW: '28rem' })}
+                      >
+                        {proposal.title ?? 'Untitled proposal'}
+                      </Link>
+                      <div className={t.muted}>{opsSummary(proposal)}</div>
+                    </td>
+                    <td className={t.td}>
+                      <CreatedBy principal={proposal.createdBy} />
+                    </td>
+                    <td className={t.td}>
+                      <PolicyBadge outcome={proposal.policyOutcome} />
+                    </td>
+                    <td className={t.td}>{risk ? <RiskBadge risk={risk} /> : <span className={t.muted}>–</span>}</td>
+                    <td className={t.tdNumber}>{formatMoney(proposal.totalValue)}</td>
+                    <td className={t.td}>
+                      <StatusBadge status={proposal.status} />
+                    </td>
+                    <td className={cx(t.tdNumber, t.muted)}>{formatAge(proposal.createdAt, now)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {visible.length === 0 ? <p className={t.empty}>No proposals match these filters.</p> : null}
+        </div>
       )}
     </Flex>
   );

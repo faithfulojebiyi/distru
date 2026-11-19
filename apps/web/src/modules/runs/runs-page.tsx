@@ -31,7 +31,7 @@ import { StartRunButton } from './start-run-dialog';
 const DETAILED_RUNS = 30;
 
 const COLUMNS =
-  'minmax(0, 2.2fr) 8.5rem 6rem 5rem 7rem 4.5rem 4.5rem minmax(0, 1.2fr)';
+  'minmax(0, 1.8fr) 8.5rem 6rem 5rem 7rem 4.5rem 4.5rem minmax(0, 1.4fr)';
 
 const TRIGGER_ICONS = {
   manual: 'user',
@@ -113,7 +113,7 @@ const RunRow = ({
         </Muted>
         <Muted hideSmall>{totals ? formatTokens(totals.tokens.total) : '—'}</Muted>
         <Muted hideSmall>{totals ? formatCost(totals.costUsd) : '—'}</Muted>
-        <Flex align="center" gap="2" minW="0">
+        <Flex align="center" gap="2" minW="0" flexWrap="wrap">
           {run.proposal ? (
             <>
               <StatusBadge status={run.proposal.status} />

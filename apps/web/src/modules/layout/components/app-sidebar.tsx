@@ -1,7 +1,6 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import { Box, HStack } from '@ops/ui/jsx';
 
-import { BrandMark } from '@ops/ui/icons/brand-mark';
 import { Icons } from '@ops/ui/icons/base';
 import {
   Sidebar,
@@ -15,9 +14,9 @@ import {
   SidebarMenuItem,
   SidebarTrigger,
 } from '@ops/ui/primitives/sidebar';
-import { Text } from '@ops/ui/primitives/text';
 import { SettingsNav } from '../../settings/settings-nav';
 import { UserMenu } from './user-menu';
+import { WorkspacePicker } from './workspace-picker';
 
 type NavItem = {
   to: string;
@@ -91,11 +90,10 @@ export const AppSidebar = () => {
             css={{ '[data-collapsible=icon] &': { display: 'none' } }}
             gap="2"
             px="1"
+            minW="0"
+            flex="1"
           >
-            <BrandMark size="1.25rem" />
-            <Text fontSize="1" fontWeight="700" letterSpacing="-0.01em">
-              OPS AGENT
-            </Text>
+            <WorkspacePicker />
           </HStack>
           <SidebarTrigger
             css={{ '[data-collapsible=icon] &': { display: 'none' } }}

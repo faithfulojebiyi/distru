@@ -300,12 +300,6 @@ const ProposalTrail = ({ proposal }: { proposal: ProposalDetail }) => {
 
 const Header = ({ proposal }: { proposal: ProposalDetail }) => (
   <Flex direction="column" gap="3">
-    <Link to="/approvals" search={{ status: 'pending' }}>
-      <HStack gap="1" color="text.muted" fontSize="1" _hover={{ color: 'text.app' }} w="fit-content">
-        <Icons.arrowLeft size={12} />
-        Approvals
-      </HStack>
-    </Link>
     <Flex
       direction={{ base: 'column', md: 'row' }}
       justify="space-between"
@@ -316,7 +310,7 @@ const Header = ({ proposal }: { proposal: ProposalDetail }) => (
         <HStack gap="2">
           <StatusBadge status={proposal.status} />
         </HStack>
-        <Heading as="h1" fontSize="5" fontWeight="600" letterSpacing="-0.015em" lineHeight="1.25">
+        <Heading as="h2" fontSize="4" fontWeight="600" letterSpacing="-0.01em" lineHeight="1.3">
           {proposal.title ?? 'Untitled proposal'}
         </Heading>
       </Flex>
@@ -325,7 +319,7 @@ const Header = ({ proposal }: { proposal: ProposalDetail }) => (
           Total value
         </Span>
         <Span
-          fontSize="6"
+          fontSize="5"
           fontWeight="600"
           fontVariantNumeric="tabular-nums"
           letterSpacing="-0.02em"
@@ -404,7 +398,7 @@ export const ProposalDetailView = ({ proposalId }: { proposalId: string }) => {
 
   const data = proposal.data;
   return (
-    <Flex direction="column" gap="5" maxW="80rem" mx="auto" w="full" data-testid="proposal-detail">
+    <Flex direction="column" gap="5" w="full" data-testid="proposal-detail">
       <Header proposal={data} />
       <ExecutionBanner proposal={data} />
       <ExecutionError proposal={data} />
