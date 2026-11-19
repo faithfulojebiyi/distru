@@ -19,11 +19,20 @@ const event = <T extends string, D extends z.ZodRawShape>(type: T, data: D) =>
   z.object({ ...base, type: z.literal(type), data: z.object(data) });
 
 export const AuditEventSchema = z.discriminatedUnion('type', [
-  event('proposal.created', { opCount: z.number().int(), actions: z.array(z.string()), totalValue: z.number().nullable() }),
+  event('proposal.created', {
+    opCount: z.number().int(),
+    actions: z.array(z.string()),
+    totalValue: z.number().nullable(),
+    /** `agent` (written by an agent, validated in code) | `template` (code) | `caller` (MCP / API). */
+    titleSource: z.string().optional(),
+    titleRejectedReason: z.string().optional(),
+  }),
   event('policy.evaluated', { trigger: z.enum(['propose', 'edit']), outcome: PolicyOutcomeSchema, reasons: z.array(PolicyReasonSchema) }),
   event('proposal.decided', { decision: z.enum(['approve', 'reject']), reason: z.string().nullable(), edited: z.boolean() }),
   event('proposal.decision_blocked', { reasons: z.array(PolicyReasonSchema) }),
   event('proposal.execution_started', { resumed: z.boolean() }),
+  // An approver asked to resume a failed proposal (the executor then re-runs only what is left).
+  event('proposal.resume_requested', { reason: z.string().nullable(), failedOpIndex: z.number().int().nullable() }),
   event('op.executed', { ...opRef, recordId: z.string(), idempotencyKey: z.string(), attempts: z.number().int(), resolved: resolvedRefs }),
   event('op.deduplicated', { ...opRef, recordId: z.string(), idempotencyKey: z.string(), attempts: z.number().int(), resolved: resolvedRefs }),
   event('op.retry', { ...opRef, attempt: z.number().int(), delayMs: z.number(), error: SerializedErrorSchema }),

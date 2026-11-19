@@ -25,6 +25,12 @@ Postgres, Inngest or HTTP imports: every side effect goes through a port.
 | Audit | Typed `AuditEvent` union (`proposal.created`, `policy.evaluated`, `proposal.decided`, `op.executed`, `op.deduplicated`, `op.verified`, `op.verify_failed`, `op.retry`, `op.failed`, `proposal.failed`, `budget.exceeded`, …). |
 | Undo | Optional `compensate` / `planCompensation` / `canCompensate` / `irreversible` on actions; `harness.undo({ ctx, principal, proposalId, opIndexes?, reason })` → a NEW compensating proposal (`<action>.undo` ops, reverse order, `meta.undoOf`, never auto-approved); `harness.undoInfo(p)` → per-op `canUndo` + reason; `undoWindowMs`. See "Undo / rollback" below. |
 
+**Resume and headlines.** `harness.requestResume({ principal, proposalId, reason })` (approve scope; only
+`failed` proposals, `isResumable(p)`) audits `proposal.resume_requested`; the app then runs `execute` again,
+which skips executed ops. Proposals carry an optional `summary` next to `title` (title ≤ 120 chars, single
+line, `InputValidationError` otherwise; never truncated). An edited approval keeps the agent's original ops
+in `meta.originalOps` (learners compare proposed vs approved).
+
 ## Usage
 
 ```ts

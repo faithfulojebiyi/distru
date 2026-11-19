@@ -3,7 +3,7 @@ import type { HarnessDeps } from './context';
 import { emit, loadProposal, nowIso } from './context';
 import { DecisionConflictError, ForbiddenError, InputValidationError, PolicyDeniedError } from './errors';
 import type { PolicyEvaluation, PolicyOutcome } from './policy';
-import { assertTransition, totalValue, type Proposal, type ProposalOp, type ProposalStatus } from './proposal';
+import { assertTransition, SUMMARY_MAX_CHARS, TITLE_MAX_CHARS, totalValue, type Proposal, type ProposalOp, type ProposalStatus } from './proposal';
 import { assertBackwardRefs } from './refs';
 import { parseWith } from './registry';
 import { idempotencyKeyFor } from './runtime';
@@ -18,9 +18,22 @@ export interface ProposeArgs<TCtx> {
   ctx: TCtx;
   principal: Principal;
   ops: readonly OpRequest[];
+  /** Short headline: single line, at most TITLE_MAX_CHARS (InputValidationError otherwise; never truncated). */
   title?: string;
+  /** One or two sentences of detail (at most SUMMARY_MAX_CHARS). */
+  summary?: string;
   rationale?: string;
   meta?: Record<string, unknown>;
+}
+
+/** Title / summary limits (a clear validation error, never a silent truncation). */
+export function assertHeadline(title: string | undefined, summary: string | undefined): void {
+  if (title !== undefined) {
+    if (!title.trim()) throw new InputValidationError('title must not be empty');
+    if (/[\r\n]/.test(title)) throw new InputValidationError('title must be a single line');
+    if (title.length > TITLE_MAX_CHARS) throw new InputValidationError(`title is ${title.length} characters; at most ${TITLE_MAX_CHARS} (put the detail in summary)`);
+  }
+  if (summary !== undefined && summary.length > SUMMARY_MAX_CHARS) throw new InputValidationError(`summary is ${summary.length} characters; at most ${SUMMARY_MAX_CHARS}`);
 }
 
 export interface OpEdit {
@@ -103,6 +116,7 @@ export async function propose<TCtx>(deps: HarnessDeps<TCtx>, args: ProposeArgs<T
   const { ctx, principal } = args;
   assertScope(principal, 'propose');
   if (args.ops.length === 0) throw new InputValidationError('A proposal needs at least one op');
+  assertHeadline(args.title, args.summary);
 
   const id = options.id ?? deps.ids();
   const ops: ProposalOp[] = [];
@@ -120,6 +134,7 @@ export async function propose<TCtx>(deps: HarnessDeps<TCtx>, args: ProposeArgs<T
     version: 1,
     status: assertTransition('draft', STATUS_FOR[policy.outcome]),
     title: args.title ?? null,
+    summary: args.summary ?? null,
     rationale: args.rationale ?? null,
     meta: args.meta ?? {},
     createdBy: principal,
@@ -135,7 +150,14 @@ export async function propose<TCtx>(deps: HarnessDeps<TCtx>, args: ProposeArgs<T
     type: 'proposal.created',
     actor: principal,
     proposalId: id,
-    data: { opCount: ops.length, actions: ops.map((op) => op.action), totalValue: totalValue(ops) },
+    data: {
+      opCount: ops.length,
+      actions: ops.map((op) => op.action),
+      totalValue: totalValue(ops),
+      // Where the headline came from (an app convention in meta: agent-written and validated, or a code template).
+      ...(typeof proposal.meta.titleSource === 'string' ? { titleSource: proposal.meta.titleSource } : {}),
+      ...(typeof proposal.meta.titleRejectedReason === 'string' ? { titleRejectedReason: proposal.meta.titleRejectedReason } : {}),
+    },
   });
   await emit(deps, { type: 'policy.evaluated', actor: principal, proposalId: id, data: { trigger: 'propose', ...policy } });
   return proposal;
@@ -177,8 +199,12 @@ export async function decide<TCtx>(deps: HarnessDeps<TCtx>, args: DecideArgs<TCt
   }
 
   const now = nowIso(deps);
+  // Edited approvals keep the ops as originally proposed (`meta.originalOps`), so learners can compare
+  // what the agent proposed with what the approver approved (proposal.ops = the edited ops).
+  const meta = edits.length && !Array.isArray(current.meta.originalOps) ? { ...current.meta, originalOps: current.ops } : current.meta;
   const next: Proposal = {
     ...current,
+    meta,
     ops,
     policy,
     status: assertTransition(current.status, decision === 'approve' ? 'approved' : 'rejected'),

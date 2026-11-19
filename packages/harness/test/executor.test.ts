@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  ForbiddenError,
+  isResumable,
+  NotResumableError,
   AuditEventSchema,
   Budget,
   InMemoryProposalStore,
@@ -8,7 +11,7 @@ import {
   stepIds,
   type Proposal,
 } from '../src';
-import { agent, approvedProposal, approver, HttpError, poInput, setup } from './fixtures';
+import { agent, approvedProposal, approver, HttpError, operator, poInput, setup } from './fixtures';
 
 /** A store that "crashes the process" the first time an op result is persisted. */
 class CrashOnOpSaveStore extends InMemoryProposalStore {
@@ -131,6 +134,21 @@ describe('executeProposal', () => {
     expect(resumed.ops.map((o) => o.status)).toEqual(['executed', 'executed', 'executed']);
     expect(env.erp.writes - writesBefore).toBe(2);
     expect(env.audit.ofType('proposal.execution_started').map((e) => e.data.resumed)).toEqual([false, true]);
+  });
+
+  test('requestResume: approver only, failed proposals only, audited with the failed op', async () => {
+    const env = setup();
+    const p = await approvedProposal(env);
+    expect(isResumable(p)).toBe(false);
+    await expect(env.harness.requestResume({ principal: approver, proposalId: p.id })).rejects.toBeInstanceOf(NotResumableError);
+    env.erp.upsert = () => {
+      throw new HttpError(400);
+    };
+    const failed = await env.harness.execute({ ctx: env.ctx, proposalId: p.id });
+    expect(isResumable(failed)).toBe(true);
+    await expect(env.harness.requestResume({ principal: operator, proposalId: p.id })).rejects.toBeInstanceOf(ForbiddenError);
+    await env.harness.requestResume({ principal: approver, proposalId: p.id, reason: 'vendor fixed' });
+    expect(env.audit.ofType('proposal.resume_requested').map((e) => e.data)).toEqual([{ reason: 'vendor fixed', failedOpIndex: 0 }]);
   });
 
   test('verify mismatch → op and proposal failed with mismatches', async () => {

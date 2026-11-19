@@ -211,7 +211,8 @@ export async function undo<TCtx>(deps: HarnessDeps<TCtx>, args: UndoArgs<TCtx>, 
       ctx,
       principal,
       ops,
-      title: `Undo: ${original.title ?? `proposal ${original.id}`}`,
+      title: undoTitle(original.title ?? `proposal ${original.id.slice(0, 8)}`),
+      summary: `Undo of "${original.title ?? original.id}"${original.summary ? `: ${original.summary}` : ''}`.slice(0, 1000),
       rationale: reason,
       meta: { undoOf: { proposalId, opIndexes }, undoReason: reason, notUndoable: [...notUndoable, ...skipped] },
     },
@@ -224,4 +225,11 @@ export async function undo<TCtx>(deps: HarnessDeps<TCtx>, args: UndoArgs<TCtx>, 
     data: { undoProposalId: created.id, opIndexes, notUndoable: [...notUndoable, ...skipped], reason },
   });
   return created;
+}
+
+/** `Undo · <original title>`, kept within 60 characters by shortening the original title (the full one is in summary). */
+export function undoTitle(original: string): string {
+  const prefix = 'Undo · ';
+  const room = 60 - prefix.length;
+  return prefix + (original.length <= room ? original : `${original.slice(0, room - 1).trimEnd()}…`);
 }

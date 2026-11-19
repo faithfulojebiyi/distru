@@ -104,7 +104,10 @@ export const ProposalSchema = z.object({
   /** Optimistic-concurrency version; incremented on every write. */
   version: z.number().int().nonnegative(),
   status: ProposalStatusSchema,
+  /** Short human headline (≤ 120 chars, single line; apps aim for ≤ 60). */
   title: z.string().nullable(),
+  /** One or two sentences with the detail the title leaves out (totals, counts, vendors). */
+  summary: z.string().nullable().optional(),
   rationale: z.string().nullable(),
   meta: z.record(z.string(), z.unknown()),
   createdBy: PrincipalSchema,
@@ -139,3 +142,7 @@ export function serializeError(err: unknown): SerializedError {
   }
   return { name: 'Error', message: String(err) };
 }
+
+/** Hard limits on proposal headlines (the harness rejects longer ones; it never truncates). */
+export const TITLE_MAX_CHARS = 120;
+export const SUMMARY_MAX_CHARS = 1000;

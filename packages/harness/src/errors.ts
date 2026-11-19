@@ -14,7 +14,8 @@ export type HarnessErrorCode =
   | 'cancelled'
   | 'infrastructure'
   | 'unresolved_reference'
-  | 'undo_unavailable';
+  | 'undo_unavailable'
+  | 'not_resumable';
 
 export abstract class HarnessError extends Error {
   abstract readonly code: HarnessErrorCode;
@@ -86,4 +87,16 @@ export class PolicyDeniedError extends HarnessError {
 /** A port (store, audit sink) failed mid-execution. Never treated as an op failure; the run stays resumable. */
 export class InfrastructureError extends HarnessError {
   readonly code = 'infrastructure';
+}
+
+/** Resume was requested for a proposal that is not `failed` (nothing to resume). */
+export class NotResumableError extends HarnessError {
+  readonly code = 'not_resumable';
+  readonly proposalId: string;
+  readonly currentStatus: string;
+  constructor(proposalId: string, currentStatus: string) {
+    super(`Proposal ${proposalId} cannot be resumed (status: ${currentStatus}; only failed proposals resume)`);
+    this.proposalId = proposalId;
+    this.currentStatus = currentStatus;
+  }
 }

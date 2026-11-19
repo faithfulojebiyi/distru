@@ -160,6 +160,33 @@ describe('decide', () => {
     expect(decided.ops[0]?.diff).toContainEqual({ path: ['items'], kind: 'added', before: undefined, after: [{ productId: 'sku-1', quantity: 40, unitPrice: 5 }] });
     expect(decided.ops[0]?.idempotencyKey).toBe(p.ops[0]?.idempotencyKey ?? '');
     expect(env.audit.ofType('policy.evaluated').map((e) => e.data.trigger)).toEqual(['propose', 'edit']);
+    // The ops as originally proposed are kept for learners (approver edits vs agent proposal).
+    expect(decided.meta.originalOps).toEqual(p.ops);
+    expect((await env.harness.get(p.id)).meta.originalOps).toEqual(p.ops);
+  });
+
+  test('title ≤ 120 chars, single line (validation error, never truncated); summary stored; audited title source', async () => {
+    const env = setup();
+    await expect(env.harness.propose({ ctx: env.ctx, principal: agent, ops: [op(poInput())], title: 'x'.repeat(121) })).rejects.toBeInstanceOf(InputValidationError);
+    await expect(env.harness.propose({ ctx: env.ctx, principal: agent, ops: [op(poInput())], title: 'two\nlines' })).rejects.toBeInstanceOf(InputValidationError);
+    const p = await env.harness.propose({
+      ctx: env.ctx,
+      principal: agent,
+      ops: [op(poInput())],
+      title: 'Restock 1 vendor · Oakland',
+      summary: '1 PO ($100.00) for Acme.',
+      meta: { titleSource: 'template', titleRejectedReason: 'mentions $999 which is not in the proposal' },
+    });
+    expect(p).toMatchObject({ title: 'Restock 1 vendor · Oakland', summary: '1 PO ($100.00) for Acme.' });
+    expect((await env.harness.get(p.id)).summary).toBe('1 PO ($100.00) for Acme.');
+    expect(env.audit.ofType('proposal.created').at(-1)?.data).toMatchObject({ titleSource: 'template', titleRejectedReason: 'mentions $999 which is not in the proposal' });
+  });
+
+  test('an unedited approval does not copy the ops into meta', async () => {
+    const env = setup();
+    const p = await env.harness.propose({ ctx: env.ctx, principal: agent, ops: [op(poInput())] });
+    const decided = await env.harness.decide({ ctx: env.ctx, principal: approver, proposalId: p.id, decision: 'approve' });
+    expect(decided.meta.originalOps).toBeUndefined();
   });
 
   test('a deny after edits blocks approval and leaves the proposal pending', async () => {

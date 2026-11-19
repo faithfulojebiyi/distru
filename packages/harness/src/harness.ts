@@ -8,6 +8,7 @@ import { decide, propose, type DecideArgs, type ProposeArgs } from './proposals'
 import type { Registry } from './registry';
 import { neverRetry, RetryPolicySchema, type RetryPolicy } from './retry';
 import { inlineStepRunner, randomId, systemClock } from './runtime';
+import { requestResume, type RequestResumeArgs } from './resume';
 import { undo, undoInfo, type UndoArgs, type UndoInfo } from './undo';
 
 export interface HarnessConfig<TCtx> {
@@ -94,6 +95,14 @@ export class Harness<TCtx> {
   /** Which ops of a proposal can be undone now, and why not. */
   undoInfo(proposal: Proposal | string): Promise<UndoInfo> {
     return undoInfo(this.#deps, proposal, this.#undoWindowMs);
+  }
+
+  /**
+   * Record an approver's request to resume a failed proposal (needs `approve`; NotResumableError unless
+   * `failed`). Does not execute: dispatch `execute` (durably) afterwards; it re-runs only what is left.
+   */
+  requestResume(args: RequestResumeArgs): Promise<Proposal> {
+    return requestResume(this.#deps, args);
   }
 
   get(proposalId: string): Promise<Proposal> {
