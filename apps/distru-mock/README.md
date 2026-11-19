@@ -13,6 +13,24 @@ bun test               # REST, schema, client integration, MCP and menu tests
 bun run gen:mcp-schemas  # regenerate src/mcp/schemas.gen.ts from docs/research/mcptools/*.md
 ```
 
+## Seeded world
+
+`src/seed.ts` builds one deterministic distributor (3 own locations, 6 vendors, 43 products, 120 days of
+sales). Scenarios (`MOCK_SCENARIO`) only flip data; ids stay the same.
+
+- **default**: the 8 canonical SKUs (`LOW_STOCK_SKUS`) are below their reorder point company-wide and at
+  every location (Oakland shows 7–8 depending on the lead time), FLW-WC-35's newest batch failed its lab
+  test (its packages are on hold everywhere), VAP-PE-1G's description carries a prompt injection.
+- **clean**: like default without the two hazards. **failed-lab-test** / **prompt-injection**: one hazard each.
+- **no-reorder-needed**: nothing is below its reorder point anywhere, for any lead time from 7 to 21 days.
+
+Stock is calibrated per location against each location's own sales (about half ship from Oakland, a
+quarter each from Los Angeles and Sacramento), so a `location_ids`-filtered velocity report is as
+realistic as the company-wide one.
+
+Note on the velocity report: as in Distru, without `lead_time_days` no row has a reorder point, and a
+`below_reorder_point` filter (`true` or `false`) then returns no rows. Omit the filter to get every row.
+
 ## REST
 
 - **Endpoints:** inventory-velocity report, inventory, products, companies, locations, orders, purchases (upsert, plus `POST /purchases/{id}/pdf`), metrc packages, test results, batches, tasks (list, get, upsert, delete), users, custom fields (list, get, create; `custom_data` on purchases is validated, returned and filterable for dropdown/checkbox fields), deleted records, activity and record history. Activity and record history are fed by both REST writes (`PUBLIC_API`) and MCP writes (`MCP`).

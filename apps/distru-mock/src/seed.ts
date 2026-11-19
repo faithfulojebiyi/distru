@@ -159,6 +159,100 @@ function metrcLabel(n: number, lic: string): string {
   return `1A4${facility}${String(n).padStart(15, '0')}`;
 }
 
+/**
+ * Per-location stock for the branch warehouses (LA, Sacramento). The main calibration above sizes stock
+ * company-wide and keeps it at Oakland, but a quarter of sales each ship from LA and Sacramento, so a
+ * location-filtered velocity report there used to show 30+ SKUs as LATE in every scenario. This sizes each
+ * branch's available stock against that branch's own sales and reorder point: healthy SKUs get 35–85 days
+ * of cover above it, the scenario's low SKUs sit at 20–40 % of its 7-day reorder point (scaled down further
+ * when needed so the company-wide figure stays below reorder at 7–21 days of lead time).
+ *
+ * Runs after every record with a seeded id exists and uses its own PRNG, so the ids (and the Oakland
+ * figures) of the main seed are unchanged.
+ */
+function calibrateBranchStock(
+  store: Store,
+  o: {
+    locations: string[];
+    products: ProductRec[];
+    lowSkus: ReadonlySet<string>;
+    batchesByProduct: Map<string, BatchRec[]>;
+    onHoldBatchId: string | null;
+    nextMetrcLabel: (locationId: string) => string;
+    daysAgo: (d: number, hour?: number) => string;
+    today: number;
+  },
+): void {
+  const r3: Rng = rng(20251105);
+  const LOW_LEAD = 7; // shortest lead time the low SKUs must stay below their reorder point at
+  const companySales = salesByProduct(store);
+  const salesAt = new Map(o.locations.map((l) => [l, salesByProduct(store, { locationIds: [l] })]));
+  const available = (p: ProductRec, locationIds?: string[]) => store.quantityActive(p.id, locationIds) - store.quantityReserved(p.id, locationIds);
+  for (const p of o.products) {
+    const isLow = o.lowSkus.has(p.sku);
+    // low SKUs: what the branches may hold in total so the company-wide figure stays below its reorder point
+    let lowBudget = Infinity;
+    if (isLow) {
+      const cs = companySales.get(p.id);
+      const companyRop = cs ? reorderPoint(cs, LOW_LEAD, CALIBRATION.service_level, p.threshold_min)?.value ?? 0 : 0;
+      // the company-wide figure nets every location's reservations, so budget against it directly
+      const branchesNow = o.locations.reduce((n, l) => n + available(p, [l]), 0);
+      lowBudget = Math.floor(companyRop * 0.9) - (available(p) - branchesNow);
+    }
+    const targets = o.locations.map((locationId) => {
+      const s = salesAt.get(locationId)!.get(p.id);
+      const rate = s ? demandRate(s) : 0;
+      const healthyDays = r3.int(35, 85);
+      const lowShare = 0.2 + r3.next() * 0.2;
+      if (!p.is_active || !s || rate <= 0) return 0;
+      if (isLow) return Math.floor((reorderPoint(s, LOW_LEAD, CALIBRATION.service_level, p.threshold_min)?.value ?? 0) * lowShare);
+      const rop = reorderPoint(s, CALIBRATION.lead_time_days, CALIBRATION.service_level, p.threshold_min)?.value ?? 0;
+      return Math.ceil(rop + rate * healthyDays) + 5;
+    });
+    const total = targets.reduce((a, b) => a + b, 0);
+    // over budget: shrink the branch figures, down to an empty shelf with its open orders backordered
+    const reserved = o.locations.map((l) => store.quantityReserved(p.id, [l]));
+    let wanted = targets;
+    if (total > lowBudget) {
+      const floor = reserved.map((q) => -q);
+      const room = total - floor.reduce((a, b) => a + b, 0);
+      const keep = room > 0 ? Math.max(0, lowBudget - floor.reduce((a, b) => a + b, 0)) / room : 0;
+      wanted = targets.map((t, i) => Math.floor(floor[i]! + (t - floor[i]!) * Math.min(1, keep)));
+    }
+    o.locations.forEach((locationId, i) => {
+      const lotId = r3.uuid(); // drawn even when unused, so branch package ids match across scenarios
+      const target = Math.max(0, wanted[i]! + reserved[i]!);
+      const here = [...store.lots.values()].filter((l) => l.product_id === p.id && l.location_id === locationId);
+      let have = here.reduce((n, l) => n + l.quantity, 0);
+      // too much already here (a split from the main calibration): trim the existing packages
+      for (const l of here) {
+        if (have <= target) break;
+        const cut = Math.min(l.quantity, have - target);
+        l.quantity -= cut;
+        have -= cut;
+      }
+      const topUp = target - have;
+      if (topUp <= 0) return;
+      const batch = o.batchesByProduct.get(p.id)?.[2] ?? null;
+      const receivedAgo = batch ? Math.max(1, Math.round((o.today - new Date(batch.inserted_datetime).getTime()) / DAY_MS) - 1) : 18;
+      const lot: LotRec = {
+        id: lotId,
+        product_id: p.id,
+        batch_id: batch?.id ?? null,
+        location_id: locationId,
+        quantity_initial: topUp,
+        quantity: topUp,
+        compliance_label: batch ? o.nextMetrcLabel(locationId) : null,
+        metrc_id: batch ? ++store.counters.metrcPackage : null,
+        on_hold: batch !== null && batch.id === o.onHoldBatchId,
+        inserted_datetime: o.daysAgo(receivedAgo, 14),
+        updated_datetime: o.daysAgo(Math.max(0, receivedAgo - 3), 14),
+      };
+      store.lots.set(lot.id, lot);
+    });
+  }
+}
+
 export function seedStore(scenario: ScenarioName = 'default', now: Date = new Date()): Store {
   const flags = SCENARIOS[scenario];
   const r: Rng = rng(20251104);
@@ -651,6 +745,17 @@ export function seedStore(scenario: ScenarioName = 'default', now: Date = new Da
     updated_datetime: daysAgo(2, 10),
   };
   store.purchases.set(draft.id, draft);
+
+  calibrateBranchStock(store, {
+    locations: [LA, SAC],
+    products,
+    lowSkus: flags.lowStock ? lowSet : new Set(),
+    batchesByProduct,
+    onHoldBatchId: failedTest ? failedBatch.id : null,
+    nextMetrcLabel: (locationId) => metrcLabel(++metrcTag, OWN_LOCATIONS[store.ownLocationIds.indexOf(locationId)]!.lic),
+    daysAgo,
+    today,
+  });
 
   // ── scenario: prompt injection ─────────────────────────────────────────────────────────────
   const injected = bySku.get(INJECTION_SKU)!;
