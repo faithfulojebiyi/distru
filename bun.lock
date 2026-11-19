@@ -17,6 +17,8 @@
         "@mastra/memory": "~1.41.2",
         "@mastra/observability": "~1.24.2",
         "@mastra/pg": "~1.37.0",
+        "@ops/connector-distru": "workspace:*",
+        "@ops/distru-client": "workspace:*",
         "@ops/harness": "workspace:*",
         "better-auth": "1.7.7",
         "drizzle-orm": "^0.45.4",
@@ -26,6 +28,7 @@
         "zod": "^4.6.7",
       },
       "devDependencies": {
+        "@ops/distru-mock": "workspace:*",
         "@types/bun": "latest",
         "drizzle-kit": "^0.31.11",
         "mastra": "~1.40.1",
@@ -36,10 +39,25 @@
       "name": "@ops/distru-mock",
       "version": "0.0.0",
       "dependencies": {
+        "@modelcontextprotocol/server": "2.4.0",
+        "hono": "^4.13.0",
+        "zod": "^4.6.7",
+      },
+      "devDependencies": {
+        "@modelcontextprotocol/client": "2.4.0",
+        "@ops/distru-client": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "^6.0.3",
+      },
+    },
+    "apps/headset-mock": {
+      "name": "@ops/headset-mock",
+      "version": "0.0.0",
+      "dependencies": {
         "hono": "^4.13.0",
       },
       "devDependencies": {
-        "@ops/distru-client": "workspace:*",
+        "@ops/distru-mock": "workspace:*",
         "@types/bun": "latest",
         "typescript": "^6.0.3",
       },
@@ -63,6 +81,7 @@
         "sonner": "^2.0.8",
       },
       "devDependencies": {
+        "@ops/harness": "workspace:*",
         "@pandacss/dev": "^2.2.0",
         "@pandacss/preset-base": "^2.2.0",
         "@tanstack/router-plugin": "^1.168.35",
@@ -74,6 +93,7 @@
         "orval": "^8.9.1",
         "typescript": "^6.0.3",
         "vite": "^8.2.2",
+        "zod": "^4.6.7",
       },
     },
     "packages/connector-distru": {
@@ -86,6 +106,47 @@
       },
       "devDependencies": {
         "@ops/distru-mock": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "^6.0.3",
+      },
+    },
+    "packages/connector-email": {
+      "name": "@ops/connector-email",
+      "version": "0.0.0",
+      "dependencies": {
+        "@ops/harness": "workspace:*",
+        "zod": "^4.6.7",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^6.0.3",
+      },
+    },
+    "packages/connector-headset": {
+      "name": "@ops/connector-headset",
+      "version": "0.0.0",
+      "dependencies": {
+        "@ops/harness": "workspace:*",
+        "zod": "^4.6.7",
+      },
+      "devDependencies": {
+        "@ops/connector-distru": "workspace:*",
+        "@ops/distru-mock": "workspace:*",
+        "@ops/headset-mock": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "^6.0.3",
+      },
+    },
+    "packages/connector-mcp": {
+      "name": "@ops/connector-mcp",
+      "version": "0.0.0",
+      "dependencies": {
+        "@modelcontextprotocol/client": "2.4.0",
+        "@ops/harness": "workspace:*",
+        "zod": "^4.6.7",
+      },
+      "devDependencies": {
+        "@modelcontextprotocol/server": "2.4.0",
         "@types/bun": "latest",
         "typescript": "^6.0.3",
       },
@@ -584,11 +645,19 @@
 
     "@ops/connector-distru": ["@ops/connector-distru@workspace:packages/connector-distru"],
 
+    "@ops/connector-email": ["@ops/connector-email@workspace:packages/connector-email"],
+
+    "@ops/connector-headset": ["@ops/connector-headset@workspace:packages/connector-headset"],
+
+    "@ops/connector-mcp": ["@ops/connector-mcp@workspace:packages/connector-mcp"],
+
     "@ops/distru-client": ["@ops/distru-client@workspace:packages/distru-client"],
 
     "@ops/distru-mock": ["@ops/distru-mock@workspace:apps/distru-mock"],
 
     "@ops/harness": ["@ops/harness@workspace:packages/harness"],
+
+    "@ops/headset-mock": ["@ops/headset-mock@workspace:apps/headset-mock"],
 
     "@ops/ui": ["@ops/ui@workspace:packages/ui"],
 
