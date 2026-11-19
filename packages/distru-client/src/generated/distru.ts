@@ -582,6 +582,39 @@ export const upsertPurchase = async (upsertPurchaseBody?: UpsertPurchaseBody, op
 
 
 
+export const getDeletePurchaseUrl = (id: string,) => {
+
+
+
+
+  return `/public/v1/purchases/${id}`
+}
+
+/**
+ * Deletes a purchase. This is a hard delete: the purchase is permanently removed together with its line items, charges, and payments — it disappears from `GET /public/v1/purchases`, `GET /public/v1/purchases/{id}` returns 404 for it, and it cannot be recovered through the API. Responds 204 with no body on success, or 404 if no purchase with that `id` exists in your company (including one that belongs to another company or was already deleted).
+ *
+ * A purchase that has been matched to a compliance transfer cannot be deleted: the delete is refused with a 400 for a purchase carrying a `metrc_transfer_id` or a `biotrack_id`. Transfer matching is permanent, so such a purchase can never be deleted through the API.
+ *
+ * Deleting a received purchase (PARTIALLY_RECEIVED or COMPLETED) pulls its received quantities back out of [inventory](#model-inventory), and the recorded unit costs for those lines are removed. That reversal only succeeds while the received inventory is still untouched: if any line's received quantity has already been used elsewhere in Distru — sold, transferred, adjusted, or consumed in an assembly — the delete is refused with a 400 and nothing is changed. Purchases in DRAFT, PENDING, PROCESSING, or DELIVERING never affected inventory, so they delete without any inventory movement.
+ *
+ * Other effects, all in one atomic call: tasks tied to the purchase are deleted, and if your company is integrated with QuickBooks Online the linked bill and its payments are scheduled for deletion there too (that sync is eventual — observe it in QuickBooks Online, not in the 204). Files attached to the purchase are detached but kept. Nothing is synced to Metrc or BioTrack.
+ *
+ * Required permission: `purchases_permissions_delete` (plus access to the purchase under team restrictions).
+ * @summary Delete a purchase
+ */
+export const deletePurchase = async (id: string, options?: Parameters<typeof distruFetch>[1]): Promise<void> => {
+
+  return distruFetch<void>(getDeletePurchaseUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
 export const getGetPurchaseUrl = (id: string,) => {
 
 

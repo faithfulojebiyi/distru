@@ -608,6 +608,14 @@ export function createMockServer(opts: MockOptions = {}) {
     return c.json({ data: ser.purchase(res.record) }, 200);
   });
 
+  // Hard delete (Distru has no cancelled status for purchases): lines, charges, payments and linked
+  // tasks go with it; refused for Metrc-matched purchases or when received stock was already used.
+  app.delete('/public/v1/purchases/:id', (c) => {
+    const res = ops.deletePurchase(c.req.param('id'), 'PUBLIC_API');
+    if (!res.ok) return err(c, res.status, res.errors);
+    return c.body(null, 204);
+  });
+
   // ── compliance: metrc packages, test results, batches ────────────────────────────────────────
   const METRC_STATUSES = ['ACTIVE', 'DISCONTINUED', 'FINISHED', 'ONHOLD', 'TRANSFERRED'] as const;
   app.get('/public/v1/metrc/packages', (c) => {

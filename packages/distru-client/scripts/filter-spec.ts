@@ -26,7 +26,7 @@ export const KEEP: Record<string, Record<string, string>> = {
   '/public/v1/orders': { get: 'listOrders', post: 'upsertOrder' },
   '/public/v1/orders/{id}': { get: 'getOrder' },
   '/public/v1/purchases': { get: 'listPurchases', post: 'upsertPurchase' },
-  '/public/v1/purchases/{id}': { get: 'getPurchase' },
+  '/public/v1/purchases/{id}': { get: 'getPurchase', delete: 'deletePurchase' },
   '/public/v1/metrc/packages': { get: 'listMetrcPackages' },
   '/public/v1/test-results': { get: 'listTestResults' },
   '/public/v1/test-results/{id}': { get: 'getTestResult' },
