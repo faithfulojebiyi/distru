@@ -17,7 +17,10 @@ export const EvalReportSchema = z
       passed: z.number().int(),
       failed: z.number().int(),
       pending: z.number().int(),
+      /** Missing or stale recordings that fail the suite. */
       missingRecording: z.number().int(),
+      /** `awaiting_recording` scenarios never recorded yet (reported, never a failure). */
+      awaitingRecording: z.number().int().default(0),
       costUsd: z.number(),
       realCostUsd: z.number(),
       tokens: z.number().int(),
@@ -64,7 +67,8 @@ export function buildReport(args: { batchId: string; startedAt: Date; mode: Eval
       passed: s.filter((r) => r.status === 'pass').length,
       failed: s.filter((r) => r.status === 'fail' || r.status === 'error').length,
       pending: s.filter((r) => r.status === 'pending' || r.status === 'skipped').length,
-      missingRecording: s.filter((r) => r.status === 'missing_recording').length,
+      missingRecording: s.filter((r) => r.status === 'missing_recording' && r.blocking !== false).length,
+      awaitingRecording: s.filter((r) => r.status === 'missing_recording' && r.blocking === false).length,
       costUsd: round(ran.reduce((n, r) => n + r.usage.costUsd, 0)),
       realCostUsd: round(args.realCostUsd),
       tokens: ran.reduce((n, r) => n + r.usage.inputTokens + r.usage.outputTokens, 0),
@@ -76,7 +80,11 @@ export function buildReport(args: { batchId: string; startedAt: Date; mode: Eval
 
 const round = (n: number) => Math.round(n * 1e6) / 1e6;
 
-/** The suite fails (non-zero exit) on any failed / errored scenario or a missing recording. */
+/**
+ * The suite fails (non-zero exit) on any failed / errored scenario or a missing / stale recording of a
+ * ready (or already recorded) scenario. Pending scenarios and never-recorded `awaiting_recording` ones
+ * do not fail it.
+ */
 export function reportFailed(report: EvalReport, options: { allowMissing?: boolean } = {}): boolean {
   return report.totals.failed > 0 || (!options.allowMissing && report.totals.missingRecording > 0);
 }
@@ -118,7 +126,7 @@ export function formatReport(report: EvalReport, options: { verbose?: boolean } 
   const t = report.totals;
   out.push(
     bold(
-      `${t.passed} passed, ${t.failed} failed, ${t.pending} pending, ${t.missingRecording} missing recording` +
+      `${t.passed} passed, ${t.failed} failed, ${t.pending} pending, ${t.missingRecording} missing recording, ${t.awaitingRecording} awaiting first recording` +
         ` · ${t.tokens.toLocaleString('en-US')} tokens · $${t.costUsd.toFixed(4)} (as recorded)` +
         (report.mode === 'offline' ? ' · $0 spent' : ` · $${t.realCostUsd.toFixed(4)} spent now`),
     ),

@@ -19,12 +19,12 @@ const base = {
 };
 
 describe('scenario schema', () => {
-  test('every shipped scenario parses, ids are unique, ready ones have a recording', () => {
+  test('every shipped scenario parses, ids are unique, ready ones with model calls have a recording', () => {
     const ids = SCENARIOS.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const s of SCENARIOS) {
       expect(ScenarioSchema.safeParse(s).success).toBe(true);
-      if (s.status === 'ready' && s.trigger.kind !== 'vendor_reply') expect(existsSync(recordingPath(RECORDINGS_DIR, s.recording ?? s.id))).toBe(true);
+      if (s.status === 'ready' && s.llm) expect(existsSync(recordingPath(RECORDINGS_DIR, s.recording ?? s.id))).toBe(true);
     }
   });
 
@@ -33,7 +33,8 @@ describe('scenario schema', () => {
     expect(s.status).toBe('ready');
     expect(s.emulatorSetup).toEqual({ policyRules: [], distruMockConfig: [] });
     expect(s.scope).toEqual({ locations: [] });
-    expect(s.trigger).toEqual({ kind: 'restock', approve: false, reexecute: false });
+    expect(s.trigger).toEqual({ kind: 'restock', approve: false, reexecute: false, slackClicks: [] });
+    expect(s.llm).toBe(true);
   });
 
   test('rejects bad ids, unknown mock scenarios and unknown assertion kinds', () => {
@@ -41,6 +42,17 @@ describe('scenario schema', () => {
     expect(ScenarioSchema.safeParse({ ...base, mockScenario: 'nope' }).success).toBe(false);
     expect(ScenarioSchema.safeParse({ ...base, expectations: [{ kind: 'vibes_ok' }] }).success).toBe(false);
     expect(ScenarioSchema.safeParse({ ...base, expectations: [] }).success).toBe(false);
+  });
+
+  test('undo / slack assertions need their trigger; undo needs approve', () => {
+    expect(ScenarioSchema.safeParse({ ...base, expectations: [{ kind: 'undo_applied' }] }).success).toBe(false);
+    expect(ScenarioSchema.safeParse({ ...base, trigger: { kind: 'restock', undo: { reason: 'r' } }, expectations: [{ kind: 'undo_applied' }] }).success).toBe(false);
+    expect(ScenarioSchema.safeParse({ ...base, trigger: { kind: 'restock', approve: true, undo: { reason: 'r' } }, expectations: [{ kind: 'undo_applied' }] }).success).toBe(true);
+    expect(ScenarioSchema.safeParse({ ...base, expectations: [{ kind: 'slack_click', as: 'operator', outcome: 'refused' }] }).success).toBe(false);
+  });
+
+  test('awaiting_recording parses without a reason', () => {
+    expect(ScenarioSchema.parse({ ...base, status: 'awaiting_recording' }).status).toBe('awaiting_recording');
   });
 
   test('pending needs a reason', () => {
@@ -75,6 +87,7 @@ describe('report + eval_run mapping', () => {
     realCalls: 0,
     latencyMs: 12,
     observation: null,
+    blocking: true,
   });
 
   test('pending and missing recordings are not stored; scores carry pass rate, cost, tokens and judge', () => {
@@ -94,5 +107,16 @@ describe('report + eval_run mapping', () => {
     const missing = buildReport({ batchId: 'b', startedAt: new Date(0), mode: 'offline', model: 'm', judge: false, gitSha: null, realCostUsd: 0, scenarios: [result('d', 'missing_recording')] });
     expect(reportFailed(missing)).toBe(true);
     expect(reportFailed(missing, { allowMissing: true })).toBe(false);
+  });
+
+  test('awaiting_recording: never recorded → reported, not a failure; a recorded one that breaks still fails', () => {
+    const awaiting = { ...result('new', 'missing_recording'), blocking: false };
+    const ok = buildReport({ batchId: 'b', startedAt: new Date(0), mode: 'offline', model: 'm', judge: false, gitSha: null, realCostUsd: 0, scenarios: [result('a', 'pass'), awaiting] });
+    expect(ok.totals).toMatchObject({ missingRecording: 0, awaitingRecording: 1 });
+    expect(reportFailed(ok)).toBe(false);
+    const stale = buildReport({ batchId: 'b', startedAt: new Date(0), mode: 'offline', model: 'm', judge: false, gitSha: null, realCostUsd: 0, scenarios: [awaiting, result('old', 'missing_recording')] });
+    expect(reportFailed(stale)).toBe(true);
+    const broken = buildReport({ batchId: 'b', startedAt: new Date(0), mode: 'offline', model: 'm', judge: false, gitSha: null, realCostUsd: 0, scenarios: [awaiting, result('old', 'fail')] });
+    expect(reportFailed(broken)).toBe(true);
   });
 });

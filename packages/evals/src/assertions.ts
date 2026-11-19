@@ -79,6 +79,22 @@ export function labelOf(a: Assertion): string {
       return `tool /${a.tool}/ not called`;
     case 'handoff_occurred':
       return `handoff to ${a.agent}`;
+    case 'no_proposal':
+      return 'no proposal';
+    case 'op_diff':
+      return `${a.action} changes ${a.field} ${JSON.stringify(a.from)} → ${JSON.stringify(a.to)}`;
+    case 'op_input_matches':
+      return `${a.action} input matches /${a.pattern}/`;
+    case 'slack_click':
+      return `Slack click by ${a.as} ${a.outcome}${a.message ? ` (/${a.message}/)` : ''}`;
+    case 'undo_proposal':
+      return `undo proposal ${a.status}${a.requiresApproval ? ', approval required' : ''}${Object.keys(a.ops).length ? `, ops ${Object.entries(a.ops).map(([k, n]) => `${k}.undo≥${n}`).join(' ')}` : ''}${a.notUndoable.length ? `, not undoable: ${a.notUndoable.join(', ')}` : ''}`;
+    case 'undo_applied':
+      return 'undo applied (POs + tasks deleted, caps restored, emails stay sent)';
+    case 'restock_runs_started':
+      return `restock runs started = ${a.count}`;
+    case 'mcp_call_refused':
+      return `MCP ${a.tool} refused${a.reason ? ` (/${a.reason}/)` : ''}`;
     case 'llm_judge':
       return `judge: ${a.criteria.length} criteria`;
   }
@@ -185,6 +201,54 @@ export function evaluateAssertion(a: Assertion, o: Observation, judge?: JudgeVer
     }
     case 'handoff_occurred':
       return result(a, o.agents.includes(a.agent), `agents: ${o.agents.join(', ') || 'none'}`);
+    case 'no_proposal':
+      return result(a, o.proposal === null, o.proposal ? `proposal ${o.proposal.id} (${o.proposal.status})` : 'none');
+    case 'op_diff': {
+      const ops = o.proposal?.ops.filter((op) => op.action === a.action) ?? [];
+      const changes = ops.flatMap((op) => op.diff.filter((d) => d.field === a.field));
+      const hit = changes.some((d) => JSON.stringify(d.before) === JSON.stringify(a.from) && JSON.stringify(d.after) === JSON.stringify(a.to));
+      return result(a, hit, changes.length ? `changes: ${changes.map((d) => `${JSON.stringify(d.before)}→${JSON.stringify(d.after)}`).join(', ')}` : `no ${a.field} change in ${ops.length} op(s)`);
+    }
+    case 'op_input_matches': {
+      const ops = o.proposal?.ops.filter((op) => op.action === a.action) ?? [];
+      const hit = ops.find((op) => re(a.pattern).test(op.input));
+      return result(a, Boolean(hit), hit ? excerpt(hit.input) : ops.length ? `no match in ${ops.length} op(s): ${excerpt(ops[0]!.input)}` : 'no such op');
+    }
+    case 'slack_click': {
+      const click = o.slackClicks.find((c) => c.as === a.as);
+      if (!click) return result(a, false, `no click by ${a.as}`);
+      const ok = click.outcome === a.outcome && (!a.message || re(a.message).test(click.message ?? ''));
+      return result(a, ok, `${click.outcome}${click.message ? `: ${excerpt(click.message)}` : ''}`);
+    }
+    case 'undo_proposal': {
+      const u = o.undo;
+      if (!u) return result(a, false, 'no undo proposal');
+      const problems: string[] = [];
+      if (u.status !== a.status) problems.push(`status ${u.status}`);
+      if (a.requiresApproval && !u.policyRules.includes('undo_requires_approval')) problems.push(`policy rules ${u.policyRules.join(', ') || 'none'}`);
+      for (const [action, min] of Object.entries(a.ops)) {
+        const n = u.ops.filter((op) => op.action === `${action}.undo`).length;
+        if (n < min) problems.push(`${action}.undo ×${n} < ${min}`);
+      }
+      for (const action of a.notUndoable) if (!u.notUndoable.some((x) => x.action === action)) problems.push(`${action} not listed as not undoable`);
+      if (a.proposerCannotApprove && !u.proposerApproveRefused) problems.push('the proposer could approve his own undo');
+      const seen = `${u.ops.length} undo op(s) [${[...new Set(u.ops.map((op) => op.action))].join(', ')}], not undoable: ${u.notUndoable.map((x) => x.action).join(', ') || 'none'}`;
+      return result(a, problems.length === 0, problems.length ? problems.join('; ') : seen);
+    }
+    case 'undo_applied': {
+      const after = o.undo?.after;
+      if (!after) return result(a, false, o.undo ? `undo not executed (${o.undo.finalStatus ?? o.undo.status})` : 'no undo');
+      const ok = o.undo?.finalStatus === 'executed' && after.undoOpsExecuted === after.undoOps && after.purchasesStillThere === 0 && after.tasksStillThere === 0 && after.capsNotRestored === 0 && after.emailsAfter === after.emailsBefore;
+      return result(a, ok, `status ${o.undo?.finalStatus}; ${after.undoOpsExecuted}/${after.undoOps} undo ops executed; POs left ${after.purchasesStillThere}, tasks left ${after.tasksStillThere}, caps not restored ${after.capsNotRestored}, emails ${after.emailsBefore}→${after.emailsAfter}`);
+    }
+    case 'restock_runs_started':
+      return result(a, o.runsStarted === a.count, `${o.runsStarted} run(s) from ${o.webhookDeliveries.length} deliveries (${o.webhookDeliveries.map((d) => d.status).join(', ') || 'none'})`);
+    case 'mcp_call_refused': {
+      const m = o.mcp;
+      if (!m) return result(a, false, 'no MCP call made');
+      const ok = m.refused && m.proposalsAfter === 0 && (!a.reason || re(a.reason).test(m.error ?? ''));
+      return result(a, ok, `${m.refused ? 'refused' : 'ALLOWED'}: ${m.error ?? 'no error'}; listed propose tools: ${m.tools.filter((t) => t.startsWith('propose_')).length}; proposals ${m.proposalsAfter}`);
+    }
     case 'llm_judge':
       if (!judge) return { kind: a.kind, label: labelOf(a), status: 'skipped', detail: 'judge disabled (--judge to enable)', score: 0 };
       return { kind: a.kind, label: labelOf(a), status: judge.score >= 1 ? 'pass' : 'fail', detail: judge.reason.slice(0, 400), score: Math.max(0, Math.min(1, judge.score)) };

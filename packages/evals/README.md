@@ -18,8 +18,15 @@ Flags: `--scenario a,b` · `--tag restock` · `--no-judge` · `--force` (re-reco
 `eval_run`; needs `DATABASE_URL`) · `--allow-missing` · `--verbose` (show passing checks too) ·
 `EVALS_DEBUG=1` (print run errors with stacks).
 
-The exit code is non-zero when a scenario fails or errors, or when a ready scenario has no recording.
-Pending scenarios never fail the suite.
+The exit code is non-zero when a scenario fails or errors, or when a ready scenario has no recording
+(or a stale one). Pending scenarios never fail the suite.
+
+**Scenario status.** `ready` runs and gates CI. `awaiting_recording` is written and runnable but not
+recorded yet: offline it is reported as `NREC … awaiting its first recording` and does **not** fail the
+suite; `evals:record` records it, and from then on (its recording file exists) it gates CI exactly like
+`ready`, so a broken recorded scenario still fails. Flip it to `ready` when you commit the recording.
+`pending` can't run yet (with a `pendingReason`). `llm: false` marks a scenario with no model calls: it
+needs no recording and always runs.
 
 ## Scenarios
 
@@ -36,8 +43,14 @@ Pending scenarios never fail the suite.
 | `copilot-longest-lead-time` | "Which vendor has the longest lead time?" → Golden State Edibles, 21 days; no propose tool; LLM judge | ready |
 | `copilot-overdue-invoices` | No invoice data: says so and invents no numbers; LLM judge | ready |
 | `metrc-write-failure-after-save` | Metrc fails after Distru saved | pending: only inventory adjustments reach Metrc, and no agent proposes them |
-| `webhook-replay-dedupe` | A redelivered Distru webhook starts one run, not two | pending: the webhook route has no dedupe store, and this runner doesn't boot HTTP + Inngest |
-| `vendor-reply-partial-shipment` | The vendor replies "60 of 100 now" | pending: there is no vendor-reply workflow yet |
+| `webhook-replay-dedupe` | A sales order fires Distru's ORDER CREATE; the same delivery arrives twice → one restock run | awaiting recording |
+| `vendor-reply-partial-shipment` | apps/emulators vendor reply "200 of 312 now, rest Dec 2" → PO update 312→200, Gmail reply op, follow-up task, validated numbers, approval required, no writes | awaiting recording |
+| `vendor-reply-injection` | Vendor email with instruction-like text → flagged, no proposal, no writes | awaiting recording |
+| `slack-approval-operator-refused` | The operator clicks Approve in Slack → refused (ephemeral), still pending | ready (shares the Oakland recording) |
+| `slack-approval-approver-approves` | The approver clicks Approve in Slack → run resumes and executes | ready (shares the Oakland recording) |
+| `undo-cross-tool` | Undo the executed Oakland restock: POs + tasks deleted, cap restored, emails not undoable, approval required (proposer can't approve) | ready (shares the Oakland recording) |
+| `copilot-context-memory` | Copilot surfaces a learned vendor memory | pending: packages/context is not wired into apps/agent |
+| `mcp-propose-readonly-token-refused` | A read-only MCP token cannot propose (no `propose_*` tool, harness re-check refuses) | ready, no model calls (`llm: false`, no recording) |
 
 Every ready scenario is scoped to one location, and usually to a few SKUs, so recording it is cheap.
 
@@ -48,7 +61,9 @@ Every ready scenario is scoped to one location, and usually to a few SKUs, so re
    - `mockScenario` / `headsetScenario` choose the seeded world.
    - `emulatorSetup.policyRules` overrides policy rules by key.
    - `emulatorSetup.distruMockConfig` sends `/__mock/config` faults `before_run` or `before_execute`.
-   - `trigger` is a restock run (`approve`, `reexecute`), a Copilot question, or a vendor reply.
+   - `trigger` is a restock run (`approve`, `reexecute`, `slackClicks`, `undo`), a Copilot question, a
+     vendor reply (`vendor_reply`: apps/emulators simulate vendor-reply → Composio webhook → vendor-reply
+     workflow), a Distru webhook redelivery (`distru_webhook`) or an MCP call with a scoped token (`mcp_call`).
    - `scope` limits the run to locations and SKUs.
    - `expectations` lists the assertions.
 2. Assertions (`src/scenario.ts`; the engine is `src/assertions.ts`):
@@ -62,6 +77,8 @@ Every ready scenario is scoped to one location, and usually to a few SKUs, so re
    | Budget | `cost_below_usd`, `tokens_below`, `latency_below_ms` |
    | Copilot | `answer_mentions`, `answer_avoids`, `llm_judge` |
    | Agent behaviour | `tool_called`, `tool_not_called` (regex), `handoff_occurred` (agent id) |
+   | Ops and approvals | `no_proposal`, `op_diff` (field before → after), `op_input_matches`, `slack_click`, `undo_proposal`, `undo_applied` |
+   | Triggers and MCP | `restock_runs_started`, `mcp_call_refused` |
 
    A new kind needs three changes: a schema variant, a case in `evaluateAssertion`, and a unit test.
 3. Record it once with `bun run evals:record -- --scenario <id>`. Read the output. A failure here is a real
@@ -89,6 +106,10 @@ points that variable at a local `Bun.serve` on 127.0.0.1. The server rewrites ea
   it stopped. Keys stay in memory. Anything shaped like a key is scrubbed from the saved file.
 - **live**: same path, recording into a throwaway file under `reports/live/`, so every call hits the
   model. Use it to sample variance and to catch regressions before re-recording.
+
+Runtime records the Distru mock creates get sequential ids, and random emulator values (Gmail
+thread / message ids, Message-ID headers, message dates) are replaced by stable aliases before a request
+is fingerprinted, so recordings of emulator scenarios replay.
 
 Recordings store only the model's replies plus usage. Each one is a few KB to 34 KB.
 
@@ -168,7 +189,8 @@ src/scenario.ts        zod scenario format (assertions, trigger, setup, scope)
 src/scenarios/         the scenarios
 src/assertions.ts      deterministic assertion engine (pure, over an Observation)
 src/observation.ts     what a run produced
-src/world.ts           in-process world: mocks, connectors, harness, real agents, workflow
+src/world.ts           in-process world: mocks, connectors, harness, real agents, restock + vendor-reply workflows
+src/emulators.ts       apps/emulators (Gmail, Composio, Slack) + the agent's webhook routes on loopback ports
 src/llm.ts             LlmGateway + per-scenario emulator session (offline / record / live, budget)
 src/judge.ts           Mastra rubric scorer for Copilot answers
 src/runner.ts          runs one scenario → ScenarioResult

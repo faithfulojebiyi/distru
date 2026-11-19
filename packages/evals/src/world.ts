@@ -6,6 +6,10 @@
  * engine with in-memory storage. Mirrors `apps/agent/test/fixtures/restock-env.ts`, which hardcodes
  * scripted models; here the models are real (live) or replayed (offline).
  *
+ * Optionally (scenarios that need them) it also boots apps/emulators in-process (see `emulators.ts`) and
+ * receives the Distru mock's webhooks. Records the mock creates at runtime get sequential ids, so a
+ * recording never depends on a random id.
+ *
  * Imports apps/agent sources read-only (relative paths); nothing in apps/* is modified.
  */
 import { Mastra } from '@mastra/core';
@@ -26,6 +30,9 @@ import { RestockLauncher, RESTOCK_WORKFLOW_KEY } from '../../../apps/agent/src/m
 import { createRestockWorkflowInProcess, type RestockDeps } from '../../../apps/agent/src/mastra/workflows/restock';
 import type { Pricing } from './llm';
 import type { Scenario } from './scenario';
+import { VENDOR_REPLY_WORKFLOW_KEY } from '../../../apps/agent/src/mastra/restock-launcher';
+import { createVendorReplyWorkflowInProcess, type VendorReplyDeps } from '../../../apps/agent/src/mastra/workflows/vendor-reply';
+import { bootEmulators, type EmulatorsHandle, type EmulatorsOptions } from './emulators';
 
 /** The Distru mock's "today" (seeded data is anchored to it; recordings depend on it). */
 export const NOW = '2026-11-19T12:00:00Z';
@@ -42,6 +49,7 @@ export const DEFAULT_RULES: PolicyRuleConfig[] = [
 const PURCHASES_PATH = '/public/v1/purchases';
 const TASKS_PATH = '/public/v1/tasks';
 const MCP_KEY = 'distru_mcp_mock';
+export const DISTRU_WEBHOOK_SECRET = 'evals-distru-webhook-secret';
 
 export function rulesFor(scenario: Scenario): PolicyRuleConfig[] {
   const overrides = scenario.emulatorSetup.policyRules;
@@ -57,10 +65,30 @@ export interface WorldOptions {
   scenario: Scenario;
   models: Record<AgentKey, MastraModelConfig>;
   pricing: Pricing;
+  /**
+   * Boot apps/emulators in-process (Gmail + Composio + Slack on loopback ports, for the official
+   * SDKs) and wire the agent's real Composio / Slack webhook routes to them.
+   */
+  emulators?: EmulatorsOptions;
+  /** Receives the Distru mock's outgoing webhooks (the mock posts to it like Distru would). */
+  distruWebhooks?: boolean;
 }
 
-export async function createWorld({ scenario, models, pricing }: WorldOptions) {
-  const mock = createMockServer({ now: NOW, scenario: scenario.mockScenario });
+/** Deterministic ids for records the mock creates at runtime (recordings must not depend on randomness). */
+export function sequentialIds(prefix = 'e7a1'): () => string {
+  let n = 0;
+  return () => `${prefix}0000-0000-4000-8000-${(++n).toString(16).padStart(12, '0')}`;
+}
+
+export async function createWorld({ scenario, models, pricing, emulators, distruWebhooks }: WorldOptions) {
+  /** Where the Distru mock's webhooks go (set by the webhook flow). Default: acknowledged and dropped. */
+  const distruHook: { handler: (url: string, init: RequestInit) => Promise<Response> } = { handler: async () => new Response('ok') };
+  const mock = createMockServer({
+    now: NOW,
+    scenario: scenario.mockScenario,
+    ...(distruWebhooks ? { webhookUrl: 'http://ops.test/api/webhooks/distru', webhookSecret: DISTRU_WEBHOOK_SECRET, webhookRetryDelaysMs: [0, 0, 0], webhookFetch: (url, init) => distruHook.handler(url, init) } : {}),
+  });
+  mock.store.newId = sequentialIds();
   const headset = createHeadsetMock({ now: NOW, scenario: scenario.headsetScenario ?? scenario.mockScenario });
   const net = { purchaseWrites: 0, taskWrites: 0 };
   const fetch: FetchLike = async (url, init) => {
@@ -72,9 +100,12 @@ export async function createWorld({ scenario, models, pricing }: WorldOptions) {
     return res;
   };
   const mcpFetch = async (url: string | URL, init?: RequestInit) => mock.app.request(url instanceof URL ? url.toString() : url, init);
+  // Emulators first: the Composio connector connects to them at start().
+  const emu: EmulatorsHandle | null = emulators ? await bootEmulators(emulators) : null;
   const connectors = new AppConnectors({
     connectMcp: () => createDistruMcpConnector({ url: 'http://mock.test/mcp', key: MCP_KEY, fetch: mcpFetch }),
     mcpUrl: 'http://mock.test/mcp',
+    ...(emu?.connectComposio ? { connectComposio: emu.connectComposio } : {}),
   });
   await connectors.start();
   const outbox = new OutboxTransport({ now: () => new Date(NOW) });
@@ -85,6 +116,7 @@ export async function createWorld({ scenario, models, pricing }: WorldOptions) {
     headset: { baseUrl: 'http://headset.test', token: 'headset-mock-token', fetch: async (url, init) => headset.app.request(url, init) },
     email: { transport: outbox, from: 'Golden Coast Purchasing <purchasing@goldencoastdistro.com>' },
     mcpClient: () => connectors.mcpClient(),
+    ...(emu?.connectComposio ? { composioClient: () => connectors.composioClient() } : {}),
   });
   const store = new InMemoryProposalStore();
   const audit = new InMemoryAuditSink();
@@ -104,6 +136,18 @@ export async function createWorld({ scenario, models, pricing }: WorldOptions) {
     findProposalByRunId,
     crossTool: {},
     now: () => new Date(NOW),
+    ...(emu?.slack ? { notifier: emu.slack } : {}),
+  };
+  const vendorReplyDeps: VendorReplyDeps = {
+    get registry() {
+      return connectors.registry;
+    },
+    harness,
+    contexts: () => contexts,
+    pricing,
+    findProposalByRunId,
+    now: () => new Date(NOW),
+    ...(emu?.slack ? { notifier: emu.slack } : {}),
   };
 
   const launcher = new RestockLauncher();
@@ -118,7 +162,7 @@ export async function createWorld({ scenario, models, pricing }: WorldOptions) {
   });
   const mastra = new Mastra({
     agents,
-    workflows: { [RESTOCK_WORKFLOW_KEY]: createRestockWorkflowInProcess(deps) },
+    workflows: { [RESTOCK_WORKFLOW_KEY]: createRestockWorkflowInProcess(deps), [VENDOR_REPLY_WORKFLOW_KEY]: createVendorReplyWorkflowInProcess(vendorReplyDeps) },
     storage: new InMemoryStore(),
     logger: false,
   });
@@ -142,10 +186,10 @@ export async function createWorld({ scenario, models, pricing }: WorldOptions) {
     return all.map((l) => ({ id: l.id, name: l.name ?? l.id }));
   };
 
-  const waitFor = async (runId: string, statuses: string[], timeoutMs = 15 * 60_000) => {
+  const waitFor = async (runId: string, statuses: string[], timeoutMs = 15 * 60_000, workflow: 'restock' | 'vendor-reply' = 'restock') => {
     const started = Date.now();
     for (;;) {
-      const state = await launcher.workflow().getWorkflowRunById(runId);
+      const state = await (workflow === 'restock' ? launcher.workflow() : launcher.decisionWorkflow('vendor-reply')).getWorkflowRunById(runId);
       if (state && statuses.includes(state.status)) return state;
       if (state?.status === 'failed') return state;
       if (Date.now() - started > timeoutMs) throw new Error(`timeout waiting for ${statuses.join('|')} (last: ${state?.status})`);
@@ -158,7 +202,12 @@ export async function createWorld({ scenario, models, pricing }: WorldOptions) {
     if (!res.ok) throw new Error(`mock config failed: ${res.status} ${await res.text()}`);
   };
 
-  return { mock, headset, net, outbox, connectors, contexts, store, audit, rules, harness, deps, agents, mastra, launcher, approver, productId, skuById, locations, waitFor, findProposalByRunId, configureMock };
+  const world = { mock, headset, net, outbox, connectors, contexts, store, audit, rules, harness, deps, agents, mastra, launcher, approver, productId, skuById, locations, waitFor, findProposalByRunId, configureMock, distruHook, emu };
+  if (emu) await emu.attach(world);
+  const close = async () => {
+    await emu?.close();
+  };
+  return { ...world, close };
 }
 
 export type World = Awaited<ReturnType<typeof createWorld>>;

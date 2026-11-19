@@ -15,9 +15,9 @@ function restock(overrides: Partial<Observation> = {}): Observation {
       policyOutcome: 'needs_approval',
       totalValue: 1234.5,
       ops: [
-        { action: 'distru.purchases.upsert', status: 'pending', verified: null },
-        { action: 'distru.purchases.upsert', status: 'pending', verified: null },
-        { action: 'email.send_vendor_po', status: 'pending', verified: null },
+        { action: 'distru.purchases.upsert', status: 'pending', verified: null, diff: [{ field: 'quantity', before: 312, after: 200 }], input: '{"purchase_id":"po-1"}' },
+        { action: 'distru.purchases.upsert', status: 'pending', verified: null, diff: [], input: '{}' },
+        { action: 'email.send_vendor_po', status: 'pending', verified: null, diff: [], input: '{"body":"Hi, we updated PO-501 to the 200 units"}' },
       ],
     },
     lines: [
@@ -84,7 +84,7 @@ describe('assertion engine', () => {
 
   test('execution: verify, idempotency, audit, writes', () => {
     const executed = restock({
-      proposal: { id: 'p1', status: 'executed', policyOutcome: 'needs_approval', totalValue: 10, ops: [{ action: 'distru.purchases.upsert', status: 'executed', verified: true }] },
+      proposal: { id: 'p1', status: 'executed', policyOutcome: 'needs_approval', totalValue: 10, ops: [{ action: 'distru.purchases.upsert', status: 'executed', verified: true, diff: [], input: '{}' }] },
       reexecuteWrites: 0,
       writes: { purchases: 1, tasks: 0 },
     });
@@ -132,6 +132,60 @@ describe('assertion engine', () => {
     const failed = evaluateAssertion(judge, o, { score: 0, reason: 'missed' });
     expect(failed.status).toBe('fail');
     expect(failed.detail).toBe('missed');
+  });
+
+  test('proposal shape: no_proposal, op_diff, op_input_matches', () => {
+    const o = restock();
+    expect(status({ kind: 'no_proposal' }, o)).toBe('fail');
+    expect(status({ kind: 'no_proposal' }, restock({ proposal: null }))).toBe('pass');
+    expect(status({ kind: 'op_diff', action: 'distru.purchases.upsert', field: 'quantity', from: 312, to: 200 }, o)).toBe('pass');
+    expect(status({ kind: 'op_diff', action: 'distru.purchases.upsert', field: 'quantity', from: 312, to: 100 }, o)).toBe('fail');
+    expect(status({ kind: 'op_input_matches', action: 'email.send_vendor_po', pattern: 'updated PO-\\d+ to the 200 units' }, o)).toBe('pass');
+    expect(status({ kind: 'op_input_matches', action: 'distru.tasks.create', pattern: '.' }, o)).toBe('fail');
+  });
+
+  test('slack clicks, webhook runs, MCP refusals', () => {
+    const o = restock({
+      slackClicks: [{ as: 'operator', outcome: 'refused', message: 'Only approvers can decide proposals' }],
+      runsStarted: 1,
+      webhookDeliveries: [
+        { status: 'accepted', eventId: 'e1' },
+        { status: 'accepted', eventId: 'e1' },
+      ],
+      mcp: { tools: ['get_me'], refused: true, error: "Unknown tool; harness: forbidden: mcp-client:t lacks the 'propose' scope", proposalsAfter: 0 },
+    });
+    expect(status({ kind: 'slack_click', as: 'operator', outcome: 'refused', message: 'only approvers' }, o)).toBe('pass');
+    expect(status({ kind: 'slack_click', as: 'operator', outcome: 'decided' }, o)).toBe('fail');
+    expect(status({ kind: 'slack_click', as: 'approver', outcome: 'decided' }, o)).toBe('fail');
+    expect(status({ kind: 'restock_runs_started', count: 1 }, o)).toBe('pass');
+    expect(status({ kind: 'restock_runs_started', count: 2 }, o)).toBe('fail');
+    expect(status({ kind: 'mcp_call_refused', tool: 'propose_x', reason: "lacks the 'propose' scope" }, o)).toBe('pass');
+    expect(status({ kind: 'mcp_call_refused', tool: 'propose_x' }, restock({ mcp: { tools: [], refused: false, error: null, proposalsAfter: 1 } }))).toBe('fail');
+  });
+
+  test('undo: proposal shape and applied effects', () => {
+    const undo: NonNullable<Observation['undo']> = {
+      proposalId: 'u1',
+      status: 'pending_approval',
+      policyRules: ['undo_requires_approval'],
+      ops: [
+        { action: 'distru.tasks.create.undo', summary: null },
+        { action: 'distru.purchases.upsert.undo', summary: 'Delete PO-501 (PENDING, never received)' },
+      ],
+      notUndoable: [{ action: 'email.send_vendor_po', reason: 'already delivered' }],
+      proposerApproveRefused: true,
+      finalStatus: 'executed',
+      after: { purchasesStillThere: 0, tasksStillThere: 0, capsNotRestored: 0, emailsBefore: 3, emailsAfter: 3, undoOpsExecuted: 2, undoOps: 2 },
+    };
+    const o = restock({ undo });
+    const shape = { kind: 'undo_proposal', ops: { 'distru.purchases.upsert': 1, 'distru.tasks.create': 1 }, notUndoable: ['email.send_vendor_po'] };
+    expect(status(shape, o)).toBe('pass');
+    expect(status({ ...shape, ops: { 'distru_mcp.mutate_product': 1 } }, o)).toBe('fail');
+    expect(status(shape, restock({ undo: { ...undo, proposerApproveRefused: false } }))).toBe('fail');
+    expect(status(shape, restock({ undo: { ...undo, policyRules: [] } }))).toBe('fail');
+    expect(status({ kind: 'undo_applied' }, o)).toBe('pass');
+    expect(status({ kind: 'undo_applied' }, restock({ undo: { ...undo, after: { ...undo.after!, capsNotRestored: 1 } } }))).toBe('fail');
+    expect(status({ kind: 'undo_applied' }, restock())).toBe('fail');
   });
 
   test('a run error is attached to failing checks only', () => {

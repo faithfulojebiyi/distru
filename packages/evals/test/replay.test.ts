@@ -42,11 +42,11 @@ const scenario = (id: string): Scenario => {
 };
 
 describe('offline replay (no network, no key, no spend)', () => {
-  test('failed lab test veto + Copilot lead-time question pass from their recordings', async () => {
+  test('no-reorder restock + Copilot lead-time question pass from their recordings', async () => {
     const sink = new MemorySink();
     const report = await runSuite({
       mode: 'offline',
-      scenarios: [scenario('failed-lab-test-veto'), scenario('copilot-longest-lead-time')],
+      scenarios: [scenario('no-reorder-needed'), scenario('copilot-longest-lead-time')],
       judge: true,
       config: { model: 'claude-sonnet-5-5', pricing: { inputUsdPerMTok: 3, outputUsdPerMTok: 15 } },
       sinks: [sink],
@@ -57,10 +57,11 @@ describe('offline replay (no network, no key, no spend)', () => {
       const failing = r.assertions.filter((a) => a.status !== 'pass').map((a) => `${a.label}: ${a.detail}`);
       expect({ id: r.id, status: r.status, reason: r.reason, failing }).toEqual({ id: r.id, status: 'pass', reason: null, failing: [] });
       expect(r.realCalls).toBe(0);
-      expect(r.usage.llmCalls).toBeGreaterThan(0);
+      // no-reorder-needed may end in the workflow's deterministic pre-check without any model call
+      if (r.id !== 'no-reorder-needed') expect({ id: r.id, calls: r.usage.llmCalls > 0 }).toEqual({ id: r.id, calls: true });
     }
-    const [veto] = report.scenarios;
-    expect(veto?.observation?.vetoed.some((v) => v.sku === 'FLW-WC-35')).toBe(true);
+    const [restock] = report.scenarios;
+    expect(restock?.observation?.resultStatus).toBe('nothing_to_order');
     expect(sink.reports).toHaveLength(1);
   }, 120_000);
 

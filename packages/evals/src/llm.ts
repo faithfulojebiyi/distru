@@ -88,6 +88,30 @@ export class LlmSession {
       .filter((c) => c.script === 'recorded').length;
   }
 
+  /** Random ids of the world (e.g. Gmail ids from the emulators) to alias before fingerprinting. */
+  volatile: (() => readonly string[]) | null = null;
+  readonly #aliases = new Map<string, string>();
+
+  /**
+   * Replaces every volatile id in a request body with a stable alias (`vol-1`, `vol-2`, … in order of
+   * first appearance in this session), so a request built from random ids still matches its recording.
+   */
+  normalize(body: string): string {
+    const values = this.volatile?.() ?? [];
+    if (!values.length) return body;
+    const present = values.filter((v) => body.includes(v)).sort((a, b) => body.indexOf(a) - body.indexOf(b) || b.length - a.length);
+    let out = body;
+    for (const v of present) {
+      let alias = this.#aliases.get(v);
+      if (!alias) {
+        alias = `vol-${this.#aliases.size + 1}`;
+        this.#aliases.set(v, alias);
+      }
+      out = out.split(v).join(alias);
+    }
+    return out;
+  }
+
   /** Calls nothing answered (stale or missing recording in offline mode). */
   unanswered(): number {
     return llmCalls(this.emulator)
@@ -121,10 +145,13 @@ export class LlmGateway {
           const session = this.#current;
           if (!session) return Response.json({ type: 'error', error: { type: 'api_error', message: 'no eval session attached' } }, { status: 500 });
           const url = new URL(req.url);
+          const hasBody = req.method !== 'GET' && req.method !== 'HEAD';
+          const headers = new Headers(req.headers);
+          headers.delete('content-length');
           const upstream = new Request(`https://api.anthropic.com${url.pathname}${url.search}`, {
             method: req.method,
-            headers: req.headers,
-            ...(req.method === 'GET' || req.method === 'HEAD' ? {} : { body: await req.arrayBuffer() }),
+            headers,
+            ...(hasBody ? { body: session.normalize(await req.text()) } : {}),
           });
           return session.emulator.fetch(upstream);
         },
