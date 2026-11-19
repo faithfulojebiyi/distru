@@ -23,6 +23,9 @@ async function databaseReachable(): Promise<boolean> {
   const probe = postgres(process.env.DATABASE_URL ?? 'postgres://ops:ops@127.0.0.1:5482/ops', { max: 1, connect_timeout: 2, onnotice: () => {} });
   try {
     await probe`select 1 from proposal limit 1`;
+    // Schema current (latest additions: audit_event.request_id, mcp_token)?
+    await probe`select request_id from audit_event limit 1`;
+    await probe`select 1 from mcp_token limit 1`;
     return true;
   } catch {
     return false;

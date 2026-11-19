@@ -7,7 +7,7 @@ import type { RunDetail, RunStep, RunSummary } from '../api/schemas';
 import type { DB } from '../db/client';
 import { proposal } from '../db/schema';
 import type { RestockLauncher } from '../mastra/restock-launcher';
-import { RESTOCK_WORKFLOW_ID } from '../mastra/restock-launcher';
+import { isDecisionWorkflowId, RESTOCK_WORKFLOW_ID } from '../mastra/restock-launcher';
 import { AgentTraceEntrySchema, sumTrace, type AgentTraceEntry } from '../mastra/trace';
 import type { DecisionHook } from './proposals';
 
@@ -74,6 +74,18 @@ function traceEntriesIn(output: unknown): AgentTraceEntry[] {
 
 const traceKey = (t: AgentTraceEntry) => `${t.agent}|${t.label}|${t.startedAt}`;
 
+function totalsOfEntries(entries: readonly AgentTraceEntry[]): RunSummary['totals'] {
+  const spend = sumTrace(entries);
+  return { tokens: spend.tokens, costUsd: spend.costUsd, agentCalls: entries.length, toolCalls: entries.reduce((n, t) => n + t.toolCalls.length, 0) };
+}
+
+/** Run totals from step outputs (deduplicated agent calls), for list rows. */
+export function totalsOf(outputs: readonly unknown[]): RunSummary['totals'] {
+  const all = new Map<string, AgentTraceEntry>();
+  for (const output of outputs) for (const t of traceEntriesIn(output)) all.set(traceKey(t), t);
+  return totalsOfEntries([...all.values()]);
+}
+
 function stepResults(raw: WorkflowState['steps'], id: string): WorkflowStateSingleStepResult[] {
   const r = raw?.[id];
   if (!r) return [];
@@ -115,7 +127,7 @@ export function toRunDetail(state: WorkflowState, link: ProposalLink | null): Ru
   });
   timeline.sort((a, b) => (a.startedAt ?? '9999').localeCompare(b.startedAt ?? '9999'));
 
-  const spend = sumTrace(entries);
+  const totals = totalsOfEntries(entries);
   const suspended = Object.values(steps)
     .flatMap((r) => (Array.isArray(r) ? r : [r]))
     .find((r) => r.status === 'suspended');
@@ -132,7 +144,7 @@ export function toRunDetail(state: WorkflowState, link: ProposalLink | null): Ru
     result: asRecord(state.result),
     error: state.error?.message ?? null,
     steps: timeline,
-    totals: { tokens: spend.tokens, costUsd: spend.costUsd, agentCalls: entries.length, toolCalls: entries.reduce((n, t) => n + t.toolCalls.length, 0) },
+    totals,
     suspendPayload: asRecord(suspended?.suspendPayload),
   };
 }
@@ -151,6 +163,7 @@ export function createRunsService({ launcher, proposalLinks }: RunsServiceDeps):
       return runs.map((r): RunSummary => {
         const snapshot = typeof r.snapshot === 'string' ? null : r.snapshot;
         const input = asRecord(snapshot?.context.input);
+        const totals = totalsOf(Object.values(snapshot?.context ?? {}).map((step) => asRecord(step)?.output));
         return {
           runId: r.runId,
           workflowId: RESTOCK_WORKFLOW_ID,
@@ -159,6 +172,7 @@ export function createRunsService({ launcher, proposalLinks }: RunsServiceDeps):
           createdAt: iso(r.createdAt) ?? new Date(0).toISOString(),
           updatedAt: iso(r.updatedAt) ?? new Date(0).toISOString(),
           proposal: links.get(r.runId) ?? null,
+          totals,
         };
       });
     },
@@ -178,13 +192,15 @@ export function createRunsService({ launcher, proposalLinks }: RunsServiceDeps):
 }
 
 /**
- * Decision hook: resume the restock run waiting on this proposal (`meta.workflowRunId`). No-op when
- * the proposal has no run, has no decision yet, or the run is not suspended (already resumed).
+ * Decision hook: resume the run waiting on this proposal (`meta.workflowRunId`) of the workflow that
+ * created it (`meta.workflowId`: `restock` (default) or `vendor-reply`). No-op when the proposal has
+ * no run, has no decision yet, or the run is not suspended (already resumed).
  */
 export function resumeRunOnDecision(launcher: RestockLauncher): DecisionHook {
   return async (p) => {
     const runId = typeof p.meta.workflowRunId === 'string' ? p.meta.workflowRunId : null;
     if (!runId || !p.decision) return;
-    await launcher.resumeAfterDecision(runId, { decision: p.decision.decision, by: p.decision.by.id });
+    const workflowId = isDecisionWorkflowId(p.meta.workflowId) ? p.meta.workflowId : RESTOCK_WORKFLOW_ID;
+    await launcher.resumeAfterDecision(runId, { decision: p.decision.decision, by: p.decision.by.id }, workflowId);
   };
 }

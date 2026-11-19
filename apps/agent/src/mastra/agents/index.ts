@@ -8,6 +8,7 @@ import { createInventoryAnalyst } from './inventory-analyst';
 import { createOpsLead, createStartRestockRunTool } from './ops-lead';
 import { createPolicyCritic } from './policy-critic';
 import { createProcurementPlanner } from './procurement-planner';
+import { createVendorLiaison } from './vendor-liaison';
 import type { AgentKey } from './roster';
 
 export interface AgentDeps<TCtx> extends HarnessToolDeps<TCtx> {
@@ -26,6 +27,7 @@ export function modelsFromEnv(env: Env): Record<AgentKey, string> {
     procurementPlanner: env.PROCUREMENT_PLANNER_MODEL ?? fallback,
     complianceReviewer: env.COMPLIANCE_REVIEWER_MODEL ?? fallback,
     policyCritic: env.POLICY_CRITIC_MODEL ?? fallback,
+    vendorLiaison: env.VENDOR_LIAISON_MODEL ?? fallback,
   };
 }
 
@@ -50,6 +52,8 @@ export function createAgents<TCtx>(deps: AgentDeps<TCtx>) {
   const procurementPlanner = createProcurementPlanner({ model: deps.models.procurementPlanner, tools: tools('procurementPlanner') });
   const complianceReviewer = createComplianceReviewer({ model: deps.models.complianceReviewer, tools: tools('complianceReviewer') });
   const policyCritic = createPolicyCritic({ model: deps.models.policyCritic, tools: tools('policyCritic') });
+  // Vendor-reply workflow only (not a supervisor subagent): classifies vendor emails.
+  const vendorLiaison = createVendorLiaison({ model: deps.models.vendorLiaison, tools: tools('vendorLiaison') });
   const startRestockRun = createStartRestockRunTool(deps.launcher);
   const opsLead = createOpsLead({
     model: deps.models.opsLead,
@@ -57,7 +61,7 @@ export function createAgents<TCtx>(deps: AgentDeps<TCtx>) {
     agents: { inventoryAnalyst, procurementPlanner, complianceReviewer, policyCritic },
     ...(deps.memory ? { memory: deps.memory } : {}),
   });
-  return { opsLead, inventoryAnalyst, procurementPlanner, complianceReviewer, policyCritic };
+  return { opsLead, inventoryAnalyst, procurementPlanner, complianceReviewer, policyCritic, vendorLiaison };
 }
 
 export type OpsAgents = ReturnType<typeof createAgents>;

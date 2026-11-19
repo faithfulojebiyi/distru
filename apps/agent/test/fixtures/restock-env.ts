@@ -22,6 +22,11 @@ import type { AgentKey } from '../../src/mastra/agents/roster';
 import { RestockLauncher, RESTOCK_WORKFLOW_KEY } from '../../src/mastra/restock-launcher';
 import { createRestockWorkflowInProcess, type RestockDeps } from '../../src/mastra/workflows/restock';
 import { jsonAfter, match, resultOf, resultsOf, scriptedModel, type Script } from './scripted-model';
+import type { ComposioBridge } from '@ops/connector-composio';
+import type { ProposalNotifier } from '../../src/slack/approvals';
+import { VENDOR_REPLY_WORKFLOW_KEY } from '../../src/mastra/restock-launcher';
+import { createVendorReplyWorkflowInProcess, type VendorReplyDeps } from '../../src/mastra/workflows/vendor-reply';
+import { vendorLiaisonScript } from './vendor-liaison-script';
 
 export const NOW = '2026-11-19T12:00:00Z';
 export { FAILED_TEST_SKU, INJECTION_SKU };
@@ -272,6 +277,10 @@ export interface RestockEnvOptions {
   crossTool?: CrossToolOptions;
   /** Boot without the Distru MCP bridge reachable (degraded mode); `connectMcp()` later brings it up. */
   mcpDown?: boolean;
+  /** Register the Composio connector (vendor-reply tests: the in-process emulator world). */
+  composio?: () => Promise<ComposioBridge<'composio'>>;
+  /** Slack approvals / notifications for both workflows. */
+  notifier?: ProposalNotifier;
 }
 
 export async function restockEnv(options: RestockEnvOptions = {}) {
@@ -295,6 +304,7 @@ export async function restockEnv(options: RestockEnvOptions = {}) {
   const connectors = new AppConnectors({
     connectMcp: () => createDistruMcpConnector({ url: 'http://mock.test/mcp', key: MCP_KEY, fetch: mcpFetch }),
     mcpUrl: 'http://mock.test/mcp',
+    ...(options.composio ? { connectComposio: options.composio } : {}),
   });
   await connectors.start();
   const outbox = new OutboxTransport({ now: () => new Date(NOW) });
@@ -305,6 +315,7 @@ export async function restockEnv(options: RestockEnvOptions = {}) {
     headset: { baseUrl: 'http://headset.test', token: 'headset-mock-token', fetch: async (url, init) => headset.app.request(url, init) },
     email: { transport: outbox, from: 'Golden Coast Purchasing <purchasing@goldencoastdistro.com>' },
     mcpClient: () => connectors.mcpClient(),
+    composioClient: () => connectors.composioClient(),
   });
   const store = new InMemoryProposalStore();
   const audit = new InMemoryAuditSink();
@@ -323,6 +334,18 @@ export async function restockEnv(options: RestockEnvOptions = {}) {
     findProposalByRunId,
     crossTool: options.crossTool ?? {},
     now: () => new Date(NOW),
+    ...(options.notifier ? { notifier: options.notifier } : {}),
+  };
+  const vendorReplyDeps: VendorReplyDeps = {
+    get registry() {
+      return connectors.registry;
+    },
+    harness,
+    contexts: () => contexts,
+    pricing: { inputUsdPerMTok: 3, outputUsdPerMTok: 15 },
+    findProposalByRunId,
+    now: () => new Date(NOW),
+    ...(options.notifier ? { notifier: options.notifier } : {}),
   };
 
   const scripts: Record<AgentKey, Script> = {
@@ -331,6 +354,7 @@ export async function restockEnv(options: RestockEnvOptions = {}) {
     procurementPlanner: plannerScript(options.planner ?? {}),
     complianceReviewer: reviewerScript,
     policyCritic: criticScript,
+    vendorLiaison: vendorLiaisonScript,
   };
   const models = Object.fromEntries(Object.entries(scripts).map(([k, s]) => [k, scriptedModel(k, s)])) as Record<AgentKey, ReturnType<typeof scriptedModel>>;
 
@@ -346,7 +370,7 @@ export async function restockEnv(options: RestockEnvOptions = {}) {
   });
   const mastra = new Mastra({
     agents,
-    workflows: { [RESTOCK_WORKFLOW_KEY]: createRestockWorkflowInProcess(deps) },
+    workflows: { [RESTOCK_WORKFLOW_KEY]: createRestockWorkflowInProcess(deps), [VENDOR_REPLY_WORKFLOW_KEY]: createVendorReplyWorkflowInProcess(vendorReplyDeps) },
     storage: new InMemoryStore(),
     logger: false,
   });
@@ -388,7 +412,19 @@ export async function restockEnv(options: RestockEnvOptions = {}) {
     return connectors.refresh();
   };
 
-  return { mock, headset, net, outbox, connectors, contexts, store, audit, rules, harness, deps, agents, mastra, launcher, approver, productId, locations, waitFor, findProposalByRunId, configureMock, connectMcp, mcpState };
+  /** Polls a vendor-reply run (same as `waitFor`, on the vendor-reply workflow). */
+  const waitForVendorReply = async (runId: string, statuses: string[], timeoutMs = 20_000) => {
+    const started = Date.now();
+    for (;;) {
+      const state = await launcher.decisionWorkflow('vendor-reply').getWorkflowRunById(runId);
+      if (state && statuses.includes(state.status)) return state;
+      if (state?.status === 'failed' && !statuses.includes('failed')) throw new Error(`vendor-reply run failed: ${state.error?.message ?? JSON.stringify(state.steps)}`);
+      if (Date.now() - started > timeoutMs) throw new Error(`timeout waiting for ${statuses.join('|')} (last: ${state?.status})`);
+      await Bun.sleep(25);
+    }
+  };
+
+  return { mock, headset, net, outbox, connectors, contexts, store, audit, rules, harness, deps, vendorReplyDeps, agents, mastra, launcher, approver, productId, locations, waitFor, waitForVendorReply, findProposalByRunId, configureMock, connectMcp, mcpState };
 }
 
 export type RestockEnv = Awaited<ReturnType<typeof restockEnv>>;

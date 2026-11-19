@@ -39,6 +39,7 @@ const EnvSchema = z.object({
   PROCUREMENT_PLANNER_MODEL: z.string().optional(),
   COMPLIANCE_REVIEWER_MODEL: z.string().optional(),
   POLICY_CRITIC_MODEL: z.string().optional(),
+  VENDOR_LIAISON_MODEL: z.string().optional(),
   /** Cost estimate for run budgets/timelines (USD per million tokens). Not billing data. */
   LLM_INPUT_USD_PER_MTOK: z.coerce.number().nonnegative().default(3),
   LLM_OUTPUT_USD_PER_MTOK: z.coerce.number().nonnegative().default(15),
@@ -71,6 +72,34 @@ const EnvSchema = z.object({
     .transform((v) => v === '1' || v === 'true'),
   /** Inngest cron expression; `TZ=` prefix supported by Inngest (e.g. `TZ=America/Los_Angeles 0 7 * * *`). */
   RESTOCK_CRON: z.string().default('TZ=America/Los_Angeles 0 7 * * *'),
+  // --- Composio (connector `composio`: Gmail/Calendar tools + the Gmail new-message trigger) ---
+  /** Composio project key. Default: the local emulator's key (`bun run dev:emulators`). Empty disables the connector. */
+  COMPOSIO_API_KEY: z.string().default('ak_emulator_goldencoast_local0001'),
+  /** Emulator origin. Empty = real Composio (https://backend.composio.dev). */
+  COMPOSIO_BASE_URL: z.union([z.url(), z.literal('')]).default('http://localhost:4700'),
+  COMPOSIO_USER_ID: z.string().min(1).default('golden-coast'),
+  COMPOSIO_TOOLKITS: z.string().default('gmail,googlecalendar'),
+  /** Secret Composio signs trigger webhooks with (POST /api/webhooks/composio). Default: the emulator's. */
+  COMPOSIO_WEBHOOK_SECRET: z.string().min(1).default('whsec_emulator_goldencoast_local'),
+  /** Retry interval while Composio is unreachable (degraded mode), in ms. */
+  COMPOSIO_REFRESH_MS: z.coerce.number().int().min(1000).default(60_000),
+  // --- Slack approvals (WebClient; emulator by default) ---
+  /** Bot token. Default: the emulator's "Ops Agent" app. Empty disables Slack. */
+  SLACK_BOT_TOKEN: z.string().default('xoxb-emulator-goldencoast-ops-agent'),
+  /** Web API base. Default: the emulator. Empty = real Slack (https://slack.com/api/). */
+  SLACK_API_URL: z.union([z.url(), z.literal('')]).default('http://localhost:4700/slack/api/'),
+  /** Verifies `x-slack-signature` on POST /api/webhooks/slack. Default: the emulator's. */
+  SLACK_SIGNING_SECRET: z.string().min(1).default('emulator-slack-signing-secret'),
+  /** Where approval requests (Approve / Reject buttons) are posted. */
+  SLACK_APPROVALS_CHANNEL: z.string().min(1).default('#ops-approvals'),
+  /** Where run notifications (proposal created / executed / failed) are posted. */
+  SLACK_NOTIFY_CHANNEL: z.string().min(1).default('#purchasing'),
+  /** Dashboard origin for links in Slack messages (default: the first WEB_ORIGIN). */
+  WEB_BASE_URL: z.url().optional(),
+  /** How long after execution a proposal can still be undone (hours; POST /api/proposals/:id/undo). */
+  UNDO_WINDOW_HOURS: z.coerce.number().positive().default(168),
+  /** Public base URL of this server, used for the MCP endpoint shown with a new token (`<url>/mcp`). Default: BETTER_AUTH_URL. */
+  PUBLIC_URL: z.url().optional(),
   INNGEST_DEV: z.string().optional(),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
@@ -95,6 +124,10 @@ function loadEnv(): Env {
   }
   if (env.RESEND_API_KEY && !env.EMAIL_FROM) {
     console.error('EMAIL_FROM is required when RESEND_API_KEY is set.');
+    process.exit(1);
+  }
+  if (env.NODE_ENV === 'production' && (env.COMPOSIO_WEBHOOK_SECRET.startsWith('whsec_emulator') || env.SLACK_SIGNING_SECRET.startsWith('emulator-'))) {
+    console.error('COMPOSIO_WEBHOOK_SECRET and SLACK_SIGNING_SECRET must be set to real secrets in production (not the emulator defaults).');
     process.exit(1);
   }
   if (env.NODE_ENV === 'production' && !env.DISTRU_WEBHOOK_SECRET) {

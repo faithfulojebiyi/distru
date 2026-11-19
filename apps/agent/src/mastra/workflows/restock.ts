@@ -20,6 +20,7 @@ import { PolicyCritiqueSchema, policyCriticPrompt } from '../agents/policy-criti
 import { GuardSuggestionSchema, PlannerResultSchema, plannerPrompt, plannerRevisionPrompt } from '../agents/procurement-planner';
 import { AGENTS, principalFor } from '../agents/roster';
 import { SuspiciousTextFlagSchema, type SuspiciousTextFlag } from '../agents/shared';
+import type { ProposalNotifier } from '../../slack/approvals';
 import { inngestWorkflowKit } from '../inngest';
 import { AWAIT_DECISION_STEP, RESTOCK_WORKFLOW_ID, RestockResumeSchema, RestockTriggerSchema, type RestockTrigger } from '../restock-launcher';
 import { draftOpFrom, DraftOpSchema, DraftProposal, type DraftOp } from '../tools/run-context';
@@ -72,6 +73,8 @@ export interface RestockDeps {
   crossTool?: CrossToolOptions;
   /** Clock for active-buyer windows and receiving dates (tests pin it to the mock's "now"). */
   now?: () => Date;
+  /** Slack approval request + run notifications (best-effort; never fails a step). */
+  notifier?: ProposalNotifier;
 }
 
 // ── schemas ─────────────────────────────────────────────────────────────────────────────────────
@@ -681,6 +684,7 @@ export function createRestockSteps(deps: RestockDeps) {
           spend,
         },
       });
+      await deps.notifier?.proposalCreated(proposal);
       return { proposalId: proposal.id, proposalStatus: proposal.status, outcome, totalValue: totalValue(proposal.ops), agentTrace: state.agentTrace };
     },
   });
@@ -739,6 +743,7 @@ export function createRestockSteps(deps: RestockDeps) {
       }
       const p = await deps.harness.get(inputData.proposalId);
       const total = totalValue(p.ops);
+      if (inputData.decision === 'rejected' || p.status === 'executed' || p.status === 'failed') await deps.notifier?.proposalFinished(p);
       if (inputData.decision === 'rejected' || inputData.decision === 'denied') {
         return {
           status: inputData.decision,

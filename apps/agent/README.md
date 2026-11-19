@@ -83,6 +83,17 @@ ports against Postgres (`src/harness/`):
 | `headset` | analytics | retail sell-through (read-only): `retail_trends`, `demand_signal`, … (`HEADSET_BASE_URL`, `HEADSET_API_TOKEN`) |
 | `email` | email | `send_vendor_po` (high risk: always a human). Mock outbox by default; Resend when `RESEND_API_KEY` (+ `EMAIL_FROM`) is set |
 | `distru_mcp` | erp | Distru's MCP through the bridge (`DISTRU_MCP_URL`, default `http://localhost:4500/mcp`; `DISTRU_MCP_KEY`, default `distru_mcp_mock`; empty URL disables it) |
+| `composio` | other | Gmail / Calendar via Composio (`@ops/connector-composio`; the emulator by default: `COMPOSIO_BASE_URL=http://localhost:4700`, `COMPOSIO_API_KEY=ak_emulator_goldencoast_local0001`, `COMPOSIO_USER_ID=golden-coast`; empty key disables it, empty base URL = real Composio). Thread reads + `gmail_reply_to_thread` (high risk) for the vendor-reply loop |
+
+**Composio degraded mode** works like `distru_mcp`: if Composio (the emulator) is down at boot the app
+starts without it (`ctx.connectors.composio` is a placeholder that fails with a retryable "unavailable"
+error), and `AppConnectors` retries every `min(DISTRU_MCP_REFRESH_MS, COMPOSIO_REFRESH_MS)` until it
+connects, then rebuilds the registry. Errors route through `composioErrorClassifier`.
+
+**Triggers** (`registry.triggers()`): `distru.order_created` (Distru connector), `composio.gmail.new_message`
+(Composio connector), and the app-level `slack.interaction` + `schedule.morning_restock`
+(`src/harness/triggers.ts`). Every webhook route goes through harness `ingestWebhook` (signature over
+the raw body, zod-validated event, `trigger.received` / `trigger.rejected` in the audit trail).
 
 `distru_mcp` is built from a live `tools/list`, so `src/index.ts` awaits `appConnectors.start()` before
 serving. **Degraded mode**: if the MCP server is unreachable the app boots without it, logs why, and
@@ -102,11 +113,62 @@ Default policy (seeded): `max_total_value` $25,000 (deny above), `auto_approve_b
 outside the six mock vendors' domains, e.g. `sierraextractsco.com`), and `vendor_allowlist` present but disabled.
 Emails, tasks and buyer caps are `moneyless` (value 0), so `max_total_value` still applies to a cross-tool proposal.
 
+## Vendor-reply loop (`src/mastra/workflows/vendor-reply.ts`)
+
+Vendor replies to a PO email → Composio Gmail trigger → signed webhook → `POST /api/webhooks/composio`
+(`ingestWebhook`, 401 when forged) → Inngest `composio/gmail.new_message` (id `composio.gmail.new_message:<webhook-id>`,
+so a redelivery is a no-op) → function `vendor-reply-on-email` → Mastra workflow `vendor-reply` (Inngest):
+
+1. **match** (code): sender address → Distru vendor (PO email, else same domain); `PO-\d+` in the subject/snippet
+   → that vendor's PO (`listPurchases(purchase_numbers, company_ids)`; a number belonging to another vendor is
+   never used; without one, only a single open PO is unambiguous). Non-vendor mail / unknown PO → `ignored`.
+2. **read-thread**: `composio.gmail_fetch_message_by_thread_id` as the Liaison (untrusted text); falls back to
+   the trigger's snippet while Composio is down.
+3. **classify**: the **Vendor Liaison** agent (`agents/vendor-liaison.ts`; scopes read + propose, read tools only,
+   budget 6 steps / $0.5, `VENDOR_LIAISON_MODEL`) returns `{ kind: partial|delay|confirm|price_change|other,
+   lines[{ sku, product_id, shipped_quantity, backordered_quantity, new_unit_price }], eta, eta_text, summary,
+   injection_detected, suspicious_text }`, copying numbers as stated and never acting on the email.
+4. **plan** (code, `validateAgainstPo`): shipped must be an integer in `1..ordered-1`, prices within ±50% of the PO
+   price, ETA within 180 days, lines must be on the PO; everything else becomes a finding, not a change. Ops:
+   `distru.purchases.upsert` (only the validated quantity/price changes; other lines untouched) → buyer cap
+   `distru_mcp.mutate_product` when (on hand + units shipping now) ÷ avg daily demand < days to the new ETA
+   (`computeCap` / `activeBuyers` from the allocation guard; skipped when no demand, no buyers, or an existing
+   cap is tighter) → acknowledgement `composio.gmail_reply_to_thread` (high risk; body from validated numbers
+   only) → `distru.tasks.create` for the buyer (due at the ETA). A suspicious email gets **no** reply op and is
+   flagged; a confirmation carrying an injection produces no proposal at all (Slack `#purchasing` is told).
+5. **propose** (Vendor Liaison principal, `meta.workflowId: 'vendor-reply'`, analysis, changes, capChecks,
+   findings) → **await-decision** (same step id as restock) → **execute** → **finalize**.
+
+`resumeRunOnDecision` resumes whichever workflow created the proposal (`meta.workflowId`: `restock` or
+`vendor-reply`; `RestockLauncher.resumeAfterDecision(runId, data, workflowId)`).
+
+## Slack approvals (`src/slack/`, `src/api/webhooks-slack.ts`)
+
+`SlackApprovals` (`@slack/web-api` WebClient; emulator by default: `SLACK_API_URL=http://localhost:4700/slack/api/`,
+`SLACK_BOT_TOKEN=xoxb-emulator-goldencoast-ops-agent`; empty token disables Slack) is the workflows' `notifier`:
+
+- A proposal entering `pending_approval` (restock or vendor-reply) is posted to `SLACK_APPROVALS_CHANNEL`
+  (`#ops-approvals`) as Block Kit: title, total, op count, policy outcome, ops grouped by system
+  (`ERP · distru`, `Other · composio`, high-risk marked), the non-pass policy reasons, a flag line for ignored
+  untrusted text, and **Approve** / **Reject** / **Open proposal** (`WEB_BASE_URL` or the first `WEB_ORIGIN` +
+  `/approvals/<id>`).
+- `POST /api/webhooks/slack`: `ingestWebhook('slack.interaction')` checks `x-slack-signature` v0 over the raw body
+  with a 300 s timestamp window (`SLACK_SIGNING_SECRET`; 401 otherwise), parses `block_actions`, maps the member to
+  an Ops Agent user by email (`users.info` → `user` table: `olivia`/operator@demo.dev, `adam`/approver@demo.dev) and
+  calls the same `proposals.decide` as the UI (`harness.decide` with that user's principal, then the resume hook).
+  An operator gets an ephemeral "Only approvers can decide" (the harness's scope check refuses), a second click an
+  ephemeral "Already decided: approved by …", an unlinked member an ephemeral too. On success the message is
+  `chat.update`d (buttons replaced by "Approved by Adam Approver … via Slack"). Events API deliveries to the same
+  URL are verified and acknowledged (URL-verification challenge answered).
+- Run notifications to `SLACK_NOTIFY_CHANNEL` (`#purchasing`): proposal created / auto-approved / denied,
+  executed (verified or not), failed (which op), rejected, and flagged vendor emails.
+- Best-effort: every Slack failure is logged and swallowed, never failing a workflow step.
+
 ## Agents and the restock workflow
 
 - Agents (`src/mastra/agents/`): Ops Lead (supervisor via Mastra `agents` subagents, Memory, read-only +
   `start_restock_run`), Inventory Analyst, Procurement Planner (only one with `propose_*`), Compliance Reviewer,
-  Policy Critic. Scopes, tool allowlists and budgets in `roster.ts`; models per agent from env (`*_MODEL`, default
+  Policy Critic, and the Vendor Liaison (vendor-reply loop only). Scopes, tool allowlists and budgets in `roster.ts`; models per agent from env (`*_MODEL`, default
   `OPS_AGENT_MODEL`). Tools are generated from `registry.catalog(principal)` (`src/mastra/tools/harness-tools.ts`).
 - `propose_*` tools never write: inside a workflow run they add an op to the run's draft (same vendor + location
   replaces), outside one they call `harness.propose` (pending proposal).
@@ -143,6 +205,80 @@ Emails, tasks and buyer caps are `moneyless` (value 0), so `max_total_value` sti
   Distru mock on :4500 (REST + MCP), the Headset mock on :4600 (`bun run dev:headset`), the server and
   `bun run inngest:dev`). Prints ops per system, retail-driven picks, guard caps, emails, tasks and cost.
 
+## MCP server (`/mcp`): the harness for Claude Code / Codex
+
+`src/mastra/mcp/ops-mcp.ts` (tools) + `src/api/mcp-http.ts` (route) + `src/services/mcp-tokens.ts`.
+
+- **Auth**: an approver creates a token in Settings or with `POST /api/mcp-tokens { name, scopes }`
+  (`scopes` ⊆ `read | propose | approve`, `read` implied). The response holds the plaintext
+  `ops_mcp_…` once; only its SHA-256 is stored (`mcp_token`). Each request maps to
+  `mcpClientPrincipal(tokenId, scopes)`; `DELETE /api/mcp-tokens/:id` revokes it on the next request.
+  Sessions are not accepted on /mcp. Token create/revoke are audited.
+- **Tools are the principal's**: one @mastra/mcp `MCPServer` per scope set, generated from
+  `registry.catalog(principal)`, so a read-only token never sees a `propose_*` tool; the harness
+  re-checks every scope anyway. Separation of duties: a token can't decide what it proposed.
+- **Distru conventions**: every tool takes `intent` (audited as `mcp.tool_called` with the token id,
+  and forwarded to Distru's MCP as its `intent` on bridged reads); `get_me` first; lists page with
+  `limit` + `cursor` → `{ items, hasMore, nextCursor }`.
+- **Tools**: `get_me`; every registry read tool (`distru_*`, `headset_*`, `distru_mcp_*`, …); with
+  `propose`: every `propose_*` (calls `harness.propose`, returns proposal id, op summaries + diff,
+  policy outcome; never writes), `propose_undo`, `start_restock_run`; `list_proposals`, `get_proposal`
+  (full ops + diff + undo info), `list_audit_events`, `get_run`; with `approve`: `decide_proposal`.
+- Approved proposals that no workflow waits on (MCP, undo) are executed by the Inngest function
+  `proposal-execute` (`ops/proposal.execute`, one durable step per op); auto-approved MCP proposals too.
+- `bun run mcp:smoke`: signs in as the approver, creates a throwaway token, lists tools, calls
+  `get_me`, a read tool and `propose_distru_purchases_upsert` with the MCP SDK client, then revokes it.
+
+Claude Code (`.mcp.json` in the repo root, or `claude mcp add --transport http ops-agent http://localhost:4111/mcp --header "Authorization: Bearer $OPS_MCP_TOKEN"`):
+
+```json
+{
+  "mcpServers": {
+    "ops-agent": {
+      "type": "http",
+      "url": "http://localhost:4111/mcp",
+      "headers": { "Authorization": "Bearer ${OPS_MCP_TOKEN}" }
+    }
+  }
+}
+```
+
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.ops-agent]
+url = "http://localhost:4111/mcp"
+bearer_token_env_var = "OPS_MCP_TOKEN"
+```
+
+The server speaks MCP 2026-07-28 and serves 2025-era clients (that open with `initialize`) statelessly.
+
+## Undo
+
+`POST /api/proposals/:id/undo` (or MCP `propose_undo`) → `harness.undo` (packages/harness README,
+"Undo / rollback"): a new proposal of compensating ops in reverse order that needs an approver.
+Compensations: Distru PO created → `DELETE /purchases/{id}` while never received (Distru has no
+cancelled status), PO updated → restore the previous lines/notes, Distru task → delete, Distru MCP
+`mutate_product` (buyer cap) → `UPDATE` back to the `before` value. Vendor emails are listed as not
+undoable. Window: `UNDO_WINDOW_HOURS` (default 168). The proposal detail's `undo` block drives the UI.
+
+## A2A
+
+Mastra's built-in A2A routes expose every registered agent; the Ops Lead is
+`GET /api/.well-known/ops-lead/agent-card.json` (discovery) and `POST /api/a2a/ops-lead` (JSON-RPC:
+`message/send`, `message/stream`, `tasks/get`, …; `A2A-Version: 1.0` for v1). `MastraServer` gets an
+`InMemoryTaskStore` (required for execution; paused tasks resume only on the same process). Auth: a
+Better Auth session, or an MCP token (card: any valid token; execution: `propose`, because the Ops Lead
+can start a restock run); the token is accepted on these two routes only.
+
+```bash
+curl -H "Authorization: Bearer $OPS_MCP_TOKEN" http://localhost:4111/api/.well-known/ops-lead/agent-card.json
+curl -X POST http://localhost:4111/api/a2a/ops-lead -H "Authorization: Bearer $OPS_MCP_TOKEN" -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"kind":"message","role":"user","messageId":"m1","parts":[{"kind":"text","text":"Which SKUs are at risk in Oakland?"}]}}}'
+```
+
+From another Mastra app: `new A2AAgent({ url: '<host>/api/.well-known/ops-lead/agent-card.json', headers: { Authorization: 'Bearer …' } })`.
+
 ## Layout
 
 ```
@@ -154,14 +290,17 @@ apps/agent/
 │   ├── api/
 │   │   ├── schemas.ts        zod 4 boundary schemas, each with .meta({ id }) for stable OpenAPI names
 │   │   ├── routes.ts         OpenAPIHono routes + /api/openapi.json
+│   │   ├── ops-routes.ts     MCP tokens, undo, policy rules, locations (schemas in schemas-ops.ts)
+│   │   ├── mcp-http.ts       /mcp: token → principal → MCPServer.startHTTP
 │   │   └── services.ts       ApiServices interface (injected, so routes are testable without a DB)
 │   ├── auth/
 │   │   ├── auth.ts           Better Auth 1.7.7 (email+password, `role` additionalField, bearer plugin)
 │   │   ├── session.ts        session resolver, sessionMiddleware, requireUser, requireRole(...)
-│   │   └── mastra-auth.ts    MastraAuthProvider that reuses the Better Auth session for built-ins
+│   │   ├── mastra-auth.ts    MastraAuthProvider that reuses the Better Auth session for built-ins
+│   │   └── a2a-tokens.ts     MCP tokens accepted on the two A2A routes
 │   ├── db/
 │   │   ├── schema.ts         Drizzle: Better Auth tables + proposal (versioned), proposal_op, approval,
-│   │   │                     audit_event, policy_rule (harness rule configs), eval_run
+│   │   │                     audit_event (+ request_id), policy_rule (harness rule configs), eval_run, mcp_token
 │   │   ├── client.ts         drizzle(postgres-js)
 │   │   └── seed.ts           demo users + default policy rules (idempotent)
 │   ├── harness/              @ops/harness ports on Drizzle + createAppHarness (see "The harness in this app")
@@ -173,7 +312,7 @@ apps/agent/
 │       ├── agents/ops-agent.ts  placeholder supervisor agent (model router string)
 │       ├── workflows/hello.ts   2-step workflow with one suspend/resume point
 │       ├── tools/            harness-generated tools (propose_* / read tools) — empty for now
-│       ├── mcp/              our MCP server (read/propose/approve scopes) — empty for now
+│       ├── mcp/ops-mcp.ts    our MCP server: MCPServer per token scope set (served at /mcp by src/api/mcp-http.ts)
 │       └── scorers/          eval scorers — empty for now
 ├── scripts/verify-hello-workflow.ts   e2e: sign in → start → suspended → resume → success
 ├── test/                     bun tests: role guard, decision route (auth + harness error mapping),
@@ -187,15 +326,23 @@ apps/agent/
 |---|---|---|
 | `GET /api/health` | public | includes a DB ping |
 | `GET /api/me` | session | `{ id, email, name, role }` |
-| `GET /api/proposals?status=&limit=` | session | summaries (status, version, policy outcome, total, actions) |
-| `GET /api/proposals/:id` | session | harness shape: ops with diff/payload/before/result, policy evaluation with reasons, status, version, decision, execution |
+| `GET /api/proposals?status=&limit=&offset=` | session | summaries: status, version, policy outcome, total, actions, `maxRisk`, `opSummaries[]` (summary, risk, status, value, `connector {id, system}`, `reaches` from the MCP bridge classification), `undoOf` |
+| `GET /api/proposals/:id` | session | harness shape: ops with diff/payload/before/result, policy evaluation with reasons, status, version, decision, execution, plus `undo: { available, reason, ops: [{ opIndex, canUndo, reason, undoProposalId }], undoProposalId, undoOf, until }` |
+| `POST /api/proposals/:id/undo` | operator/approver | `{ reason, opIndexes? }` → `harness.undo` → 201 `{ proposal }` = a NEW pending undo proposal (needs an approver; never auto-approved). 409 `undo_unavailable` (+ `undo` info), 400 when a record moved on (e.g. PO received) |
 | `POST /api/proposals/:id/decision` | **approver** | `{ decision: 'approve'\|'reject', reason?, edits? }` → `harness.decide` with `userPrincipal(user.id, role)`. Errors: 400 `InputValidationError`, 403 `ForbiddenError` (scope, separation of duties), 404 `NotFoundError`, 409 `decision_conflict` / `concurrent_modification` / `policy_denied` (+ `evaluation`). After the decision, the suspended restock run (`meta.workflowRunId`) is resumed (idempotent no-op unless suspended) |
-| `GET /api/audit-events?proposalId=&type=&order=&limit=` | session | newest first by default; `order=asc` for a timeline |
-| `GET /api/runs?limit=` | session | restock runs from Mastra run storage, each with its linked proposal |
-| `GET /api/runs/:id` | session | status, input/result, step timeline with agent calls (tokens, cost estimate, tool calls), suspend payload, linked proposal |
+| `GET /api/audit-events?proposalId=&type=&order=&limit=&offset=` | session | newest first by default; `order=asc` for a timeline. Each event has `requestId` (the `x-request-id` of the API/MCP call that caused it) and, for op events, the op's `idempotencyKey` and `diff` |
+| `GET /api/runs?limit=` | session | restock runs from Mastra run storage, each with its linked proposal and `totals` (tokens, cost, agent/tool calls) |
+| `GET /api/runs/:id` | session | status, input/result, step timeline with agent calls (tokens, cost estimate, tool calls with trimmed `args` / `result`; untrusted text stays wrapped), suspend payload, linked proposal |
 | `POST /api/runs` | operator/approver | `{ scenarioNote?, locationIds?, vendorIds?, productIds? }` → 202 `{ runId }` (503 if Inngest is down) |
 | `GET /api/connectors` | session | connector health + tool catalogue |
-| `POST /api/webhooks/distru` | HMAC (`x-distru-signature`, `DISTRU_WEBHOOK_SECRET`) | ORDER CREATE → Inngest `ops/restock.requested` → restock run scoped to the ordered products |
+| `GET /api/locations` | session | own Distru locations (ids for `POST /api/runs`), cached 5 min |
+| `GET /api/policy-rules` · `PUT /api/policy-rules` | session · **approver** | rules + rule types (params JSON Schema); PUT replaces the set, validated against the engine's rules (400 `invalid_policy` + issues), audited `policy.changed` |
+| `POST /api/mcp-tokens` · `GET` · `DELETE /api/mcp-tokens/:id` | **approver** | per-client MCP tokens (see "MCP server"): create returns the token once |
+| `/mcp` | MCP token (`Bearer ops_mcp_…`) | our MCP server (Streamable HTTP). Not in OpenAPI |
+| `GET /api/.well-known/ops-lead/agent-card.json`, `POST /api/a2a/ops-lead` | session or MCP token | Mastra built-in A2A (see "A2A") |
+| `POST /api/webhooks/distru` | HMAC (`x-distru-signature`, `DISTRU_WEBHOOK_SECRET`) | trigger `distru.order_created` (`ingestWebhook`, audited); ORDER CREATE → Inngest `ops/restock.requested` → restock run scoped to the ordered products |
+| `POST /api/webhooks/composio` | Standard Webhooks signature (`COMPOSIO_WEBHOOK_SECRET`) | trigger `composio.gmail.new_message` → Inngest `composio/gmail.new_message` (deduped by webhook id) → vendor-reply run. Not in OpenAPI (provider-shaped body) |
+| `POST /api/webhooks/slack` | `x-slack-signature` v0 (`SLACK_SIGNING_SECRET`, 300 s window) | trigger `slack.interaction`: Approve / Reject buttons → `harness.decide` as the mapped user. Not in OpenAPI |
 | `GET /api/openapi.json` | public | OpenAPI 3.1 for the routes above (Orval input) |
 | `/api/auth/*` | Better Auth | `sign-in/email`, `sign-up/email` (sign-up is disabled in production), `get-session`, ... |
 | `/api/inngest` | Inngest signing | serves Mastra workflows as Inngest functions |

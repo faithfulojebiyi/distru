@@ -13,6 +13,10 @@ export const ToolCallTraceSchema = z
     durationMs: z.number().nonnegative(),
     ok: z.boolean(),
     error: z.string().nullable(),
+    /** Tool input (trimmed with `trimForTrace`). */
+    args: z.unknown().optional(),
+    /** Tool output (trimmed; untrusted ERP text stays wrapped as-is). */
+    result: z.unknown().optional(),
   })
   .meta({ id: 'ToolCallTrace' });
 export type ToolCallTrace = z.infer<typeof ToolCallTraceSchema>;
@@ -61,4 +65,31 @@ export function sumTrace(entries: readonly AgentTraceEntry[]): { tokens: TokenUs
     costUsd += e.costUsd;
   }
   return { tokens, costUsd: Math.round(costUsd * 1_000_000) / 1_000_000 };
+}
+
+const isUntrustedWrapper = (v: Record<string, unknown>) => typeof v.untrusted_text === 'string' && 'source' in v;
+
+/**
+ * Bounded copy of a tool input/output for the run timeline: arrays keep their first `maxItems`
+ * (plus a `{ _truncated: n }` marker), long strings are cut, depth is capped. Untrusted-text
+ * wrappers (`{ untrusted_text, source, suspicious }`) are kept exactly as-is so the UI shows the
+ * quoted data, flagged, never as instructions.
+ */
+export function trimForTrace(value: unknown, opts: { maxItems?: number; maxString?: number; maxDepth?: number } = {}): unknown {
+  const maxItems = opts.maxItems ?? 20;
+  const maxString = opts.maxString ?? 2000;
+  const maxDepth = opts.maxDepth ?? 6;
+  const walk = (v: unknown, depth: number): unknown => {
+    if (typeof v === 'string') return v.length > maxString ? `${v.slice(0, maxString)}… [${v.length - maxString} more chars]` : v;
+    if (v === null || typeof v !== 'object') return v;
+    if (depth >= maxDepth) return Array.isArray(v) ? `[array(${v.length})]` : '[object]';
+    if (Array.isArray(v)) {
+      const head = v.slice(0, maxItems).map((x) => walk(x, depth + 1));
+      return v.length > maxItems ? [...head, { _truncated: v.length - maxItems }] : head;
+    }
+    const rec = v as Record<string, unknown>;
+    if (isUntrustedWrapper(rec)) return { ...rec };
+    return Object.fromEntries(Object.entries(rec).map(([k, x]) => [k, walk(x, depth + 1)]));
+  };
+  return walk(value, 0);
 }

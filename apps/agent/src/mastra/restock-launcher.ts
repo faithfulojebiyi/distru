@@ -1,8 +1,19 @@
 import type { Mastra } from '@mastra/core';
+import { GmailNewMessageEventSchema } from '@ops/connector-composio';
 import { z } from 'zod';
 
 export const RESTOCK_WORKFLOW_KEY = 'restockWorkflow';
 export const RESTOCK_WORKFLOW_ID = 'restock';
+export const VENDOR_REPLY_WORKFLOW_KEY = 'vendorReplyWorkflow';
+export const VENDOR_REPLY_WORKFLOW_ID = 'vendor-reply';
+
+/** Workflows that suspend on `await-decision` for a proposal: workflow id (proposal `meta.workflowId`) → Mastra key. */
+export const DECISION_WORKFLOWS = {
+  [RESTOCK_WORKFLOW_ID]: RESTOCK_WORKFLOW_KEY,
+  [VENDOR_REPLY_WORKFLOW_ID]: VENDOR_REPLY_WORKFLOW_KEY,
+} as const;
+export type DecisionWorkflowId = keyof typeof DECISION_WORKFLOWS;
+export const isDecisionWorkflowId = (id: unknown): id is DecisionWorkflowId => typeof id === 'string' && Object.hasOwn(DECISION_WORKFLOWS, id);
 
 /** What starts a restock run: who/what triggered it and an optional scope. */
 export const RestockTriggerSchema = z
@@ -50,6 +61,19 @@ export class RestockLauncher {
     return this.mastra.getWorkflow(RESTOCK_WORKFLOW_KEY);
   }
 
+  /** A workflow that waits on a proposal decision, by its workflow id (`restock`, `vendor-reply`). */
+  decisionWorkflow(id: DecisionWorkflowId) {
+    return this.mastra.getWorkflow(DECISION_WORKFLOWS[id]);
+  }
+
+  /** Starts a vendor-reply run for a (verified, normalized) Composio Gmail event. Fire-and-forget. */
+  async startVendorReply(event: unknown, options: { runId?: string } = {}): Promise<StartedRun> {
+    const workflow = this.decisionWorkflow(VENDOR_REPLY_WORKFLOW_ID);
+    const run = await workflow.createRun(options.runId ? { runId: options.runId } : {});
+    await run.startAsync({ inputData: GmailNewMessageEventSchema.parse(event) });
+    return { runId: run.runId };
+  }
+
   /** Fire-and-forget start; returns the run id immediately. */
   async start(input: RestockTrigger, options: { resourceId?: string } = {}): Promise<StartedRun> {
     const inputData = RestockTriggerSchema.parse(input);
@@ -63,8 +87,8 @@ export class RestockLauncher {
    * (a second click, a retried request or a resume that already happened are no-ops). Returns
    * whether a resume was dispatched. Does not wait for execution to finish.
    */
-  async resumeAfterDecision(runId: string, data: RestockResume): Promise<boolean> {
-    const workflow = this.workflow();
+  async resumeAfterDecision(runId: string, data: RestockResume, workflowId: DecisionWorkflowId = RESTOCK_WORKFLOW_ID): Promise<boolean> {
+    const workflow = this.decisionWorkflow(workflowId);
     const state = await workflow.getWorkflowRunById(runId, { fields: ['steps'] });
     if (!state || state.status !== 'suspended') return false;
     const run = await workflow.createRun({ runId });
@@ -75,7 +99,7 @@ export class RestockLauncher {
     } else {
       // Default engine: resume runs in-process; claim happens synchronously, the rest continues in the background.
       void run.resume(params).catch((err: unknown) => {
-        this.mastra.getLogger()?.error('restock resume failed', { runId, error: err instanceof Error ? err.message : String(err) });
+        this.mastra.getLogger()?.error(`${workflowId} resume failed`, { runId, error: err instanceof Error ? err.message : String(err) });
       });
     }
     return true;

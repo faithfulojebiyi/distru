@@ -240,6 +240,8 @@ export const auditEvent = pgTable(
     actorId: text('actor_id').notNull(),
     proposalId: uuid('proposal_id'),
     opIndex: integer('op_index'),
+    /** Request that caused the event (HTTP `x-request-id` / generated, MCP request), when known. */
+    requestId: text('request_id'),
     data: jsonb('data').$type<Record<string, unknown>>().notNull(),
     at: timestamp('at', { withTimezone: true }).notNull(),
   },
@@ -273,4 +275,27 @@ export const evalRun = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('eval_run_scenario_idx').on(t.scenario, t.createdAt)],
+);
+
+/**
+ * Per-client API tokens for our MCP server (Claude Code, Codex, A2A callers). Created by an approver;
+ * the plaintext is shown once and only its SHA-256 is stored. `scopes` ⊆ read / propose / approve.
+ * Each MCP request maps to `mcpClientPrincipal(id, scopes)`; revoked tokens stop working immediately.
+ */
+export const mcpToken = pgTable(
+  'mcp_token',
+  {
+    id: uuid('id').primaryKey(),
+    name: text('name').notNull(),
+    /** hex SHA-256 of the full token (`ops_mcp_…`). */
+    tokenHash: text('token_hash').notNull().unique(),
+    /** First characters of the token, for recognising it in lists (never enough to use it). */
+    prefix: text('prefix').notNull(),
+    scopes: jsonb('scopes').$type<Array<'read' | 'propose' | 'approve'>>().notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [index('mcp_token_created_idx').on(t.createdAt)],
 );

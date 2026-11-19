@@ -1,6 +1,7 @@
 import type { AuditEvent, AuditSink } from '@ops/harness';
 import type { DB } from '../db/client';
 import { auditEvent } from '../db/schema';
+import { currentRequestId } from './request-context';
 
 /** Maps a harness AuditEvent onto `audit_event` columns (+ the type-specific `data`). */
 export function auditValues(event: AuditEvent): typeof auditEvent.$inferInsert {
@@ -14,6 +15,7 @@ export function auditValues(event: AuditEvent): typeof auditEvent.$inferInsert {
     actorId: event.actor.id,
     proposalId: event.proposalId,
     opIndex,
+    requestId: currentRequestId(),
     data,
     at: new Date(event.at),
   };

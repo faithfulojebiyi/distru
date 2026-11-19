@@ -1,7 +1,7 @@
 import { PrincipalSchema, type BudgetLimits, type Principal, type Scope } from '@ops/harness';
 
 /**
- * The five agents: ids, display names, harness scopes, which registry tools each may see, and
+ * The agents: ids, display names, harness scopes, which registry tools each may see, and
  * per-agent budgets. One place, so the scope model (read / propose; never approve) is auditable.
  */
 export const AGENTS = {
@@ -10,6 +10,8 @@ export const AGENTS = {
   procurementPlanner: { id: 'procurement-planner', name: 'Procurement Planner', scopes: ['read', 'propose'] },
   complianceReviewer: { id: 'compliance-reviewer', name: 'Compliance Reviewer', scopes: ['read'] },
   policyCritic: { id: 'policy-critic', name: 'Policy Critic', scopes: ['read'] },
+  // Authors vendor-reply proposals (propose scope), but has only read tools: the workflow assembles ops in code.
+  vendorLiaison: { id: 'vendor-liaison', name: 'Vendor Liaison', scopes: ['read', 'propose'] },
 } as const satisfies Record<string, { id: string; name: string; scopes: readonly Exclude<Scope, 'approve'>[] }>;
 
 export type AgentKey = keyof typeof AGENTS;
@@ -48,6 +50,7 @@ export const AGENT_TOOLS: Record<AgentKey, readonly string[]> = {
   procurementPlanner: ['distru.vendors', 'distru.vendor_purchase_history', 'distru.products_get', 'distru.purchases.upsert', 'distru_mcp.mutate_product'],
   complianceReviewer: ['distru.compliance_check', 'distru.products_get'],
   policyCritic: ['distru.vendors', 'distru.products_get'],
+  vendorLiaison: ['distru.vendor_purchase_history', 'distru.products_get', 'composio.gmail_fetch_message_by_thread_id', 'composio.gmail_fetch_message_by_message_id'],
 };
 
 /** Per-agent budget for one agent call (tool calls = steps). The run budget caps the sum. */
@@ -58,6 +61,7 @@ export const AGENT_BUDGETS: Record<AgentKey, BudgetLimits> = {
   procurementPlanner: { maxSteps: 20, maxTokens: 300_000, maxCostUsd: 2, maxWallClockMs: 4 * 60_000 },
   complianceReviewer: { maxSteps: 16, maxTokens: 250_000, maxCostUsd: 2, maxWallClockMs: 4 * 60_000 },
   policyCritic: { maxSteps: 6, maxTokens: 120_000, maxCostUsd: 1, maxWallClockMs: 2 * 60_000 },
+  vendorLiaison: { maxSteps: 6, maxTokens: 120_000, maxCostUsd: 0.5, maxWallClockMs: 2 * 60_000 },
 };
 
 /** Whole restock run (sum over every agent call), checked before each agent call. */
@@ -70,4 +74,5 @@ export const AGENT_MAX_STEPS: Record<AgentKey, number> = {
   procurementPlanner: 12,
   complianceReviewer: 12,
   policyCritic: 4,
+  vendorLiaison: 4,
 };

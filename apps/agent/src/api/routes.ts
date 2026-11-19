@@ -23,9 +23,12 @@ import {
   ProposalListSchema,
   RunListSchema,
 } from './schemas';
-import { DistruWebhookSchema, restockScopeFor, verifyDistruSignature } from './distru-webhook';
+import { ingestWebhook, triggerSource } from '@ops/harness';
+import { distruOrderCreatedTrigger, DistruOrderCreatedEventSchema, DISTRU_ORDER_TRIGGER_ID } from './distru-webhook';
+import { discardAudit } from './webhook-support';
 import { toHttpError } from './harness-errors';
 import type { ApiServices } from './services';
+import { registerOpsRoutes } from './ops-routes';
 import { z } from 'zod';
 
 export const OPENAPI_PATH = '/api/openapi.json';
@@ -308,29 +311,24 @@ export function createApiRoutes(services: ApiServices) {
 
   api.openapi(distruWebhookRoute, async (c) => {
     const raw = await c.req.raw.clone().text();
-    if (!verifyDistruSignature(raw, c.req.header('x-distru-signature'), services.webhooks.distruSecret)) {
-      return c.json({ error: 'invalid_signature', message: 'Missing or invalid x-distru-signature' }, 401);
-    }
-    let parsedJson: unknown;
-    try {
-      parsedJson = JSON.parse(raw);
-    } catch {
-      return c.json({ error: 'invalid_body', message: 'Body is not JSON' }, 400);
-    }
-    const hook = DistruWebhookSchema.safeParse(parsedJson);
-    if (!hook.success) return c.json({ error: 'invalid_body', message: 'Not a Distru webhook envelope' }, 400);
-    const scope = restockScopeFor(hook.data);
-    if (!scope) {
-      return c.json({ ok: true as const, action: 'ignored' as const, reason: `${hook.data.type} ${hook.data.event} does not trigger a restock` }, 200);
-    }
+    // Verify + normalize + audit through the Distru connector's trigger (`distru.order_created`).
+    const result = await ingestWebhook(triggerSource([distruOrderCreatedTrigger]), DISTRU_ORDER_TRIGGER_ID, raw, c.req.raw.headers, { DISTRU_WEBHOOK_SECRET: services.webhooks.distruSecret }, {
+      audit: services.webhooks.audit ?? discardAudit,
+    });
+    if (result.status === 'rejected') return c.json({ error: result.reason, message: result.message }, result.httpStatus);
+    if (result.status === 'ignored') return c.json({ ok: true as const, action: 'ignored' as const, reason: 'Only ORDER CREATE (with products) triggers a restock' }, 200);
+    const order = DistruOrderCreatedEventSchema.parse(result.event.data);
     await services.webhooks.requestRestock({
-      triggeredBy: `webhook:distru (ORDER ${hook.data.id})`,
-      productIds: scope.productIds,
-      ...(scope.locationIds.length ? { locationIds: scope.locationIds } : {}),
-      scenarioNote: `New sales order ${hook.data.id}: check whether the ordered products need restocking.`,
+      triggeredBy: `webhook:distru (ORDER ${order.orderId})`,
+      productIds: order.productIds,
+      ...(order.locationIds.length ? { locationIds: order.locationIds } : {}),
+      scenarioNote: `New sales order ${order.orderId}: check whether the ordered products need restocking.`,
     });
     return c.json({ ok: true as const, action: 'restock_requested' as const, reason: null }, 200);
   });
+
+  // MCP tokens, undo, policy rules, locations (src/api/ops-routes.ts).
+  registerOpsRoutes(api, services, session);
 
   api.doc31(OPENAPI_PATH, {
     openapi: '3.1.0',

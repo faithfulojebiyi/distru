@@ -15,7 +15,8 @@
     "verify:hello": "bun scripts/verify-hello-workflow.ts",
     "inngest:dev": "npx --yes --ignore-scripts=false inngest-cli@latest dev -u http://localhost:4111/api/inngest --no-discovery",
     "studio": "mastra studio",
-    "restock:demo": "bun scripts/restock-demo.ts"
+    "restock:demo": "bun scripts/restock-demo.ts",
+    "mcp:smoke": "bun scripts/mcp-smoke.ts"
   },
   "dependencies": {
     "@hono/zod-openapi": "^1.6.3",
@@ -27,14 +28,19 @@
     "@mastra/memory": "~1.41.2",
     "@mastra/observability": "~1.24.2",
     "@mastra/pg": "~1.37.0",
+    "@mastra/server": "1.85.0",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@ops/connector-composio": "workspace:*",
     "@ops/connector-distru": "workspace:*",
     "@ops/connector-email": "workspace:*",
     "@ops/connector-headset": "workspace:*",
     "@ops/connector-mcp": "workspace:*",
     "@ops/distru-client": "workspace:*",
     "@ops/harness": "workspace:*",
+    "@slack/web-api": "8.2.0",
     "better-auth": "1.7.7",
     "drizzle-orm": "^0.45.4",
+    "fetch-to-node": "2.1.0",
     "hono": "^4.13.19",
     "inngest": "~4.26.2",
     "postgres": "^3.4.7",
@@ -42,6 +48,8 @@
   },
   "devDependencies": {
     "@ops/distru-mock": "workspace:*",
+    "@ops/emulators": "workspace:*",
+    "@ops/emulators-server": "workspace:*",
     "@ops/headset-mock": "workspace:*",
     "@types/bun": "latest",
     "drizzle-kit": "^0.31.11",

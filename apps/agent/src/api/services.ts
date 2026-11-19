@@ -1,3 +1,4 @@
+import type { AuditSink, Principal } from '@ops/harness';
 import type { z } from 'zod';
 import type { SessionResolver, SessionUser } from '../auth/session';
 import type {
@@ -13,6 +14,7 @@ import type {
   RunSummary,
   StartRunRequest,
 } from './schemas';
+import type { CreateMcpTokenRequest, LocationList, McpToken, PolicyRule, PolicyRuleInput, PolicyRuleType, UndoRequest } from './schemas-ops';
 
 /** Everything the custom routes depend on. Injected so routes can be tested without a database. */
 export type ApiServices = {
@@ -41,9 +43,33 @@ export type ApiServices = {
   connectors: {
     list: () => Promise<ConnectorSummary[]>;
   };
+  /** POST /api/proposals/{id}/undo → harness.undo (a new compensating proposal; throws harness errors / UndoUnavailableError). */
+  undo: {
+    propose: (id: string, user: SessionUser, input: UndoRequest) => Promise<ProposalDetail>;
+  };
+  /** Per-client MCP tokens (approver only). */
+  mcpTokens: {
+    create: (user: SessionUser, input: CreateMcpTokenRequest) => Promise<{ token: string; record: McpToken }>;
+    list: () => Promise<McpToken[]>;
+    /** Null when the token does not exist. */
+    revoke: (user: SessionUser, id: string) => Promise<McpToken | null>;
+    /** Public URL of the MCP endpoint (for the create response). */
+    mcpUrl: string;
+  };
+  /** Policy rules (`policy_rule`); `replace` validates against the engine's rules (PolicyValidationError) and audits `policy.changed`. */
+  policyRules: {
+    list: () => Promise<PolicyRule[]>;
+    available: () => PolicyRuleType[];
+    replace: (actor: Principal, rules: PolicyRuleInput[]) => Promise<PolicyRule[]>;
+  };
+  locations: {
+    list: () => Promise<LocationList>;
+  };
   webhooks: {
     /** HMAC secret for `x-distru-signature`. */
     distruSecret: string;
+    /** Where `trigger.received` / `trigger.rejected` go (optional: route tests run without it). */
+    audit?: AuditSink;
     /** Emits the event that starts a restock run (Inngest `ops/restock.requested`). */
     requestRestock: (trigger: { triggeredBy: string; productIds?: string[]; locationIds?: string[]; scenarioNote?: string }) => Promise<void>;
   };

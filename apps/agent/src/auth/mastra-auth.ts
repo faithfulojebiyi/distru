@@ -26,20 +26,36 @@ export const MASTRA_STUDIO_AUTH_PATHS = ['/api/auth/capabilities', '/api/auth/me
  *   Mastra's credentials interface, so standalone Studio shows an email/password form that signs in
  *   through Better Auth and gets the normal session cookie. Sign-up from Studio is always disabled.
  */
+/**
+ * A2A callers may authenticate with a per-client MCP token instead of a session (see
+ * `a2aTokenUser`): returns the pseudo-user for a valid token allowed on this A2A request, else null.
+ */
+export type A2ATokenResolver = (token: string, request: { path: string; method: string }) => Promise<SessionUser | null>;
+
+/** `/api/.well-known/<agentId>/agent-card.json` (discovery) and `/api/a2a/<agentId>` (execution). */
+export const A2A_PATH = /^\/api\/(?:\.well-known\/[^/]+\/agent-card\.json|a2a\/[^/]+)$/;
+
 export class BetterAuthMastraProvider extends MastraAuthProvider<SessionUser> {
   constructor(
     private readonly resolve: SessionResolver,
     private readonly credentials?: CredentialsSignIn,
+    private readonly a2aTokens?: A2ATokenResolver,
   ) {
     super({ name: 'better-auth' });
     // Mastra detects capabilities by method presence, so only expose sign-in when it's enabled.
     if (!credentials) Object.defineProperty(this, 'signIn', { value: undefined });
   }
 
-  async authenticateToken(_token: string, request: MastraAuthRequest): Promise<SessionUser | null> {
-    const headers = getWebRequest(request)?.headers ?? ('headers' in request ? request.headers : undefined);
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<SessionUser | null> {
+    const web = getWebRequest(request);
+    const headers = web?.headers ?? ('headers' in request ? request.headers : undefined);
     if (!headers) return null;
-    return this.resolve(headers);
+    const user = await this.resolve(headers);
+    if (user || !this.a2aTokens || !web) return user;
+    // A2A only: a per-client MCP token (never accepted on the other built-in routes).
+    const path = new URL(web.url).pathname;
+    const bearer = /^Bearer\s+(\S+)$/i.exec(headers.get('authorization') ?? '')?.[1] ?? token;
+    return A2A_PATH.test(path) && bearer ? this.a2aTokens(bearer, { path, method: web.method }) : null;
   }
 
   authorizeUser(user: SessionUser): boolean {

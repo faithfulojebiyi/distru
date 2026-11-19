@@ -1,6 +1,10 @@
 import type { InngestFunction } from 'inngest';
 import { inngest, RESTOCK_REQUESTED_EVENT } from './inngest';
+import { morningRestockTrigger } from '../harness/triggers';
 import { RestockTriggerSchema, type RestockLauncher } from './restock-launcher';
+
+/** Emitted by POST /api/webhooks/composio (trigger `composio.gmail.new_message`). */
+export const COMPOSIO_GMAIL_EVENT = 'composio/gmail.new_message';
 
 export interface RestockFunctionOptions {
   /** Register the morning cron (RESTOCK_CRON_ENABLED=1). */
@@ -28,8 +32,23 @@ export function createRestockFunctions(launcher: RestockLauncher, options: Resto
     },
   );
   if (!options.cronEnabled) return [onEvent];
-  const cron = inngest.createFunction({ id: 'restock-cron', name: 'Restock: morning scan', triggers: [{ cron: options.cron }] }, async ({ step }) =>
+  // The schedule trigger (`schedule.morning_restock`) owns the cron expression.
+  const schedule = morningRestockTrigger(options.cron);
+  const cron = inngest.createFunction({ id: 'restock-cron', name: 'Restock: morning scan', triggers: [{ cron: schedule.cron }] }, async ({ step }) =>
     step.run('start-restock-run', () => launcher.start({ triggeredBy: 'cron', scenarioNote: 'Scheduled morning restock scan' })),
   );
   return [onEvent, cron];
+}
+
+/**
+ * `vendor-reply-on-email`: a verified Composio Gmail event (deduped by Inngest on the event id) starts
+ * one vendor-reply run in a memoized step, so an Inngest retry never starts a second run. The
+ * workflow itself ignores mail that is not a vendor reply to an open PO.
+ */
+export function createVendorReplyFunctions(launcher: RestockLauncher): InngestFunction.Like[] {
+  return [
+    inngest.createFunction({ id: 'vendor-reply-on-email', name: 'Vendor reply: on email', triggers: [{ event: COMPOSIO_GMAIL_EVENT }] }, async ({ event, step }) =>
+      step.run('start-vendor-reply-run', () => launcher.startVendorReply(event.data)),
+    ),
+  ];
 }

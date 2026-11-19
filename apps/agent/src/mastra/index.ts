@@ -3,6 +3,8 @@ import { MastraStorageExporter, Observability } from '@mastra/observability';
 import { PostgresStore } from '@mastra/pg';
 import { auth, signInWithEmail } from '../auth/auth';
 import { BetterAuthMastraProvider } from '../auth/mastra-auth';
+import { a2aTokenResolver } from '../auth/a2a-tokens';
+import { appMcpTokens } from '../services/app-mcp-tokens';
 import { betterAuthResolver } from '../auth/session';
 import { db } from '../db/client';
 import { env } from '../env';
@@ -12,10 +14,13 @@ import { appConnectors, appContexts } from '../harness/registry';
 import { createAgents, modelsFromEnv } from './agents';
 import { mcpServers } from './mcp';
 import { restockLauncher } from './restock-launcher';
+import { afterPropose, sendProposalApproved } from './proposal-executor';
 import { scorers } from './scorers';
 import { tools } from './tools';
 import { helloWorkflow } from './workflows/hello';
 import { createRestockWorkflow, type RestockDeps } from './workflows/restock';
+import { createVendorReplyWorkflow, type VendorReplyDeps } from './workflows/vendor-reply';
+import { appNotifier } from '../slack';
 
 /** What the restock workflow runs against: the app harness (Postgres), the Distru connector, the seeded policy. */
 export const restockDeps: RestockDeps = {
@@ -29,6 +34,20 @@ export const restockDeps: RestockDeps = {
   pricing: { inputUsdPerMTok: env.LLM_INPUT_USD_PER_MTOK, outputUsdPerMTok: env.LLM_OUTPUT_USD_PER_MTOK },
   findProposalByRunId: (runId) => findProposalByRunId(db, runId),
   crossTool: { taskOwnerRole: env.RESTOCK_TASK_OWNER_ROLE },
+  notifier: appNotifier,
+};
+
+/** The vendor-reply loop (Composio Gmail trigger → Vendor Liaison → proposal → approval → execute). */
+export const vendorReplyDeps: VendorReplyDeps = {
+  get registry() {
+    return appConnectors.registry;
+  },
+  harness: appHarness,
+  contexts: appContexts,
+  pricing: { inputUsdPerMTok: env.LLM_INPUT_USD_PER_MTOK, outputUsdPerMTok: env.LLM_OUTPUT_USD_PER_MTOK },
+  findProposalByRunId: (runId) => findProposalByRunId(db, runId),
+  notifier: appNotifier,
+  taskOwnerRole: env.RESTOCK_TASK_OWNER_ROLE,
 };
 
 /**
@@ -41,11 +60,14 @@ export const agents = createAgents({
   },
   harness: appHarness,
   readCtx: () => appContexts().read,
+  // A run-less auto-approved proposal (Copilot) is executed right away (Inngest `proposal-execute`).
+  afterPropose: afterPropose(sendProposalApproved),
   models: modelsFromEnv(env),
   launcher: restockLauncher,
 });
 
 export const restockWorkflow = createRestockWorkflow(restockDeps);
+export const vendorReplyWorkflow = createVendorReplyWorkflow(vendorReplyDeps);
 
 /**
  * The Mastra instance — the central registration point (https://mastra.ai/reference/project-structure):
@@ -54,7 +76,7 @@ export const restockWorkflow = createRestockWorkflow(restockDeps);
  */
 export const mastra = new Mastra({
   agents,
-  workflows: { helloWorkflow, restockWorkflow },
+  workflows: { helloWorkflow, restockWorkflow, vendorReplyWorkflow },
   tools,
   scorers,
   mcpServers,
@@ -81,6 +103,8 @@ export const mastra = new Mastra({
     auth: new BetterAuthMastraProvider(
       betterAuthResolver(auth),
       env.NODE_ENV === 'production' ? undefined : signInWithEmail,
+      // A2A (agent card + /api/a2a/:agentId) also accepts per-client MCP tokens (src/auth/a2a-tokens.ts).
+      a2aTokenResolver(appMcpTokens),
     ),
   },
   environment: env.NODE_ENV,

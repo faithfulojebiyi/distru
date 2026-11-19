@@ -89,6 +89,8 @@ const SUPERSEDED_DEFAULTS: Array<{ key: string; params: Record<string, unknown> 
   { key: RULE_KEYS.allowedActions, params: { actions: ['purchases.upsert'] } },
   // Before the cross-tool restock (emails, tasks, buyer caps), only POs were allowed.
   { key: RULE_KEYS.allowedActions, params: { actions: ['distru.purchases.upsert'] } },
+  // Before the vendor-reply loop (acknowledgement reply through Composio Gmail).
+  { key: RULE_KEYS.allowedActions, params: { actions: ['distru.purchases.upsert', 'distru_mcp.mutate_product', 'email.send_vendor_po', 'distru.tasks.create'] } },
 ];
 for (const old of SUPERSEDED_DEFAULTS) {
   const next = DEFAULT_POLICY.find((r) => r.key === old.key)!;

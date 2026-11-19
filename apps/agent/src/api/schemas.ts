@@ -158,6 +158,27 @@ export const ExecutionSchema = z
   })
   .meta({ id: 'Execution' });
 
+/** The connector (system) an op writes to, from the registry. */
+export const OpConnectorSchema = z
+  .object({ id: z.string(), system: z.string() })
+  .meta({ id: 'OpConnector' });
+
+/** One op of a proposal, for inbox rows: what it does, how risky, where it writes. */
+export const ProposalOpSummarySchema = z
+  .object({
+    index: z.number().int(),
+    action: z.string(),
+    summary: z.string().nullable(),
+    risk: RiskSchema,
+    status: OpStatusSchema,
+    value: z.number().nullable(),
+    /** Connector that executes the op (null when the action is no longer registered). */
+    connector: OpConnectorSchema.nullable(),
+    /** Systems the write reaches beyond the connector (MCP bridge classification, e.g. QuickBooks, Metrc); null when unknown. */
+    reaches: z.array(z.string()).nullable(),
+  })
+  .meta({ id: 'ProposalOpSummary' });
+
 export const ProposalSummarySchema = z
   .object({
     id: z.uuid(),
@@ -169,11 +190,43 @@ export const ProposalSummarySchema = z
     totalValue: z.number().nullable(),
     opCount: z.number().int(),
     actions: z.array(z.string()),
+    /** Highest op risk (null for a proposal without ops). */
+    maxRisk: RiskSchema.nullable(),
+    opSummaries: z.array(ProposalOpSummarySchema),
+    /** Set when this proposal undoes another one (`meta.undoOf.proposalId`). */
+    undoOf: z.string().nullable(),
     workflowRunId: z.string().nullable(),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
   })
   .meta({ id: 'ProposalSummary' });
+
+export const UndoOpInfoSchema = z
+  .object({
+    opIndex: z.number().int(),
+    action: z.string(),
+    summary: z.string().nullable(),
+    canUndo: z.boolean(),
+    /** Why the op cannot be undone (e.g. "The email was already delivered…"); null when it can. */
+    reason: z.string().nullable(),
+    /** The undo proposal covering this op (pending/approved/executing/executed/failed), if any. */
+    undoProposalId: z.string().nullable(),
+  })
+  .meta({ id: 'UndoOpInfo' });
+
+export const UndoInfoSchema = z
+  .object({
+    available: z.boolean(),
+    reason: z.string().nullable(),
+    ops: z.array(UndoOpInfoSchema),
+    /** Latest live undo proposal for this proposal (not rejected/denied). */
+    undoProposalId: z.string().nullable(),
+    /** This proposal is itself an undo of that proposal. */
+    undoOf: z.string().nullable(),
+    /** Undo allowed until (ISO) when an undo window is configured. */
+    until: z.string().nullable(),
+  })
+  .meta({ id: 'UndoInfo' });
 
 export const ProposalDetailSchema = ProposalSummarySchema.extend({
   rationale: z.string().nullable(),
@@ -182,6 +235,8 @@ export const ProposalDetailSchema = ProposalSummarySchema.extend({
   policy: PolicyEvaluationSchema,
   decision: DecisionSchema.nullable(),
   execution: ExecutionSchema.nullable(),
+  /** Which executed ops can be undone (POST /api/proposals/{id}/undo), and why not. */
+  undo: UndoInfoSchema,
 }).meta({ id: 'ProposalDetail' });
 
 export const ProposalListSchema = z
@@ -191,6 +246,8 @@ export const ProposalListSchema = z
 export const ListProposalsQuerySchema = z.object({
   status: ProposalStatusSchema.optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
+  /** Rows to skip (paging; the MCP server's cursors encode it). */
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
 });
 
 export const ProposalIdParamsSchema = z.object({ id: z.uuid() });
@@ -232,6 +289,11 @@ export const AuditEventSchema = z
     opIndex: z.number().int().nullable(),
     data: z.record(z.string(), z.unknown()),
     at: z.iso.datetime(),
+    /** Request that caused the event (`x-request-id`), when it came from an API or MCP call. */
+    requestId: z.string().nullable(),
+    /** For op events: the op's idempotency key and field-level diff (from the proposal). */
+    idempotencyKey: z.string().nullable(),
+    diff: z.array(FieldChangeSchema).nullable(),
   })
   .meta({ id: 'AuditEvent' });
 
@@ -245,6 +307,7 @@ export const ListAuditEventsQuerySchema = z.object({
   /** `desc` (default): newest first. `asc`: chronological, e.g. a proposal timeline. */
   order: z.enum(['asc', 'desc']).default('desc'),
   limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
 });
 
 export const RunStatusSchema = z
@@ -254,6 +317,15 @@ export const RunStatusSchema = z
 export const RunProposalLinkSchema = z
   .object({ id: z.uuid(), status: ProposalStatusSchema, title: z.string().nullable(), totalValue: z.number().nullable() })
   .meta({ id: 'RunProposalLink' });
+
+export const TokenUsageSchema = z
+  .object({ input: z.number().int(), output: z.number().int(), total: z.number().int() })
+  .meta({ id: 'RunTokenUsage' });
+
+/** Spend and activity of a run so far (sum over its agent calls). */
+export const RunTotalsSchema = z
+  .object({ tokens: TokenUsageSchema, costUsd: z.number(), agentCalls: z.number().int(), toolCalls: z.number().int() })
+  .meta({ id: 'RunTotals' });
 
 export const RunSummarySchema = z
   .object({
@@ -265,6 +337,7 @@ export const RunSummarySchema = z
     updatedAt: z.iso.datetime(),
     /** The proposal the run created (null before the propose step, or when nothing needed ordering). */
     proposal: RunProposalLinkSchema.nullable(),
+    totals: RunTotalsSchema,
   })
   .meta({ id: 'RunSummary' });
 
@@ -277,12 +350,18 @@ export const ListRunsQuerySchema = z.object({
 export const RunIdParamsSchema = z.object({ id: z.string().min(1).max(200) });
 
 export const ToolCallTraceSchema = z
-  .object({ tool: z.string(), startedAt: z.iso.datetime(), durationMs: z.number(), ok: z.boolean(), error: z.string().nullable() })
+  .object({
+    tool: z.string(),
+    startedAt: z.iso.datetime(),
+    durationMs: z.number(),
+    ok: z.boolean(),
+    error: z.string().nullable(),
+    /** Tool input as the agent sent it (trimmed: long arrays/strings cut, `_truncated` markers). */
+    args: z.unknown().optional(),
+    /** Tool output (trimmed the same way). ERP free text stays wrapped as `{ untrusted_text, source, suspicious }`. */
+    result: z.unknown().optional(),
+  })
   .meta({ id: 'RunToolCall' });
-
-export const TokenUsageSchema = z
-  .object({ input: z.number().int(), output: z.number().int(), total: z.number().int() })
-  .meta({ id: 'RunTokenUsage' });
 
 /** One agent call on the timeline (agent, the step that called it, tokens, cost estimate, tool calls). */
 export const RunAgentCallSchema = z
@@ -325,7 +404,6 @@ export const RunDetailSchema = RunSummarySchema.extend({
   error: z.string().nullable(),
   /** Steps in execution order, each with the agent calls it made. */
   steps: z.array(RunStepSchema),
-  totals: z.object({ tokens: TokenUsageSchema, costUsd: z.number(), agentCalls: z.number().int(), toolCalls: z.number().int() }),
   /** Payload of the suspended step (e.g. `{ proposalId }` while waiting for a decision). */
   suspendPayload: z.record(z.string(), z.unknown()).nullable(),
 }).meta({ id: 'RunDetail' });

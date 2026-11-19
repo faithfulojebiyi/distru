@@ -6,11 +6,13 @@ import {
   CancelledError,
   HarnessError,
   type Harness,
+  type Proposal,
   type Registry,
   type ToolDescriptor,
 } from '@ops/harness';
 import { previewOp } from '../../harness/dry-run';
 import { AGENT_TOOLS, principalFor, type AgentKey } from '../agents/roster';
+import { trimForTrace } from '../trace';
 import { agentRunFor, type AgentRun } from './run-context';
 
 /**
@@ -41,6 +43,11 @@ export interface HarnessToolDeps<TCtx> {
   harness: Harness<TCtx>;
   /** Context for reads and planning. */
   readCtx: () => TCtx;
+  /**
+   * After a run-less propose (Copilot, Studio): e.g. queue execution when policy auto-approved it
+   * (no workflow run will execute it). Errors are reported to the model, the proposal stays.
+   */
+  afterPropose?: (proposal: Proposal) => Promise<void>;
 }
 
 export type HarnessToolSet = ReturnType<typeof createHarnessTools>;
@@ -50,15 +57,19 @@ const errorMessage = (err: unknown) => (err instanceof Error ? err.message : Str
 /** Budget/cancel errors abort the agent call; anything else is reported to the model as a failed tool result. */
 const isFatal = (err: unknown) => err instanceof BudgetExceededError || err instanceof CancelledError;
 
-async function traced<T>(run: AgentRun, tool: string, fn: () => Promise<T>): Promise<T> {
+async function traced<T>(run: AgentRun, tool: string, args: unknown, fn: () => Promise<T>): Promise<T> {
   run.budget.charge({ steps: 1 });
   const started = Date.now();
+  const base = () => ({ tool, startedAt: new Date(started).toISOString(), durationMs: Date.now() - started, args: trimForTrace(args) });
   try {
     const out = await fn();
-    run.toolCalls.push({ tool, startedAt: new Date(started).toISOString(), durationMs: Date.now() - started, ok: true, error: null });
+    // A tool that reports `{ ok: false, error }` (validation, plan errors) is a failed call on the timeline.
+    const failed = typeof out === 'object' && out !== null && 'ok' in out && out.ok === false;
+    const error = failed && 'error' in out && typeof out.error === 'string' ? out.error : null;
+    run.toolCalls.push({ ...base(), ok: !failed, error, result: trimForTrace(out) });
     return out;
   } catch (err) {
-    run.toolCalls.push({ tool, startedAt: new Date(started).toISOString(), durationMs: Date.now() - started, ok: false, error: errorMessage(err) });
+    run.toolCalls.push({ ...base(), ok: false, error: errorMessage(err) });
     throw err;
   }
 }
@@ -81,7 +92,7 @@ export function createHarnessTools<TCtx>(deps: HarnessToolDeps<TCtx>, agent: Age
       execute: async (input, context): Promise<unknown> => {
         const run = agentRunFor(agent, context?.requestContext as RequestContext | undefined);
         try {
-          return await traced(run, d.toolName, () => registry.runReadTool(readCtx(), principal, d.name, input));
+          return await traced(run, d.toolName, input, () => registry.runReadTool(readCtx(), principal, d.name, input));
         } catch (err) {
           if (isFatal(err)) throw err;
           return { ok: false, error: errorMessage(err) };
@@ -101,7 +112,7 @@ export function createHarnessTools<TCtx>(deps: HarnessToolDeps<TCtx>, agent: Age
       execute: async (input, context): Promise<unknown> => {
         const run = agentRunFor(agent, context?.requestContext as RequestContext | undefined);
         try {
-          return await traced(run, d.toolName, async () => {
+          return await traced(run, d.toolName, input, async () => {
             assertScope(principal, 'propose');
             const preview = await previewOp(registry, readCtx(), principal, { action: d.name, input });
             if (run.draft) {
@@ -123,6 +134,7 @@ export function createHarnessTools<TCtx>(deps: HarnessToolDeps<TCtx>, agent: Age
               ...(preview.summary ? { title: preview.summary } : {}),
               meta: { source: 'agent-tool', agent: principal.id },
             });
+            await deps.afterPropose?.(proposal);
             return {
               ok: true,
               mode: 'proposal' as const,

@@ -33,6 +33,9 @@ const detail: ProposalDetail = {
   totalValue: 50,
   opCount: 0,
   actions: [],
+  maxRisk: null,
+  opSummaries: [],
+  undoOf: null,
   workflowRunId: null,
   createdAt: now,
   updatedAt: now,
@@ -42,6 +45,7 @@ const detail: ProposalDetail = {
   policy: { outcome: 'needs_approval', reasons: [] },
   decision: { decision: 'approve', by: approverPrincipal, reason: null, edited: false, at: now },
   execution: null,
+  undo: { available: false, reason: 'The proposal has no ops.', ops: [], undoProposalId: null, undoOf: null, until: null },
 };
 
 function setup(outcome: ProposalDetail | Error = detail) {

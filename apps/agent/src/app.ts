@@ -1,5 +1,6 @@
 import { type HonoBindings, type HonoVariables, MastraServer } from '@mastra/hono';
 import { serve as inngestServe } from '@mastra/inngest';
+import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { sql as dsql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -12,34 +13,51 @@ import { betterAuthResolver } from './auth/session';
 import { db } from './db/client';
 import { env } from './env';
 import { mastra } from './mastra';
-import { createRestockFunctions } from './mastra/functions';
+import { createRestockFunctions, createVendorReplyFunctions } from './mastra/functions';
+import { createWebhookRoutes } from './api/webhooks';
 import { inngest, RESTOCK_REQUESTED_EVENT } from './mastra/inngest';
 import { restockLauncher } from './mastra/restock-launcher';
-import { appHarness } from './harness/app';
-import { appConnectors, createAppCtx } from './harness/registry';
+import { appAuditSink, appHarness } from './harness/app';
+import { appConnectors, appContexts, appErrorClassifier, createAppCtx } from './harness/registry';
+import { createAppHarness } from './harness/harness';
+import { appPolicyEngine } from './harness/policy';
 import { createConnectorsService } from './services/connectors';
 import { createAuditService, createProposalService } from './services/proposals';
-import { createRunsService, dbProposalLinks, resumeRunOnDecision } from './services/runs';
+import { createRunsService, dbProposalLinks } from './services/runs';
+import { appAfterDecision, appOpSystems, createOpsServices } from './services/ops-wiring';
+import { createProposalExecutionFunctions } from './mastra/proposal-executor';
+import { requestIdMiddleware } from './harness/request-context';
 
-export function createServices(): ApiServices {
+export function createServices(): ApiServices & { mcpRoutes: ReturnType<typeof createOpsServices>['mcpRoutes'] } {
   const logger = () => mastra.getLogger();
+  const proposals = createProposalService(db, appHarness, createAppCtx, {
+    // Resume the workflow run waiting on this proposal (no-op unless suspended); an approval no run
+    // will execute (Copilot / MCP / script / undo proposals) is queued for `proposal-execute`.
+    onDecided: appAfterDecision,
+    onHookError: (err, proposalId) =>
+      logger()?.error('after-decision hook failed', { proposalId, error: err instanceof Error ? err.message : String(err) }),
+    systems: appOpSystems,
+  });
+  const audit = createAuditService(db);
+  const runs = createRunsService({ launcher: restockLauncher, proposalLinks: dbProposalLinks(db) });
+  const connectors = createConnectorsService(() => appConnectors.registry, createAppCtx, () => appConnectors.mcpStatus);
+  // MCP server + tokens, undo, policy rules, locations (src/services/ops-wiring.ts).
+  const ops = createOpsServices({ proposals, audit, runs, connectors });
   return {
     resolveSession: betterAuthResolver(auth),
     checkDatabase: async () => {
       await db.execute(dsql`select 1`);
       return true;
     },
-    proposals: createProposalService(db, appHarness, createAppCtx, {
-      // Resume the restock run that is waiting on this proposal (no-op unless it is suspended).
-      onDecided: resumeRunOnDecision(restockLauncher),
-      onHookError: (err, proposalId) =>
-        logger()?.error('resume after decision failed', { proposalId, error: err instanceof Error ? err.message : String(err) }),
-    }),
-    audit: createAuditService(db),
-    runs: createRunsService({ launcher: restockLauncher, proposalLinks: dbProposalLinks(db) }),
-    connectors: createConnectorsService(() => appConnectors.registry, createAppCtx, () => appConnectors.mcpStatus),
+    proposals,
+    audit,
+    runs,
+    connectors,
+    ...ops.api,
+    mcpRoutes: ops.mcpRoutes,
     webhooks: {
       distruSecret: env.DISTRU_WEBHOOK_SECRET,
+      audit: appAuditSink,
       requestRestock: async (data) => {
         await inngest.send({ name: RESTOCK_REQUESTED_EVENT, data });
       },
@@ -55,11 +73,17 @@ export function createServices(): ApiServices {
  *   /api/inngest       Inngest serve endpoint (Mastra workflows as Inngest functions)
  *   /api/health, /api/me, /api/proposals, /api/audit-events, /api/runs, /api/connectors,
  *   /api/webhooks/distru   custom typed routes
+ *   /api/webhooks/composio, /api/webhooks/slack   signed provider webhooks (src/api/webhooks.ts)
+ *   /api/mcp-tokens, /api/proposals/:id/undo, /api/policy-rules, /api/locations   (src/api/ops-routes.ts)
+ *   /mcp               our MCP server (Streamable HTTP, Bearer ops_mcp_… tokens)
  *   /api/openapi.json  OpenAPI 3.1 for the custom routes (Orval input)
  *   /api/agents, /api/workflows, /api/memory, ...   Mastra built-ins (Better Auth session required)
  */
-export async function createApp(services: ApiServices = createServices()) {
+export async function createApp(services: ApiServices & { mcpRoutes?: Hono } = createServices()) {
   const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+
+  // x-request-id in/out; audit events written during the request carry it (audit_event.request_id).
+  app.use('*', requestIdMiddleware);
 
   // Standalone Mastra Studio (`bun run studio`, http://localhost:3000) is a browser app on another
   // origin: allowed in development only. Production never trusts it.
@@ -82,13 +106,29 @@ export async function createApp(services: ApiServices = createServices()) {
   const mastraAuthPaths = new Set<string>(MASTRA_STUDIO_AUTH_PATHS);
   app.on(['GET', 'POST'], '/api/auth/*', (c, next) => (mastraAuthPaths.has(c.req.path) ? next() : auth.handler(c.req.raw)));
 
-  const functions = createRestockFunctions(restockLauncher, { cronEnabled: env.RESTOCK_CRON_ENABLED, cron: env.RESTOCK_CRON });
+  const functions = [
+    ...createRestockFunctions(restockLauncher, { cronEnabled: env.RESTOCK_CRON_ENABLED, cron: env.RESTOCK_CRON }),
+    ...createVendorReplyFunctions(restockLauncher),
+    ...createProposalExecutionFunctions({
+      harnessFor: (steps) => createAppHarness({ registry: () => appConnectors.registry, errors: appErrorClassifier, policyEngine: appPolicyEngine, steps, config: { undoWindowMs: env.UNDO_WINDOW_HOURS * 3_600_000 } }),
+      ctx: () => appContexts().execute,
+    }),
+  ];
   app.on(['GET', 'POST', 'PUT'], '/api/inngest', inngestServe({ mastra, inngest, functions }));
 
   app.route('/', createApiRoutes(services));
 
+  // Our MCP server (Streamable HTTP, per-client tokens): /mcp. See src/api/mcp-http.ts.
+  if (services.mcpRoutes) app.route('/', services.mcpRoutes);
+
+  // Signed provider webhooks outside the OpenAPI surface: POST /api/webhooks/composio (Composio
+  // triggers → Inngest) and POST /api/webhooks/slack (approval buttons). See src/api/webhooks.ts.
+  app.route('/', createWebhookRoutes(services));
+
   // Mastra built-in routes (agents, workflows, memory, observability, ...) under /api.
-  const mastraServer = new MastraServer({ app, mastra });
+  // `taskStore` enables Mastra's built-in A2A execution (/api/a2a/:agentId); without it message/send fails.
+  // In-memory: a paused A2A task resumes only on the process that started it (Mastra docs).
+  const mastraServer = new MastraServer({ app, mastra, taskStore: new InMemoryTaskStore() });
   await mastraServer.init();
 
   app.onError((err, c) => {
