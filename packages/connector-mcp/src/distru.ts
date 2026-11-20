@@ -425,6 +425,57 @@ async function planProductUndo(h: McpHookContext, op: CompensableOp, result: OpR
   return { current, target, summary, value: 0, args: done ? null : { action: 'UPDATE', id, ...target } };
 }
 
+// ── Inventory adjustments ───────────────────────────────────────────────────────────────────
+
+const AdjustmentResultSchema = z.object({ stockAdjustment: z.object({ id: z.string() }).passthrough() }).passthrough();
+const MetrcActivitiesSchema = z
+  .object({ items: z.array(z.object({ id: z.string(), status: z.string(), lastError: z.string().nullish(), type: z.string().nullish() }).passthrough()) })
+  .passthrough();
+
+/**
+ * `distru-adjust-inventory`: a signed delta on a package, batch or product. For a Metrc package Distru
+ * saves the change, then syncs it to Metrc in the background; when Metrc rejects it the Distru
+ * adjustment stays and the Metrc activity is FAILED. So the write "succeeds" while the state system
+ * disagrees, and only a read-back can tell: `verify` passes once the package has no FAILED or QUEUED
+ * Metrc activity (a license syncs in creation order, so none left means ours synced too), and
+ * otherwise reports the activity status and Metrc's error as mismatches. The op then fails with the
+ * Distru record id kept, and a resume re-verifies that record (the executor never adjusts twice:
+ * there is no field to stamp a key into, so `find` is absent and the executor record is the dedupe).
+ * Batch and product adjustments reach no state system and verify as written.
+ */
+export function adjustInventoryHooks(): McpToolHooks {
+  return {
+    recordIdOf: (parsed) => AdjustmentResultSchema.safeParse(parsed).data?.stockAdjustment.id,
+
+    verify: async (h, _recordId, payload): Promise<VerifyResult> => {
+      const packageId = str(payload.packageId);
+      if (!packageId) return { ok: true, mismatches: [] };
+      const parsed = MetrcActivitiesSchema.safeParse(
+        await h.read('distru-search-metrc-activities', { packageIds: [packageId], statuses: ['FAILED', 'QUEUED'], sortBy: { field: 'INSERTED_AT', direction: 'DESC' }, limit: 5 }),
+      );
+      if (!parsed.success) return { ok: false, mismatches: [{ path: ['metrc'], expected: 'Metrc sync history', actual: null }] };
+      const open = parsed.data.items[0];
+      if (!open) return { ok: true, mismatches: [] };
+      return {
+        ok: false,
+        mismatches: [
+          { path: ['metrc', 'status'], expected: 'COMPLETED', actual: open.status },
+          ...(open.lastError ? [{ path: ['metrc', 'lastError'], expected: null, actual: open.lastError }] : []),
+        ],
+      };
+    },
+
+    irreversible: "A Distru inventory adjustment can't be edited or undone; adjust again to correct it.",
+
+    summarize: (payload) => {
+      const q = num(payload.quantity);
+      const target = str(payload.packageId) ? `package ${String(payload.packageId)}` : str(payload.batchId) ? `batch ${String(payload.batchId)}` : `product ${String(payload.productId ?? '?')}`;
+      const why = str(payload.complianceReason) ?? str(payload.reason);
+      return `Adjust ${target} by ${q !== null && q > 0 ? '+' : ''}${q ?? String(payload.quantity)}${why ? ` (${why})` : ''}${str(payload.packageId) ? ', synced to Metrc' : ''}`;
+    },
+  };
+}
+
 // ── Preset ──────────────────────────────────────────────────────────────────────────────────
 
 /** `intent` from the run, else a description of the governed call; satisfaction 5 unless the run says otherwise. */
@@ -453,6 +504,7 @@ export function distruMcpPreset(options: DistruPresetOptions = {}): DistruPreset
       'distru-mutate-purchase-order': purchaseOrderHooks(options),
       'distru-mutate-task': taskHooks(),
       'distru-mutate-product': productHooks(),
+      'distru-adjust-inventory': adjustInventoryHooks(),
     },
   };
 }

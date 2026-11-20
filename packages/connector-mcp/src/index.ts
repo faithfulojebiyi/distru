@@ -54,6 +54,7 @@ export {
   purchaseOrderHooks,
   taskHooks,
   productHooks,
+  adjustInventoryHooks,
   normalizeProduct,
   normalizePurchaseOrder,
   normalizeTask,

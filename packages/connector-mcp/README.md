@@ -127,6 +127,12 @@ free-text keys (`description`, `notes`, `message`, `body`, `title`, …) become
   reads it back and compares every field the payload sets; no `find` (a product has no field to stamp
   a key into without touching customer-facing text, and a sparse UPDATE that sets values is idempotent
   by value); `moneyless`. CREATE/UPDATE is `mutate_product` (medium), DELETE is `mutate_product_delete` (high).
+- `distru-adjust-inventory` (`adjustInventoryHooks`, high: reaches Metrc): Distru saves the adjustment and
+  syncs it to Metrc in the background, so a Metrc rejection is invisible to the write. `verify` reads
+  `distru-search-metrc-activities` for the package and fails while a FAILED/QUEUED activity is open
+  (mismatches carry the status and Metrc's `lastError`); the op fails with the adjustment id kept, and a
+  resume re-verifies it without adjusting again (the executor record is the dedupe: no `find`, nothing
+  to stamp). Batch/product adjustments verify as written. `irreversible` (Distru adjustments can't be undone).
 - `moneyless` hook flag: the tool moves no money, its ops count as 0 toward value rules (tasks,
   products). Unknown tools keep a null value, so value caps fail closed.
 - Env: `DISTRU_MCP_URL` (default `https://mcp.distru.com/mcp`), `DISTRU_MCP_KEY` (`distru_mcp_…`).
