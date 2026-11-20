@@ -1,5 +1,5 @@
 /**
- * `createComposioConnector`: Composio tools (Gmail, Google Calendar, …) as one governed harness
+ * `createComposioConnector`: Composio tools (Gmail, Google Calendar, Google Sheets, …) as one governed harness
  * connector. Known tools get curated schemas, LLM-trimmed outputs with untrusted wrapping, and
  * idempotent, verified writes; any other allowed tool is bridged generically (loose input, reads
  * wrapped as untrusted, writes proposable but flagged unverified, like connector-mcp).
@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { calendarActions, calendarReadTools } from './calendar';
 import { createComposioClient, run, toolkitOfSlug, type ComposioClientConfig, type ComposioToolInfo, type ComposioToolsClient } from './client';
 import { gmailActions, gmailReadTools } from './gmail';
+import { sheetsActions, sheetsReadTools, type KnownSpreadsheet } from './sheets';
 import { composioGmailNewMessageTrigger } from './triggers';
 import { untrusted } from './untrusted';
 
@@ -34,6 +35,8 @@ export const KNOWN_TOOLS = {
   GMAIL_REPLY_TO_THREAD: { toolkit: 'gmail', kind: 'write', risk: 'high' },
   GOOGLECALENDAR_EVENTS_LIST: { toolkit: 'googlecalendar', kind: 'read' },
   GOOGLECALENDAR_CREATE_EVENT: { toolkit: 'googlecalendar', kind: 'write', risk: 'medium' },
+  GOOGLESHEETS_BATCH_GET: { toolkit: 'googlesheets', kind: 'read' },
+  GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND: { toolkit: 'googlesheets', kind: 'write', risk: 'medium' },
 } as const satisfies Record<string, { toolkit: string; kind: 'read' } | { toolkit: string; kind: 'write'; risk: Risk }>;
 export type KnownToolSlug = keyof typeof KNOWN_TOOLS;
 
@@ -66,7 +69,7 @@ export interface ComposioBridgedTool {
   slug: string;
   toolkit: string;
   kind: 'read' | 'write';
-  /** Connector-local registry name (`gmail_send_email`). */
+  /** Connector-local registry name (`gmail_send_email`, `sheets.append_rows`). */
   name: string;
   risk: Risk | null;
   /** Curated (known) tool vs generic bridge. */
@@ -95,6 +98,11 @@ export interface ComposioConnectorConfig<TId extends string = 'composio'> extend
   readOnly?: boolean;
   /** Inject a client (tests, or an app-managed SDK instance). */
   client?: ComposioToolsClient;
+  /**
+   * Google Sheets the agents may know by name; `appendable` ones form the allowlist for
+   * `sheets.append_rows` (any other spreadsheet is refused at propose time).
+   */
+  spreadsheets?: readonly KnownSpreadsheet[];
 }
 
 export interface ComposioBridge<TId extends string = 'composio'> {
@@ -140,8 +148,9 @@ export function buildComposioConnector<const TId extends string = 'composio'>(
   type Ctx = ComposioCtx<TId>;
   const id = (config.id ?? 'composio') as TId;
   const clientOf = (ctx: Ctx): ComposioToolsClient => ctx.connectors[id];
-  const curatedReads: Record<string, AnyReadTool<Ctx>> = { ...gmailReadTools(clientOf), ...calendarReadTools(clientOf) };
-  const curatedWrites: Record<string, AnyAction<Ctx>> = { ...gmailActions(clientOf), ...calendarActions(clientOf) };
+  const sheets = { spreadsheets: config.spreadsheets ?? [] };
+  const curatedReads: Record<string, AnyReadTool<Ctx>> = { ...gmailReadTools(clientOf), ...calendarReadTools(clientOf), ...sheetsReadTools(clientOf, sheets) };
+  const curatedWrites: Record<string, AnyAction<Ctx>> = { ...gmailActions(clientOf), ...calendarActions(clientOf), ...sheetsActions(clientOf, sheets) };
 
   const readTools: AnyReadTool<Ctx>[] = [];
   const actions: AnyAction<Ctx>[] = [];
@@ -163,7 +172,7 @@ export function buildComposioConnector<const TId extends string = 'composio'>(
             run: async (ctx: Ctx, input) => wrapUntrustedFields(await run(clientOf(ctx), info.slug, input), `composio.${info.toolkit}`),
           }) as AnyReadTool<Ctx>),
       );
-      tools.push({ slug: info.slug, toolkit: info.toolkit, kind: 'read', name, risk: null, curated: Boolean(curatedRead), unverified: false, dedupeByExecutorOnly: false });
+      tools.push({ slug: info.slug, toolkit: info.toolkit, kind: 'read', name: curatedRead?.name ?? name, risk: null, curated: Boolean(curatedRead), unverified: false, dedupeByExecutorOnly: false });
       continue;
     }
 
@@ -194,7 +203,7 @@ export function buildComposioConnector<const TId extends string = 'composio'>(
         }) as AnyAction<Ctx>,
       );
     }
-    tools.push({ slug: info.slug, toolkit: info.toolkit, kind: 'write', name, risk: cls.risk, curated: Boolean(curatedWrite), unverified: !curatedWrite, dedupeByExecutorOnly: !curatedWrite });
+    tools.push({ slug: info.slug, toolkit: info.toolkit, kind: 'write', name: curatedWrite?.name ?? name, risk: cls.risk, curated: Boolean(curatedWrite), unverified: !curatedWrite, dedupeByExecutorOnly: !curatedWrite });
   }
 
   const connector = defineConnector<Ctx>({
@@ -202,7 +211,7 @@ export function buildComposioConnector<const TId extends string = 'composio'>(
     system: config.system ?? 'other',
     description:
       config.description ??
-      `Composio (${config.toolkits.join(', ')}) for ${client.userId}: reads pass through with external text marked untrusted; sending email, replying and creating events are proposed and need approval.`,
+      `Composio (${config.toolkits.join(', ')}) for ${client.userId}: reads pass through with external text marked untrusted; sending email, replying, creating events and appending sheet rows are proposed and need approval.`,
     readTools,
     actions,
     // Gmail new-message webhooks (signed by Composio) → `composio/gmail.new_message`.
@@ -233,12 +242,14 @@ export async function createComposioConnector<const TId extends string = 'compos
 /**
  * Env → connector config. `COMPOSIO_API_KEY` (required), `COMPOSIO_BASE_URL` (emulator only; unset
  * = real Composio), `COMPOSIO_USER_ID`, `COMPOSIO_GMAIL_ACCOUNT_ID` / `COMPOSIO_GOOGLECALENDAR_ACCOUNT_ID`
- * (optional pins), `COMPOSIO_TOOLKITS` (default `gmail,googlecalendar`).
+ * (optional pins), `COMPOSIO_TOOLKITS` (default `gmail,googlecalendar,googlesheets`),
+ * `COMPOSIO_GOOGLESHEETS_SPREADSHEETS` (known spreadsheets: `Name=id` entries separated by commas; a
+ * leading `+` puts one on the append allowlist, e.g. `Vendor price sheet=1abc,+Weekly reorder log=1def`).
  */
 export function composioConfigFromEnv(env: Record<string, string | undefined> = process.env): ComposioConnectorConfig {
   const apiKey = env.COMPOSIO_API_KEY;
   if (!apiKey) throw new Error('COMPOSIO_API_KEY is required');
-  const toolkits = (env.COMPOSIO_TOOLKITS ?? 'gmail,googlecalendar').split(',').map((s) => s.trim()).filter(Boolean);
+  const toolkits = (env.COMPOSIO_TOOLKITS ?? 'gmail,googlecalendar,googlesheets').split(',').map((s) => s.trim()).filter(Boolean);
   const accounts: Record<string, string> = {};
   for (const t of toolkits) {
     const v = env[`COMPOSIO_${t.toUpperCase()}_ACCOUNT_ID`];
@@ -250,5 +261,22 @@ export function composioConfigFromEnv(env: Record<string, string | undefined> = 
     userId: env.COMPOSIO_USER_ID ?? 'golden-coast',
     toolkits,
     ...(Object.keys(accounts).length ? { connectedAccountIds: accounts } : {}),
+    ...(env.COMPOSIO_GOOGLESHEETS_SPREADSHEETS ? { spreadsheets: parseSpreadsheets(env.COMPOSIO_GOOGLESHEETS_SPREADSHEETS) } : {}),
   };
+}
+
+/** `Vendor price sheet=1abc,+Weekly reorder log=1def` → known spreadsheets (`+` = appendable). */
+export function parseSpreadsheets(spec: string): KnownSpreadsheet[] {
+  return spec
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .flatMap((entry) => {
+      const appendable = entry.startsWith('+');
+      const body = appendable ? entry.slice(1) : entry;
+      const eq = body.lastIndexOf('=');
+      const name = eq === -1 ? body.trim() : body.slice(0, eq).trim();
+      const id = eq === -1 ? body.trim() : body.slice(eq + 1).trim();
+      return id ? [{ id, name: name || id, appendable }] : [];
+    });
 }

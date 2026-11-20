@@ -1,6 +1,6 @@
 # @ops/connector-composio
 
-Composio-hosted tools (Gmail, Google Calendar, …) as a governed harness connector, plus Composio
+Composio-hosted tools (Gmail, Google Calendar, Google Sheets, …) as a governed harness connector, plus Composio
 **triggers** (signed webhooks) verified and normalized into typed events. Built on
 `@composio/core` 0.25.0.
 
@@ -22,7 +22,8 @@ const harness = createHarness({ registry, store, audit, policyRules, errors: com
 | `baseURL` / `COMPOSIO_BASE_URL` | **Emulator only** (`http://localhost:4700`, see `apps/emulators`). Unset = real Composio. |
 | `userId` / `COMPOSIO_USER_ID` | Composio user the connected accounts belong to (default `golden-coast`) |
 | `connectedAccountIds` / `COMPOSIO_GMAIL_ACCOUNT_ID`, `COMPOSIO_GOOGLECALENDAR_ACCOUNT_ID` | Optional pins per toolkit |
-| `toolkits` / `COMPOSIO_TOOLKITS` | default `gmail,googlecalendar` |
+| `toolkits` / `COMPOSIO_TOOLKITS` | default `gmail,googlecalendar,googlesheets` |
+| `spreadsheets` / `COMPOSIO_GOOGLESHEETS_SPREADSHEETS` | Known spreadsheets by name (`Name=id`, comma-separated); a leading `+` puts one on the `sheets.append_rows` allowlist |
 | `tools` | Allow-list of slugs (default: every known tool of the toolkits). Unknown slugs are bridged generically. |
 | `classify(tool)` | Override `'read' \| 'write' \| { kind, risk }` |
 | `toolkitVersions` | Pin toolkit versions for production; without it tools run at `latest` with `dangerouslySkipVersionCheck` |
@@ -33,7 +34,8 @@ Composio, and (for triggers) the trigger + webhook subscription created in the C
 
 ## Tools
 
-Registry names are `composio.<slug lower-cased>` → tools `composio_<…>` / `propose_composio_<…>`.
+Registry names are `composio.<slug lower-cased>` → tools `composio_<…>` / `propose_composio_<…>`, except the
+Sheets tools: `composio.sheets.read_rows` / `composio.sheets.append_rows`.
 
 | Composio slug | Kind | Risk | Notes |
 |---|---|---|---|
@@ -44,6 +46,8 @@ Registry names are `composio.<slug lower-cased>` → tools `composio_<…>` / `p
 | `GMAIL_SEND_EMAIL` | write | **high** | never auto-approved; `moneyless` (value 0, so total-value caps still evaluate) |
 | `GMAIL_REPLY_TO_THREAD` | write | **high** | never auto-approved; `moneyless` |
 | `GOOGLECALENDAR_CREATE_EVENT` | write | medium | `valueOf = 0` so `auto_approve_below { max_risk: 'medium' }` can apply |
+| `GOOGLESHEETS_BATCH_GET` → `sheets.read_rows` | read | | `{ spreadsheet (id or known name), range?, max_rows }` → rows, each wrapped as untrusted text (cells joined with ` \| `) |
+| `GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND` → `sheets.append_rows` | write | medium | allowlisted spreadsheets only (refused at propose otherwise); `moneyless`; undoable |
 | anything else allowed | by name (`_FETCH/_GET/_LIST/_SEARCH/_FIND` = read; else write, high if it sends/posts/deletes/invites) | | loose input; writes flagged `unverified` + `dedupeByExecutorOnly` (`bridge.tools`) |
 
 **Writes**: `plan` = the exact tool arguments (what the approver sees, as an all-added diff);
@@ -52,6 +56,13 @@ Registry names are `composio.<slug lower-cased>` → tools `composio_<…>` / `p
 `in:sent opsidem…` (Gmail) or events `q=opsidem…` (Calendar), so a crash after the send dedupes on
 resume; `verify` reads the message back (`SENT` label, To recipients, subject or thread id) or the
 event (summary, start, attendees). The footer is the one thing added to what the approver saw.
+
+**Sheets** has no searchable text, so the marker is one extra trailing cell per appended row (the
+reorder log's `Ref` column). `findByIdempotencyKey` scans the allowlisted spreadsheets' tabs
+(`GOOGLESHEETS_GET_SPREADSHEET_INFO` + `GOOGLESHEETS_BATCH_GET`) for it; `verify` reads the appended
+range back cell by cell (numbers compared numerically). **Undo** (`compensate`) clears exactly that range
+with `GOOGLESHEETS_CLEAR_VALUES` after checking it still holds the rows we wrote with the marker: the rows
+stay, emptied, and a range someone has since edited is refused (clear it by hand).
 
 **Untrusted text**: sender header (incl. display name), subject, snippet, body and event
 title/description are wrapped as `{ untrusted_text, source, suspicious }` (same policy as

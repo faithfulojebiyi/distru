@@ -2,6 +2,7 @@ export {
   createComposioConnector,
   buildComposioConnector,
   composioConfigFromEnv,
+  parseSpreadsheets,
   defaultClassify,
   wrapUntrustedFields,
   KNOWN_TOOLS,
@@ -44,6 +45,20 @@ export {
 } from './triggers';
 export { SendEmailInput, ReplyToThreadInput, FetchEmailsInput, SentEmailRecordSchema, type SendEmailPayload, type ReplyToThreadPayload, type SentEmailRecord } from './gmail';
 export { CreateEventInput, EventsListInput, CalendarEventSchema, type CreateEventPayload, type CalendarEvent } from './calendar';
+export {
+  AppendRowsInput,
+  AppendRowsPayload,
+  AppendedRowsRecordSchema,
+  ReadRowsInput,
+  ReadRowsOutput,
+  SheetRowSchema,
+  firstRowOf,
+  quoteSheet,
+  type AppendedRowsRecord,
+  type KnownSpreadsheet,
+  type SheetRows,
+  type SheetsConfig,
+} from './sheets';
 export { EmailSummarySchema, EmailMessageSchema, RawGmailMessageSchema, addressesIn, messagesOf, type EmailSummary, type EmailMessage, type RawGmailMessage } from './messages';
 export { markerFor, stampBody, stripMarker } from './marker';
 export { untrusted, looksLikeInjection, UntrustedTextSchema, type UntrustedText } from './untrusted';
