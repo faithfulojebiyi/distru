@@ -52,7 +52,7 @@ The core idea fits in one line: **the AI proposes, code executes.**
   write lands in an audit log. Undoing a change is itself a proposal that someone approves, and anything that
   genuinely can't be undone (an email that's already been sent) says so plainly.
 
-![How the pieces fit together: who starts work, the agent team, the harness, and the business's tools](.github/assets/architecture.svg)
+![Architecture: triggers and clients enter the agent server; agents read and propose, the harness decides and writes to the business systems, and everything runs on Postgres, Inngest and Claude](.github/assets/architecture.svg)
 
 ## A morning with Ops Agent
 
@@ -368,6 +368,6 @@ The full reasoning, including how the design holds up when a constraint changes,
 
 Working today: the restock and vendor-reply flows, Slack approvals, the MCP server, undo, the context layer
 and its memories, searching past vendor emails and PO notes by meaning, the eval suite, the dashboard, prompt
-caching, and receivables answers in the Copilot.
+caching, receivables answers in the Copilot, and multiple Copilot chats with their history in the sidebar.
 
-Still to come: multiple Copilot chats with history in the sidebar (in progress), and a public demo deployment.
+Still to come: a public demo deployment.
