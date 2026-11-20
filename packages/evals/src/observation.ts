@@ -102,6 +102,19 @@ export const ObservationSchema = z
     webhookDeliveries: z.array(z.object({ status: z.string(), eventId: z.string().nullable() })).default([]),
     /** The MCP call (mcp_call): tools the token lists, and whether the call was refused. */
     mcp: z.object({ tools: z.array(z.string()), refused: z.boolean(), error: z.string().nullable(), proposalsAfter: z.number().int() }).nullable().default(null),
+    /** Semantic recall (recallSetup): documents indexed and every recall_search result's passages, in call order. */
+    recall: z
+      .object({
+        documents: z.number().int().nonnegative(),
+        searches: z.array(
+          z.object({
+            query: z.string(),
+            passages: z.array(z.object({ ref: z.string(), date: z.string(), subject: z.string().nullable(), from: z.string().nullable(), text: z.string().nullable(), suspicious: z.boolean(), score: z.number() })),
+          }),
+        ),
+      })
+      .nullable()
+      .default(null),
     usage: UsageSchema,
     latencyMs: z.number().nonnegative(),
     error: z.string().nullable(),
@@ -131,6 +144,7 @@ export function emptyObservation(kind: Observation['kind']): Observation {
     runsStarted: 0,
     webhookDeliveries: [],
     mcp: null,
+    recall: null,
     usage: { llmCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 },
     latencyMs: 0,
     error: null,

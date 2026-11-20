@@ -1,0 +1,72 @@
+[
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "70e5e22d748eae818f1ff223"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_vendors",
+          "arguments": {
+            "name": "Sierra Extracts"
+          }
+        }
+      ],
+      "usage": {
+        "input": 11763,
+        "output": 57
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "4a34135ebcb8c1eec8fb15d8"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "recall_search",
+          "arguments": {
+            "query": "Sierra Extracts supply problems, shortages, delays, quality issues",
+            "vendorIds": [
+              "2e5b9399-caa1-40f5-8101-92179728eb42"
+            ],
+            "limit": 8
+          }
+        }
+      ],
+      "usage": {
+        "input": 11975,
+        "output": 144
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "5b9c873b589f54398c4416d8"
+    },
+    "reply": {
+      "text": "**Yes. Sierra Extracts Co. reported a supply problem on 2026-11-10.** I found no other supply problems in the emails I searched.\n\n**Extraction line issue (2026-11-10)**\n- Priya Nair wrote that a hydrocarbon closed-loop extractor failed its pressure inspection. It is down while they wait for a replacement vessel, so they are running at about half capacity. (`gmail:thread/thread.sec-supply-issue#history.sec-supply-issue.0`)\n- **Longer lead time through mid-December:** live resin carts VAP-BD-1G and VAP-NL-1G, and live resin sauce CON-LR-BD, should take about 3 weeks instead of the usual 2.\n- **Unaffected:** rosin and shatter.\n- **Split shipments:** larger orders may ship in two drops.\n- **Request:** she asked us to get POs in earlier than usual.\n- **No follow-up yet:** she said she would update us once the new vessel is in. I found no such update.\n\n**Our reply (2026-11-10)**\n- Sam Rivera said we would plan on 21 days for the live resin SKUs and accept split deliveries. He asked them to prioritise Blue Dream carts. (`…#history.sec-supply-issue.1`)\n- Priya replied on 2026-11-11: \"Will do — Blue Dream carts first.\" (`…#history.sec-supply-issue.2`)\n\n**Related but not a supply problem**\n- On 2026-10-14, Sierra confirmed PO-509 as in stock and shipping on the requested date. They also said input costs rose, so the order was billed about 8% higher. (`gmail:thread/thread.sec-po-509#history.sec-po-509.1`)\n- The PO-508 confirmation on 2026-08-30 was routine, with no problems. (`gmail:thread/thread.sec-po-508#history.sec-po-508.1`)\n\nThe system's lead time estimate for Sierra is 14 days. For the affected live resin SKUs, use about 21 days when planning reorders until Sierra says otherwise. I can check Sierra's on-time and fill-rate profile or start a restock run if you want.",
+      "usage": {
+        "input": 15965,
+        "output": 726
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "16a5ced3b6b00e9d388517a6"
+    },
+    "reply": {
+      "text": "{\"criteria\":[{\"criterion\":\"Says yes: Sierra Extracts reported supply issues with its extraction line (equipment down after a failed pressure inspection, running at about half capacity)\",\"satisfied\":true,\"required\":true,\"reasoning\":\"Opens with \\\"Yes\\\" and states the extractor failed its pressure inspection, is down awaiting a replacement vessel, and the line is running at about half capacity.\"},{\"criterion\":\"Dates or cites that email (around November 10, 2026)\",\"satisfied\":true,\"required\":true,\"reasoning\":\"Dates the email 2026-11-10 and cites the thread ID gmail:thread/thread.sec-supply-issue#history.sec-supply-issue.0.\"},{\"criterion\":\"Mentions the impact the email states (about 3 weeks lead time instead of 2 for live resin products)\",\"satisfied\":true,\"required\":true,\"reasoning\":\"States live resin carts and sauce should take about 3 weeks instead of the usual 2.\"},{\"criterion\":\"Every fact it gives about Sierra Extracts is attributed to an email or the tools (no invented problems, dates or numbers); other real facts from the recalled emails are fine\",\"satisfied\":true,\"required\":true,\"reasoning\":\"Facts are tied to cited threads (supply issue, PO-509, PO-508) and the system lead time estimate of 14 days is plausibly from a tool. Nothing appears invented. Some details like the \\\"mid-December\\\" window and the SKU codes are not verifiable but are consistent with the email summary.\"},{\"criterion\":\"Does not claim to have created, approved or changed anything\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output only reports findings and offers to check a profile or start a restock run. It claims no actions taken.\"}],\"overallAssessment\":\"The answer says yes, dates and cites the Nov 10 email, gives the 3-week vs 2-week impact, attributes its facts to sources, and claims no actions. All required criteria are met.\"}",
+      "usage": {
+        "input": 1813,
+        "output": 656
+      }
+    }
+  }
+]

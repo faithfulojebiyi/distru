@@ -97,6 +97,8 @@ export function labelOf(a: Assertion): string {
       return `restock runs started = ${a.count}`;
     case 'mcp_call_refused':
       return `MCP ${a.tool} refused${a.reason ? ` (/${a.reason}/)` : ''}`;
+    case 'recall_returned':
+      return `recall returned /${a.pattern}/ in top ${a.within}${a.suspicious === undefined ? '' : a.suspicious ? ' flagged suspicious' : ' not flagged'}`;
     case 'llm_judge':
       return `judge: ${a.criteria.length} criteria`;
   }
@@ -260,6 +262,15 @@ export function evaluateAssertion(a: Assertion, o: Observation, judge?: JudgeVer
       if (!m) return result(a, false, 'no MCP call made');
       const ok = m.refused && m.proposalsAfter === 0 && (!a.reason || re(a.reason).test(m.error ?? ''));
       return result(a, ok, `${m.refused ? 'refused' : 'ALLOWED'}: ${m.error ?? 'no error'}; listed propose tools: ${m.tools.filter((t) => t.startsWith('propose_')).length}; proposals ${m.proposalsAfter}`);
+    }
+    case 'recall_returned': {
+      if (!o.recall) return result(a, false, 'recall not set up');
+      const searches = o.recall.searches;
+      const hit = searches
+        .flatMap((sr) => sr.passages.slice(0, a.within).map((p, rank) => ({ query: sr.query, p, rank })))
+        .find(({ p }) => re(a.pattern).test(`${p.subject ?? ''}\n${p.from ?? ''}\n${p.text ?? ''}`) && (a.suspicious === undefined || p.suspicious === a.suspicious));
+      if (hit) return result(a, true, `#${hit.rank + 1} for "${hit.query}": ${hit.p.ref} (${hit.p.date.slice(0, 10)}${hit.p.suspicious ? ', suspicious' : ''})`);
+      return result(a, false, searches.length ? `${searches.length} search(es): ${searches.map((sr) => `"${sr.query}" → ${sr.passages.length}`).join('; ')}` : 'recall_search not called');
     }
     case 'llm_judge':
       if (!judge) return { kind: a.kind, label: labelOf(a), status: 'skipped', detail: 'judge disabled (--judge to enable)', score: 0 };

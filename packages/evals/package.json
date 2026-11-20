@@ -12,11 +12,13 @@
     "evals:live": "bun src/cli.ts --mode live",
     "evals:record": "bun src/cli.ts --mode record",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "recall:vectors": "bun scripts/recall-vectors.ts"
   },
   "dependencies": {
     "@mastra/core": "~1.85.0",
     "@mastra/evals": "~1.10.11",
+    "@ops/connector-composio": "workspace:*",
     "@ops/connector-email": "workspace:*",
     "@ops/connector-mcp": "workspace:*",
     "@ops/context": "workspace:*",

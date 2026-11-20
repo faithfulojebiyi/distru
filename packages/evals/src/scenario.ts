@@ -93,6 +93,15 @@ export const AssertionSchema = z
     z.object({ kind: z.literal('restock_runs_started'), count: z.number().int().nonnegative() }),
     z.object({ kind: z.literal('mcp_call_refused'), tool: z.string(), reason: Pattern.optional() }),
     z.object({
+      kind: z.literal('recall_returned'),
+      /** Tested against the passage's subject, sender and text. */
+      pattern: Pattern,
+      /** The passage must be among the first `within` of one recall_search result. */
+      within: z.number().int().positive().max(8).default(8),
+      /** Require the passage's `suspicious` flag to be this value. */
+      suspicious: z.boolean().optional(),
+    }),
+    z.object({
       kind: z.literal('llm_judge'),
       criteria: z.array(z.string().min(1)).min(1).describe('Rubric; every criterion must hold'),
     }),
@@ -176,6 +185,25 @@ export const ContextSetupSchema = z
   .meta({ id: 'EvalContextSetup' });
 export type ContextSetup = z.infer<typeof ContextSetupSchema>;
 
+/** A thread added to the recall corpus (same shape as apps/emulators' `HistoryThread`, minus `kind`). */
+export const RecallThreadSchema = z.object({
+  key: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+  /** Vendor key from apps/emulators (HHF, ETG, SEC, GSE, CCV, MPR). */
+  vendor: z.enum(['HHF', 'ETG', 'SEC', 'GSE', 'CCV', 'MPR']),
+  subject: z.string().min(1),
+  messages: z.array(z.object({ from: z.enum(['buyer', 'vendor']), daysAgo: z.number().nonnegative(), text: z.string().min(1) })).min(1),
+});
+
+export const RecallSetupSchema = z
+  .object({
+    /** Index apps/emulators' seeded vendor history (the purchasing mailbox) on the eval clock. */
+    history: z.boolean().default(true),
+    /** Extra threads (e.g. an email carrying a prompt injection). */
+    threads: z.array(RecallThreadSchema).default([]),
+  })
+  .meta({ id: 'EvalRecallSetup' });
+export type RecallSetup = z.infer<typeof RecallSetupSchema>;
+
 export const ScenarioSchema = z
   .object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
@@ -203,6 +231,11 @@ export const ScenarioSchema = z
     emulatorSetup: EmulatorSetupSchema.default({ policyRules: [], distruMockConfig: [] }),
     /** Fill the context layer (packages/context) before the run. Default: an empty context store. */
     contextSetup: ContextSetupSchema.optional(),
+    /**
+     * Semantic recall (the `recall` connector + `recall_search` for the Ops Lead, Planner and Vendor
+     * Liaison) over the seeded mailbox. Needs `contextSetup.sync` (vendor ids). Default: not registered.
+     */
+    recallSetup: RecallSetupSchema.optional(),
     trigger: TriggerSchema,
     scope: z
       .object({
@@ -218,6 +251,8 @@ export const ScenarioSchema = z
   })
   .superRefine((s, ctx) => {
     if (s.status === 'pending' && !s.pendingReason) ctx.addIssue({ code: 'custom', message: 'pending scenarios need a pendingReason', path: ['pendingReason'] });
+    if (s.recallSetup && !s.contextSetup?.sync) ctx.addIssue({ code: 'custom', message: 'recallSetup needs contextSetup.sync (vendor ids come from the synced vendors)', path: ['recallSetup'] });
+    if (s.expectations.some((a) => a.kind === 'recall_returned') && !s.recallSetup) ctx.addIssue({ code: 'custom', message: 'recall_returned needs recallSetup', path: ['recallSetup'] });
     const copilotOnly: AssertionKind[] = ['answer_mentions', 'answer_avoids', 'llm_judge'];
     if (s.trigger.kind === 'restock') {
       for (const [i, a] of s.expectations.entries()) {

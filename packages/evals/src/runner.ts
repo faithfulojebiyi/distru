@@ -12,6 +12,7 @@ import { AssertionResultSchema } from './assertions';
 import type { Scenario } from './scenario';
 import { createWorld, DISTRU_WEBHOOK_SECRET, type World } from './world';
 import { SLACK_MEMBERS } from './emulators';
+import { writeVectorSnapshot } from './recall';
 import { buildPurchaseOrder, DistruApiError } from '@ops/distru-client';
 import { ingestWebhook, triggerSource, userPrincipal } from '@ops/harness';
 import { distruOrderCreatedTrigger, DistruOrderCreatedEventSchema, DISTRU_ORDER_TRIGGER_ID } from '../../../apps/agent/src/api/distru-webhook';
@@ -576,7 +577,14 @@ export async function runScenario(scenario: Scenario, options: RunnerOptions): P
     const models = Object.fromEntries(AGENT_KEYS.map((k) => [k, model])) as Record<AgentKey, typeof model>;
     const t = scenario.trigger;
     const emulators = t.kind === 'vendor_reply' ? { composio: true } : t.kind === 'restock' && t.slackClicks.length ? { slack: true } : undefined;
-    world = await createWorld({ scenario, models, pricing: options.pricing, ...(emulators ? { emulators } : {}), ...(t.kind === 'distru_webhook' ? { distruWebhooks: true } : {}) });
+    world = await createWorld({
+      scenario,
+      models,
+      pricing: options.pricing,
+      ...(emulators ? { emulators } : {}),
+      ...(t.kind === 'distru_webhook' ? { distruWebhooks: true } : {}),
+      recallVectors: mode === 'offline' ? 'replay' : 'record',
+    });
     const emu = world.emu;
     if (session && emu) session.volatile = emu.volatile;
     log(`  ▸ ${scenario.id} (${scenario.llm ? mode : 'no model calls'})`);
@@ -596,6 +604,18 @@ export async function runScenario(scenario: Scenario, options: RunnerOptions): P
     observation.error = err instanceof BudgetExceeded ? err.message : errMsg(err);
     observation.latencyMs = performance.now() - started;
   } finally {
+    if (world?.recall) {
+      observation.recall = {
+        documents: world.recall.documents,
+        searches: world.recall.searches.map((r) => ({
+          query: r.query,
+          passages: r.passages.map((p) => ({ ref: p.ref, date: p.date, subject: p.subject?.untrusted_text ?? null, from: p.from?.untrusted_text ?? null, text: p.text?.untrusted_text ?? null, suspicious: p.suspicious, score: p.score })),
+        })),
+      };
+      // Record mode: keep the vectors computed for this run (new LLM-chosen queries) for offline replay.
+      if (mode === 'record' && world.recall.embedder.dirty) writeVectorSnapshot(world.recall.embedder.snapshot());
+      if (world.recall.embedder.misses.length && !observation.error) observation.error = `recall: ${world.recall.embedder.misses.length} text(s) without a recorded embedding (stale vector snapshot? re-record)`;
+    }
     await world?.close().catch(() => undefined);
     if (session) {
       observation.usage = session.usage();

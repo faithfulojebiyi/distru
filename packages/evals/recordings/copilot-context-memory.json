@@ -2,7 +2,7 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "e776efecc1a1f03c5b34ead0"
+      "fingerprint": "206289c3673ba3dc52b37995"
     },
     "reply": {
       "toolCalls": [
@@ -15,7 +15,7 @@
         {
           "name": "context_memories_search",
           "arguments": {
-            "query": "Golden State Edibles chocolate"
+            "query": "Golden State Edibles"
           }
         },
         {
@@ -32,15 +32,15 @@
         }
       ],
       "usage": {
-        "input": 10241,
-        "output": 221
+        "input": 10502,
+        "output": 217
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "9da888c6e7b5a94a7d0fc76f"
+      "fingerprint": "075179f9b89604c2d0c72999"
     },
     "reply": {
       "toolCalls": [
@@ -72,20 +72,25 @@
               "77151b88-2ab0-492e-bd95-4e87e2cb38dc",
               "5c543406-6416-425d-b6b2-0b0ee3f61b84"
             ],
-            "limit": 5
+            "statuses": [
+              "PENDING",
+              "PROCESSING",
+              "DELIVERING",
+              "PARTIALLY_RECEIVED"
+            ]
           }
         }
       ],
       "usage": {
-        "input": 12663,
-        "output": 488
+        "input": 12920,
+        "output": 516
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "56d9ffc81936ce001c9f9296"
+      "fingerprint": "fa2d463df9183656e3c18560"
     },
     "reply": {
       "toolCalls": [
@@ -99,46 +104,37 @@
               "5c543406-6416-425d-b6b2-0b0ee3f61b84"
             ]
           }
-        },
-        {
-          "name": "distru_open_orders",
-          "arguments": {
-            "product_ids": [
-              "77151b88-2ab0-492e-bd95-4e87e2cb38dc",
-              "5c543406-6416-425d-b6b2-0b0ee3f61b84"
-            ]
-          }
         }
       ],
       "usage": {
-        "input": 18059,
-        "output": 273
+        "input": 16389,
+        "output": 165
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "92bf0a8683bc61c74e2cca8c"
+      "fingerprint": "414d179f70fe4306bd50ce2c"
     },
     "reply": {
-      "text": "**Short version:** The supplier is short on cacao, so expect chocolate bars to ship short or late. Dark Chocolate is the one that needs a reorder, and it's already late.\n\n**Supplier warning**\n- A team memory says Golden State Edibles is short on cacao and chocolate bars may ship short or late through December.\n- PO-519 (Dark Chocolate, 48 units, ordered 11/14, due 12/14) is marked \"Partial restock (supplier short on cacao)\". Nothing has been received yet.\n\n**Vendor reliability**\n- On-time delivery is 75%.\n- Median lead time is 21.2 days, which matches the 21 days promised. The p90 is 26.4 days.\n- Fill rate is 97.3% overall. That figure predates the cacao shortage, so it probably overstates how well chocolate will fill now.\n- Prices are up about 2–3% (last paid vs the 90-day average).\n  - Dark Chocolate: $8.55, against a 90-day average of $8.39.\n  - Milk Chocolate Sea Salt: $8.68, against a 90-day average of $8.43.\n\n**Dark Chocolate Bar 100mg (EDB-CHO-DK)**\n- On hand is 47 units, with about 7 units/day of demand. That is 6.7 days of supply, and the estimated stockout is 11/25.\n- The 48 units on PO-519 would bring supply to about 13.6 days. They are due 12/14, which is after the stockout date.\n- The reorder status is LATE. The reorder point is 197, and the suggested quantity is 312 (13 cases of 24), based on a 26-day lead time.\n- There is one open order, SO-1735 for Green Leaf Dispensary, for 13 units. It is ready to ship and is covered by current stock.\n- Because the vendor is constrained, you may want to ask for the full quantity anyway and also look at alternative sources. I can't tell you whether another vendor is available.\n\n**Milk Chocolate Sea Salt 100mg (EDB-CHO-MS)**\n- On hand is 469 units, about 157 days of supply. There's no need to reorder.\n\n**Compliance**\n- Both products are clear. The latest batches (CHODK-2610-C and CHOMS-2610-C) passed lab testing, and all Metrc packages are TestPassed.\n\nI didn't find any suspicious text in the data. If you want a restock run for Dark Chocolate, I can start one, and it will go to Approvals for human sign-off.",
+      "text": "**Short version:** Golden State Edibles has warned that chocolate bars may ship short or late through December. Dark Chocolate is the bar to worry about because stock is low. Milk Chocolate Sea Salt doesn't need an order.\n\n**Vendor warning**\n- A team note says the vendor is short on cacao, so chocolate bars may ship short or late through December.\n- Open PO-519 for 48 Dark Chocolate bars at Oakland Warehouse is PENDING with nothing received. It was ordered 2026-11-14 and is due 2026-12-14. Its note reads \"Partial restock - chocolate bars (supplier short on cacao)\".\n- On-time delivery is 75%. Median lead time is 21.2 days against 21 promised, with a p90 of 26.4 days (8 samples). Fill rate is 97.3%.\n- Dark Chocolate's last price was $8.55, up 1.9% on the 90-day average of $8.39. Milk Chocolate's last price was $8.68, up 2.9%. I'm treating the cacao shortage as the reason to be cautious here, not the price.\n\n**Stock position** (velocity run at a 26-day lead time, the vendor's p90)\n\n| SKU | Available | Incoming | Daily demand | Days of supply | With incoming | Stockout date | Status | Suggested qty |\n|---|---|---|---|---|---|---|---|---|\n| EDB-CHO-DK Dark Chocolate Bar 100mg | 47 | 48 | 6.99 | 6.7 | 13.6 | 2026-11-25 | LATE (reorder by 2026-11-19) | 312 |\n| EDB-CHO-MS Milk Chocolate Sea Salt 100mg | 469 | 0 | 2.995 | 156.6 | 156.6 | 2027-04-24 | OK | 0 |\n\n**What this means for Dark Chocolate**\n- It runs out around 2026-11-25. Even if PO-519 arrives on time, that only covers about 13.6 days.\n- Because of the cacao shortage, PO-519 and any new order could arrive late or short. Expect a gap in stock.\n- The suggested 312 units is 13 cases of 24. Consider splitting the order or asking the vendor to confirm what it can actually ship before you commit.\n- Ask the vendor about PO-519's status. The PO email is orders@goldenstateedibles.com.\n\n**Compliance:** Both products are clear. The latest batches (CHODK-2610-C and CHOMS-2610-C) passed lab testing and all their Metrc packages are TestPassed. Nothing is blocked.\n\nI haven't checked retail demand (Headset) or open sales orders. If you want a Dark Chocolate restock, I can start a restock run, and the proposal would then go to Approvals for a human to approve.",
       "usage": {
-        "input": 19438,
-        "output": 831
+        "input": 17151,
+        "output": 945
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "98a54121a1cac2a5d50cdbb5"
+      "fingerprint": "6c88eff304e7a065b32f070f"
     },
     "reply": {
-      "text": "{\"criteria\":[{\"criterion\":\"Mentions that Golden State Edibles is short on cacao, so chocolate bars may ship short or late\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The opening line says the supplier is short on cacao and chocolate bars may ship short or late. The Supplier warning section repeats this and cites PO-519 as a partial restock.\"},{\"criterion\":\"Mentions the vendor lead time (about 21 days) or another delivery fact from the vendor profile\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output gives a median lead time of 21.2 days against the 21 days promised. It also gives 75% on-time delivery, a p90 of 26.4 days and a fill rate of 97.3%.\"},{\"criterion\":\"Does not claim to have created, approved or changed any order\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output only reports existing orders (PO-519, SO-1735). It offers to start a restock run that would go to Approvals, which is a future offer and not a claim of action taken.\"}],\"overallAssessment\":\"The output meets all three criteria. It flags the cacao shortage, cites the 21-day lead time and other vendor delivery stats, and does not claim to have created or changed any order.\"}",
+      "text": "{\"criteria\":[{\"criterion\":\"Mentions that Golden State Edibles is short on cacao, so chocolate bars may ship short or late\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output states the vendor is short on cacao and that chocolate bars may ship short or late through December, and repeats the point in the Dark Chocolate section.\"},{\"criterion\":\"Mentions the vendor lead time (about 21 days) or another delivery fact from the vendor profile\",\"satisfied\":true,\"required\":true,\"reasoning\":\"It gives a median lead time of 21.2 days against 21 promised, 75% on-time delivery, a p90 of 26.4 days, and a fill rate of 97.3%.\"},{\"criterion\":\"Does not claim to have created, approved or changed any order\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output only reports on existing PO-519 and offers to start a restock run if asked. It says a human would approve the proposal, so it claims no created, approved, or changed order.\"}],\"overallAssessment\":\"The output meets all three criteria: it flags the cacao shortage and possible late or short shipments, gives lead time and delivery stats, and makes no claim of creating or changing any order.\"}",
       "usage": {
-        "input": 1823,
-        "output": 415
+        "input": 1937,
+        "output": 400
       }
     }
   }

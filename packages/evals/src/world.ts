@@ -34,6 +34,7 @@ import type { Scenario } from './scenario';
 import { VENDOR_REPLY_WORKFLOW_KEY } from '../../../apps/agent/src/mastra/restock-launcher';
 import { createVendorReplyWorkflowInProcess, type VendorReplyDeps } from '../../../apps/agent/src/mastra/workflows/vendor-reply';
 import { bootEmulators, type EmulatorsHandle, type EmulatorsOptions } from './emulators';
+import { createEvalRecall, snapshotEmbedder, type EvalRecall } from './recall';
 
 /** The Distru mock's "today" (seeded data is anchored to it; recordings depend on it). */
 export const NOW = '2026-11-19T12:00:00Z';
@@ -73,6 +74,11 @@ export interface WorldOptions {
   emulators?: EmulatorsOptions;
   /** Receives the Distru mock's outgoing webhooks (the mock posts to it like Distru would). */
   distruWebhooks?: boolean;
+  /**
+   * Recall embeddings (scenarios with `recallSetup`): `replay` uses only the recorded vector snapshot
+   * (offline; a miss fails as stale), `record` computes misses with FastEmbed (record / live).
+   */
+  recallVectors?: 'replay' | 'record';
 }
 
 /** Deterministic ids for records the mock creates at runtime (recordings must not depend on randomness). */
@@ -105,7 +111,7 @@ async function contextFor(scenario: Scenario, fetch: (url: string, init?: Reques
   return { store, clock };
 }
 
-export async function createWorld({ scenario, models, pricing, emulators, distruWebhooks }: WorldOptions) {
+export async function createWorld({ scenario, models, pricing, emulators, distruWebhooks, recallVectors = 'replay' }: WorldOptions) {
   /** Where the Distru mock's webhooks go (set by the webhook flow). Default: acknowledged and dropped. */
   const distruHook: { handler: (url: string, init: RequestInit) => Promise<Response> } = { handler: async () => new Response('ok') };
   const mock = createMockServer({
@@ -131,10 +137,15 @@ export async function createWorld({ scenario, models, pricing, emulators, distru
     connectMcp: () => createDistruMcpConnector({ url: 'http://mock.test/mcp', key: MCP_KEY, fetch: mcpFetch }),
     mcpUrl: 'http://mock.test/mcp',
     ...(emu?.connectComposio ? { connectComposio: emu.connectComposio } : {}),
+    // The `recall` connector only for scenarios that set it up: other prompts (and recordings) stay as they were.
+    recall: !!scenario.recallSetup,
   });
   await connectors.start();
   const outbox = new OutboxTransport({ now: () => new Date(NOW) });
   const context = await contextFor(scenario, mcpFetch);
+  const recall: EvalRecall | null = scenario.recallSetup
+    ? await createEvalRecall(scenario.recallSetup, { now: new Date(NOW), contextStore: context.store, embedder: await snapshotEmbedder(recallVectors) })
+    : null;
   const contexts = buildAppContexts({
     baseUrl: 'http://mock.test',
     token: 'mock-token',
@@ -144,6 +155,7 @@ export async function createWorld({ scenario, models, pricing, emulators, distru
     mcpClient: () => connectors.mcpClient(),
     ...(emu?.connectComposio ? { composioClient: () => connectors.composioClient() } : {}),
     context,
+    ...(recall ? { recall: recall.service } : {}),
   });
   const store = new InMemoryProposalStore();
   const audit = new InMemoryAuditSink();
@@ -186,6 +198,7 @@ export async function createWorld({ scenario, models, pricing, emulators, distru
     readCtx: () => contexts.read,
     models,
     launcher,
+    recall: !!recall,
   });
   const mastra = new Mastra({
     agents,
@@ -229,7 +242,7 @@ export async function createWorld({ scenario, models, pricing, emulators, distru
     if (!res.ok) throw new Error(`mock config failed: ${res.status} ${await res.text()}`);
   };
 
-  const world = { mock, headset, net, outbox, connectors, contexts, store, audit, rules, harness, deps, agents, mastra, launcher, approver, productId, skuById, locations, waitFor, findProposalByRunId, configureMock, distruHook, emu };
+  const world = { mock, headset, net, outbox, connectors, contexts, store, audit, rules, harness, deps, agents, mastra, launcher, approver, productId, skuById, locations, waitFor, findProposalByRunId, configureMock, distruHook, emu, recall };
   if (emu) await emu.attach(world);
   const close = async () => {
     await emu?.close();

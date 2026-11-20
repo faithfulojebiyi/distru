@@ -2,7 +2,7 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "298ebaf06ab547cadcad05ab"
+      "fingerprint": "e98b86da40066d38051608eb"
     },
     "reply": {
       "toolCalls": [
@@ -12,7 +12,7 @@
         }
       ],
       "usage": {
-        "input": 10245,
+        "input": 10506,
         "output": 33
       }
     }
@@ -20,26 +20,26 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "650d0b51a1f0f78d9afe6b20"
+      "fingerprint": "38aeb129be527761c6e8350f"
     },
     "reply": {
-      "text": "**Four customers have overdue invoices, totaling $50,076 across 75 invoices as of 2026-11-19. Harbor Greens is the worst by a wide margin.**\n\n| Customer | Total due | Invoices | Oldest | 1–30 days | 31–60 days | 61–90 days | 90+ days |\n|---|---|---|---|---|---|---|---|\n| **Harbor Greens** | $39,677 | 63 (13 partially paid) | 97 days | $16,495 | $4,503 | $17,264 | $1,415 |\n| Canopy Club Sacramento | $6,308 | 7 | 54 days | $4,328 | $1,980 | $0 | $0 |\n| The Herbal Cure | $3,271 | 4 | 27 days | $3,271 | $0 | $0 | $0 |\n| Sunset Cannabis Collective | $820 | 1 | 2 days | $820 | $0 | $0 | $0 |\n| **All customers** | **$50,076** | **75** | | **$24,914** | **$6,483** | **$17,264** | **$1,415** |\n\n**Harbor Greens**\n- It owes about 79% of all overdue money. It is also the only customer with balances past 60 days, so it holds all $18,679 of the 61+ day total.\n- Its oldest invoices are INV-10708 (97 days overdue, $65 left of $726), INV-10710 (96 days, $1,350), INV-10731 (90 days, $778), INV-10732 (90 days, $1,179) and INV-10738 (88 days, $706).\n- Its last payment was 2026-11-16, so it is paying something but not clearing the backlog.\n\n**Canopy Club Sacramento**\n- Two invoices are 52–54 days overdue: INV-10937 ($1,184) and INV-10952 ($796).\n- Three more are only 3–7 days overdue.\n- It has made no payments on any of these invoices.\n\n**The Herbal Cure**\n- INV-11192 is 27 days overdue with $422 left, after a partial payment on 2026-10-26.\n- The other three are 1–3 days overdue.\n\n**Sunset Cannabis Collective**\n- INV-11339 is 2 days overdue ($820). This is likely a timing slip rather than a collections problem.\n\nThe tool lists only the 5 oldest invoices per customer, so I haven't itemized all 63 Harbor Greens invoices. I can pull the full list if you want it.",
+      "text": "**Worst: Harbor Greens.** It owes $39,677 across 63 overdue invoices, and the oldest is 98 days late. That is about 74% of the $53,688 overdue in total. Five customers have overdue invoices, 79 invoices in all, as of 2026-11-20.\n\n| Customer | Invoices | Total due | 1–30 days | 31–60 days | 61–90 days | 90+ days | Oldest (days overdue) |\n|---|---|---|---|---|---|---|---|\n| **Harbor Greens** | 63 | $39,677 | $16,495 | $3,798 | $16,012 | $3,372 | 98 |\n| Canopy Club Sacramento | 8 | $7,565 | $5,585 | $1,980 | $0 | $0 | 55 |\n| The Herbal Cure | 4 | $3,271 | $3,271 | $0 | $0 | $0 | 28 |\n| Sunset Cannabis Collective | 3 | $2,346 | $2,346 | $0 | $0 | $0 | 3 |\n| Elevate Wellness | 1 | $829 | $829 | $0 | $0 | $0 | 1 |\n| **Total** | **79** | **$53,688** | **$28,526** | **$5,778** | **$16,012** | **$3,372** | |\n\n**Harbor Greens**\n- It is the only customer with balances past 60 days. It holds all $16,012 of the 61–90 bucket and all $3,372 of the 90+ bucket.\n- 13 of its invoices are partially paid. Its last payment was 2026-11-16.\n- The oldest invoices are INV-10708 (98 days, $65 left), INV-10710 (97 days, $1,350), INV-10731 and INV-10732 (91 days, $778 and $1,179), and INV-10738 (89 days, $706). The tool listed only these five of the 63.\n\n**Canopy Club Sacramento**\n- It has no recorded payments.\n- INV-10937 ($1,184, 55 days) and INV-10952 ($796, 53 days) are the two oldest.\n\n**Others**\n- The Herbal Cure's oldest invoice is INV-11192, 28 days late with $422 left.\n- Sunset Cannabis Collective and Elevate Wellness are only 1–3 days past due.\n\nI can pull the full invoice list for any of these customers if you want it.",
       "usage": {
-        "input": 13903,
-        "output": 987
+        "input": 14903,
+        "output": 1001
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "cf4e4e4043e1b7be1f110e58"
+      "fingerprint": "e45eae7b5acc0d86b4cb5bc7"
     },
     "reply": {
-      "text": "{\"criteria\":[{\"criterion\":\"Identifies Harbor Greens as the worst (largest overdue) account\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output states that Harbor Greens is the worst by a wide margin, with $39,677 overdue, about 79% of the total.\"},{\"criterion\":\"Gives roughly $18.7k (between $17k and $19k) as the Harbor Greens amount more than 60 days past due, or its 61-90 day bucket (~$17.3k) plus a 90+ bucket\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output gives $18,679 as the 61+ day total for Harbor Greens, and also shows 61-90 days at $17,264 and 90+ at $1,415.\"},{\"criterion\":\"Breaks the overdue balances down by how late they are (aging buckets or days overdue)\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The table has 1-30, 31-60, 61-90 and 90+ day buckets per customer, and the text adds days overdue for individual invoices.\"},{\"criterion\":\"Every customer it names is one of: Harbor Greens, Canopy Club Sacramento, The Herbal Cure, Sunset Cannabis Collective, Green Leaf Dispensary, Elevate Wellness\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The customers named are Harbor Greens, Canopy Club Sacramento, The Herbal Cure and Sunset Cannabis Collective, all on the allowed list.\"},{\"criterion\":\"Does not claim to have sent reminders, created tasks or changed any record\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output is read-only analysis. It offers to pull the full list but does not claim any actions or record changes.\"}],\"overallAssessment\":\"The output meets all criteria: it names Harbor Greens as the worst, gives the $18,679 61+ day figure, provides aging buckets, names only allowed customers, and claims no actions.\"}",
+      "text": "{\"criteria\":[{\"criterion\":\"Identifies Harbor Greens as the worst (largest overdue) account\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output states \\\"Worst: Harbor Greens\\\" with $39,677 overdue, the largest of any customer.\"},{\"criterion\":\"Gives roughly $18.7k (between $17k and $19k) as the Harbor Greens amount more than 60 days past due, or its 61-90 day bucket (~$17.3k) plus a 90+ bucket\",\"satisfied\":true,\"required\":true,\"reasoning\":\"Harbor Greens has $16,012 in the 61–90 bucket and $3,372 in the 90+ bucket, which sum to $19,384. That is outside the $17k–$19k range. The 61–90 bucket alone is $16,012, not ~$17.3k. The figures do not match the expected ~$18.7k, so the criterion is not met.\"},{\"criterion\":\"Breaks the overdue balances down by how late they are (aging buckets or days overdue)\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The table has 1–30, 31–60, 61–90 and 90+ day buckets for each customer, plus the oldest days overdue.\"},{\"criterion\":\"Every customer it names is one of: Harbor Greens, Canopy Club Sacramento, The Herbal Cure, Sunset Cannabis Collective, Green Leaf Dispensary, Elevate Wellness\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The customers named are Harbor Greens, Canopy Club Sacramento, The Herbal Cure, Sunset Cannabis Collective and Elevate Wellness. All are in the allowed list.\"},{\"criterion\":\"Does not claim to have sent reminders, created tasks or changed any record\",\"satisfied\":true,\"required\":true,\"reasoning\":\"The output only reports data and offers to pull the full invoice list. It claims no actions.\"}],\"overallAssessment\":\"The output identifies Harbor Greens, gives an aging breakdown, uses only valid customer names and claims no actions. However, its Harbor Greens 60+ day amount ($19.4k combined, $16.0k for 61–90) does not match the expected ~$18.7k range, so it fails that numeric criterion.\"}",
       "usage": {
-        "input": 1958,
-        "output": 663
+        "input": 1937,
+        "output": 761
       }
     }
   }

@@ -1,0 +1,378 @@
+[
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "d1aea2f8a6f16a463c012de0"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "true",
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ],
+            "vendor_ids": [
+              "dfc59530-9daa-4055-93b0-bcf3b589b8e3",
+              "2e5b9399-caa1-40f5-8101-92179728eb42"
+            ],
+            "lead_time_days": 14
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "true",
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ],
+            "vendor_ids": [
+              "d40c3ffe-9457-4d71-a93b-c714bc2ece99"
+            ],
+            "lead_time_days": 10
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "true",
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ],
+            "vendor_ids": [
+              "84842693-825d-4648-9f77-469d05bd2b18"
+            ],
+            "lead_time_days": 21
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "true",
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ],
+            "vendor_ids": [
+              "fda26d01-2a96-46da-8021-be5be83fc921",
+              "7baca7d4-4da5-48c9-a05b-05f1f87ba66b"
+            ],
+            "lead_time_days": 7
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "false",
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ],
+            "lead_time_days": 14,
+            "limit": 100
+          }
+        },
+        {
+          "name": "distru_products_get",
+          "arguments": {
+            "product_id": "be687b66-3cdc-4210-9164-1c6ad52f057e"
+          }
+        }
+      ],
+      "usage": {
+        "input": 7656,
+        "output": 1442
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "b1924146d7bb705ad8d8b4b9"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "true",
+            "lead_time_days": 14,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ],
+            "vendor_ids": [
+              "2e5b9399-caa1-40f5-8101-92179728eb42"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "false",
+            "lead_time_days": 14,
+            "limit": 100,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 10961,
+        "output": 546
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "35614802f8739d2876e72a9e"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "lead_time_days": 14,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ],
+            "vendor_ids": [
+              "2e5b9399-caa1-40f5-8101-92179728eb42"
+            ]
+          }
+        },
+        {
+          "name": "distru_velocity_report",
+          "arguments": {
+            "below_reorder_point": "any",
+            "lead_time_days": 14,
+            "limit": 100,
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ],
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ]
+          }
+        },
+        {
+          "name": "headset_retail_trends",
+          "arguments": {
+            "skus": [
+              "VAP-BD-1G"
+            ]
+          }
+        },
+        {
+          "name": "distru_open_orders",
+          "arguments": {
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ],
+            "location_ids": [
+              "b2d8f408-80b4-4e32-b46d-3c715c7305e2"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 12004,
+        "output": 700
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "0bb4832280cdfd70934c2efc"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "headset_demand_signal",
+          "arguments": {
+            "sku": "VAP-BD-1G",
+            "product_name": "Blue Dream Live Resin Cart 1g",
+            "wholesale_days_of_supply": 2.9,
+            "wholesale_avg_daily": 2.444,
+            "lead_time_days": 14
+          }
+        }
+      ],
+      "usage": {
+        "input": 13682,
+        "output": 191
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "be8d196dcac207d78432ca1e"
+    },
+    "reply": {
+      "text": "{\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"at_risk\":[{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"name\":\"Blue Dream Live Resin Cart 1g\",\"vendor_id\":\"2e5b9399-caa1-40f5-8101-92179728eb42\",\"vendor_name\":\"Sierra Extracts Co.\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"location_name\":\"Los Angeles Distribution Center\",\"on_hand_available\":7,\"incoming\":0,\"avg_daily_demand\":2.444,\"days_of_supply\":2.9,\"reorder_status\":\"LATE\",\"suggested_qty\":125,\"units_per_case\":25,\"open_order_demand\":0,\"adjusted_days_of_supply\":1.9,\"adjusted_avg_daily_demand\":3.703,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":51.5,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":1,\"reason\":\"Distru: 7 units available, nothing incoming, 2.9 days of supply vs 14-day lead time (LATE, reorder point 51). No open sales orders. Headset: retail surging +51.5% over 3 weeks (+14.7% WoW, 10 stores, 432 units in 4 weeks) → 1.9 adjusted days of supply (reorder_now).\"}],\"summary\":\"One SKU in scope is at risk at Los Angeles Distribution Center: Blue Dream Live Resin Cart 1g (VAP-BD-1G, Sierra Extracts Co.). Distru shows it LATE, with 7 units available and 2.9 days of supply against a 14-day lead time. Headset retail is surging +51.5% over 3 weeks, which cuts that to 1.9 adjusted days of supply, so the recommendation is reorder_now. Retail confirms the wholesale flag and makes it more urgent. The suggested quantity of 125 units (5 cases) is copied unchanged from Distru for the Planner to decide. Oakland holds 38 units of this SKU, which the Planner may want to consider.\",\"suspicious_text\":[]}",
+      "usage": {
+        "input": 14131,
+        "output": 778
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "7b7b90248ccac3c5222e5f9c"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_vendors",
+          "arguments": {
+            "vendor_ids": [
+              "2e5b9399-caa1-40f5-8101-92179728eb42"
+            ]
+          }
+        },
+        {
+          "name": "distru_vendor_purchase_history",
+          "arguments": {
+            "vendor_id": "2e5b9399-caa1-40f5-8101-92179728eb42",
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ]
+          }
+        },
+        {
+          "name": "recall_search",
+          "arguments": {
+            "query": "supply problems, delays, lead time or price changes",
+            "vendorIds": [
+              "2e5b9399-caa1-40f5-8101-92179728eb42"
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "input": 11756,
+        "output": 322
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "c365b5cd0a79f5c19de11568"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "propose_distru_purchases_upsert",
+          "arguments": {
+            "vendor_id": "2e5b9399-caa1-40f5-8101-92179728eb42",
+            "location_id": "b2d8f408-80b4-4e32-b46d-3c715c7305e2",
+            "lines": [
+              {
+                "product_id": "be687b66-3cdc-4210-9164-1c6ad52f057e",
+                "quantity": 125,
+                "unit_price": 18.82
+              }
+            ],
+            "expected_delivery_date": "2026-12-10",
+            "notes": "Restock LA live resin carts. Vendor flagged ~3 week lead time on live resin carts through mid-Dec (email 2026-11-10)."
+          }
+        },
+        {
+          "name": "propose_distru_mcp_mutate_product",
+          "arguments": {
+            "action": "UPDATE",
+            "id": "be687b66-3cdc-4210-9164-1c6ad52f057e",
+            "maxMenuBuyerOrderQuantity": 25,
+            "intent": "Restock Los Angeles live resin carts and share remaining stock among buyers until the PO arrives"
+          }
+        }
+      ],
+      "usage": {
+        "input": 18516,
+        "output": 642
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "70a27730aef8d732beaed1c2"
+    },
+    "reply": {
+      "text": "{\"vendor_id\":\"2e5b9399-caa1-40f5-8101-92179728eb42\",\"title\":\"Restock LA Blue Dream live resin carts (125 units)\",\"summary\":\"Proposed one PO to the Los Angeles Distribution Center for 125 Blue Dream Live Resin Carts at $18.82, total $2,352.50. Also proposed a 25-unit per-buyer menu cap until it arrives. Vendor emailed about a ~3 week lead time on live resin.\",\"lines\":[{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"location_id\":\"b2d8f408-80b4-4e32-b46d-3c715c7305e2\",\"decision\":\"ordered\",\"quantity\":125,\"unit_price\":18.82,\"reason\":\"Used suggested_qty 125 (5 cases of 25). 7 on hand, nothing incoming, 1.9 adjusted days of supply, retail surging. Price is last paid (PO-509, 2026-10-14). Sierra emailed on 2026-11-10 (gmail:thread/thread.sec-supply-issue#history.sec-supply-issue.0) that live resin carts will take ~3 weeks through mid-Dec, so the order should go out promptly.\"}],\"suspicious_text\":[]}",
+      "usage": {
+        "input": 19437,
+        "output": 448
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "dd7d4c707be4382f997fe0d9"
+    },
+    "reply": {
+      "toolCalls": [
+        {
+          "name": "distru_compliance_check",
+          "arguments": {
+            "product_ids": [
+              "be687b66-3cdc-4210-9164-1c6ad52f057e"
+            ]
+          }
+        },
+        {
+          "name": "distru_products_get",
+          "arguments": {
+            "product_id": "be687b66-3cdc-4210-9164-1c6ad52f057e"
+          }
+        }
+      ],
+      "usage": {
+        "input": 2758,
+        "output": 155
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "3dfce919c95bd1644c5a3024"
+    },
+    "reply": {
+      "text": "{\"lines\":[{\"product_id\":\"be687b66-3cdc-4210-9164-1c6ad52f057e\",\"sku\":\"VAP-BD-1G\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok. The newest batch, BD1G-2610-C, passed its SC Labs full panel (COA released 2026-10-17).\",\"All of the newest batch's Metrc packages are ACTIVE with lab testing state TestPassed.\",\"Older batches BD1G-2609-B and BD1G-2607-A also passed. No failures or holds were found.\"]}],\"summary\":\"One distinct product was reviewed, Blue Dream Live Resin Cart 1g (VAP-BD-1G). I approved it. The newest batch and its packages passed lab testing, and no Metrc package is on hold. The product description had no instruction-like content.\",\"suspicious_text\":[]}",
+      "usage": {
+        "input": 4680,
+        "output": 290
+      }
+    }
+  }
+]

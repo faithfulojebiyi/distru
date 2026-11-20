@@ -89,7 +89,7 @@
       ],
       "usage": {
         "input": 7677,
-        "output": 1385
+        "output": 1425
       }
     }
   },
@@ -110,55 +110,32 @@
           "name": "distru_velocity_report",
           "arguments": {
             "below_reorder_point": "true",
-            "lead_time_days": 14,
             "location_ids": [
               "815e2932-b181-444d-af9d-bdc6cb8ba793"
             ],
             "product_ids": [
               "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
             ],
-            "vendor_ids": [
-              "dfc59530-9daa-4055-93b0-bcf3b589b8e3",
-              "2e5b9399-caa1-40f5-8101-92179728eb42"
-            ]
+            "lead_time_days": 14
           }
-        },
+        }
+      ],
+      "usage": {
+        "input": 10382,
+        "output": 339
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "26c945915a2ed4237345efcf"
+    },
+    "reply": {
+      "toolCalls": [
         {
           "name": "distru_velocity_report",
           "arguments": {
-            "below_reorder_point": "true",
-            "lead_time_days": 10,
-            "location_ids": [
-              "815e2932-b181-444d-af9d-bdc6cb8ba793"
-            ],
-            "product_ids": [
-              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
-            ],
-            "vendor_ids": [
-              "d40c3ffe-9457-4d71-a93b-c714bc2ece99"
-            ]
-          }
-        },
-        {
-          "name": "distru_velocity_report",
-          "arguments": {
-            "below_reorder_point": "true",
-            "lead_time_days": 21,
-            "location_ids": [
-              "815e2932-b181-444d-af9d-bdc6cb8ba793"
-            ],
-            "product_ids": [
-              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
-            ],
-            "vendor_ids": [
-              "84842693-825d-4648-9f77-469d05bd2b18"
-            ]
-          }
-        },
-        {
-          "name": "distru_velocity_report",
-          "arguments": {
-            "below_reorder_point": "true",
             "lead_time_days": 7,
             "location_ids": [
               "815e2932-b181-444d-af9d-bdc6cb8ba793"
@@ -167,7 +144,6 @@
               "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
             ],
             "vendor_ids": [
-              "fda26d01-2a96-46da-8021-be5be83fc921",
               "7baca7d4-4da5-48c9-a05b-05f1f87ba66b"
             ]
           }
@@ -185,79 +161,13 @@
               "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
             ]
           }
-        }
-      ],
-      "usage": {
-        "input": 10382,
-        "output": 1435
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "ffda2c241f702785af96ea7e"
-    },
-    "reply": {
-      "toolCalls": [
-        {
-          "name": "distru_velocity_report",
-          "arguments": {
-            "lead_time_days": 7,
-            "location_ids": [
-              "815e2932-b181-444d-af9d-bdc6cb8ba793"
-            ],
-            "product_ids": [
-              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
-            ],
-            "vendor_ids": [
-              "7baca7d4-4da5-48c9-a05b-05f1f87ba66b"
-            ]
-          }
         },
-        {
-          "name": "distru_velocity_report",
-          "arguments": {
-            "below_reorder_point": "any",
-            "lead_time_days": 14,
-            "limit": 100,
-            "location_ids": [
-              "815e2932-b181-444d-af9d-bdc6cb8ba793"
-            ],
-            "product_ids": [
-              "4904ccf8-3f52-4c3a-bb5d-448efd8e8135"
-            ]
-          }
-        }
-      ],
-      "usage": {
-        "input": 13708,
-        "output": 538
-      }
-    }
-  },
-  {
-    "name": "recorded claude-sonnet-5-5",
-    "match": {
-      "fingerprint": "f33d51e52da755c8aa07f8ff"
-    },
-    "reply": {
-      "toolCalls": [
         {
           "name": "headset_retail_trends",
           "arguments": {
             "skus": [
               "PRE-BD-1G"
             ]
-          }
-        },
-        {
-          "name": "headset_demand_signal",
-          "arguments": {
-            "sku": "PRE-BD-1G",
-            "wholesale_days_of_supply": 7.6,
-            "wholesale_avg_daily": 7.322,
-            "lead_time_days": 7
           }
         },
         {
@@ -273,28 +183,51 @@
         }
       ],
       "usage": {
-        "input": 14973,
-        "output": 421
+        "input": 11476,
+        "output": 673
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "cd3d124884a565cf7b6fc31f"
+      "fingerprint": "5d029b257e6b3a330514ead1"
     },
     "reply": {
-      "text": "{\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"at_risk\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"name\":\"Blue Dream Pre-Roll 1g\",\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"vendor_name\":\"Mojave Pre-Roll Co.\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":56,\"incoming\":0,\"avg_daily_demand\":7.322,\"days_of_supply\":7.6,\"reorder_status\":\"ORDER_NOW\",\"suggested_qty\":250,\"units_per_case\":50,\"open_order_demand\":88,\"adjusted_days_of_supply\":5.2,\"adjusted_avg_daily_demand\":10.61,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":44.9,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":1,\"reason\":\"Distru: 7.6 days of supply with nothing incoming vs the 7-day Mojave lead time (ORDER_NOW, reorder point 75, 56 available). Open orders SO-1737 (50) and SO-1731 (38) total 88 units, which is more than the 56 available. Headset: retail surging +44.9% over 3 weeks (+13.7% WoW, 10 stores, 878 units in 4 weeks) → 10.61 adjusted daily demand and 5.2 adjusted days of supply (reorder_now).\"}],\"summary\":\"One SKU in scope is at risk: PRE-BD-1G (Blue Dream Pre-Roll 1g, Mojave Pre-Roll Co.). Distru shows ORDER_NOW with 7.6 days of supply and no incoming stock. Headset retail is surging +44.9% over 3 weeks, which cuts adjusted supply to 5.2 days (reorder_now), so retail has made it worse. Open orders, including the new SO-1737 for 50 units, total 88 units against 56 available, so they cannot be fully covered. Suggested quantity is 250, copied unchanged from the 7-day lead-time report. A cross-check at a 14-day lead time returned LATE with 300, but the vendor's actual lead time is 7 days. Other products on SO-1731 are outside the requested scope and were not assessed.\",\"suspicious_text\":[]}",
+      "toolCalls": [
+        {
+          "name": "headset_demand_signal",
+          "arguments": {
+            "sku": "PRE-BD-1G",
+            "wholesale_days_of_supply": 7.6,
+            "wholesale_avg_daily": 7.322,
+            "lead_time_days": 7
+          }
+        }
+      ],
       "usage": {
-        "input": 16592,
-        "output": 984
+        "input": 13807,
+        "output": 152
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "1245e646e25ca13fbacbc409"
+      "fingerprint": "b4b43d607762be3fb9113e5a"
+    },
+    "reply": {
+      "text": "{\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"at_risk\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"name\":\"Blue Dream Pre-Roll 1g\",\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"vendor_name\":\"Mojave Pre-Roll Co.\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"location_name\":\"Oakland Warehouse\",\"on_hand_available\":56,\"incoming\":0,\"avg_daily_demand\":7.322,\"days_of_supply\":7.6,\"reorder_status\":\"ORDER_NOW\",\"suggested_qty\":250,\"units_per_case\":50,\"open_order_demand\":88,\"adjusted_days_of_supply\":5.2,\"adjusted_avg_daily_demand\":10.61,\"retail_signal\":\"surging\",\"retail_growth_3w_pct\":44.9,\"recommendation\":\"reorder_now\",\"flagged_by\":\"both\",\"urgency_rank\":1,\"reason\":\"Distru: 7.6 days of supply vs 7-day vendor lead time (ORDER_NOW), 56 available, nothing incoming. Open orders total 88 units (SO-1737 for 50 and SO-1731 for 38), which is more than the 56 available. Headset: retail surging +44.9% over 3 weeks (+13.7% week over week, 10 stores, 878 units in 4 weeks), so adjusted days of supply is 5.2 (reorder_now).\"}],\"summary\":\"One SKU in scope is at risk: PRE-BD-1G (Blue Dream Pre-Roll 1g, Mojave Pre-Roll Co.). It is flagged by both sources. Distru shows ORDER_NOW with 7.6 days of supply against a 7-day lead time. Open orders of 88 units exceed the 56 available, and that includes the new order SO-1737 (50 units). Headset retail is surging +44.9% over 3 weeks, which cuts adjusted days of supply to 5.2, so the stockout would come before a replenishment order could arrive. Retail moved PRE-BD-1G up. Distru's suggested order quantity is 250 units (5 cases of 50). The below_reorder_point=false report call failed on a validation error, so I did not check any other SKUs in the retail pass. The scope is only this one product.\",\"suspicious_text\":[]}",
+      "usage": {
+        "input": 14209,
+        "output": 857
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "c0eb38ddd1e670c0d054511f"
     },
     "reply": {
       "toolCalls": [
@@ -328,7 +261,7 @@
         }
       ],
       "usage": {
-        "input": 10311,
+        "input": 10291,
         "output": 358
       }
     }
@@ -336,7 +269,7 @@
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "ccf27c7842eb785dcb333b05"
+      "fingerprint": "994491d8d49df846b8d5bcd4"
     },
     "reply": {
       "toolCalls": [
@@ -354,33 +287,47 @@
             ],
             "notes": "Restock Blue Dream Pre-Roll 1g for Oakland: 7.6 days of supply vs 7-day lead time, retail surging."
           }
-        },
-        {
-          "name": "propose_distru_mcp_mutate_product",
-          "arguments": {
-            "action": "UPDATE",
-            "id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
-            "maxMenuBuyerOrderQuantity": 50,
-            "intent": "Restock Blue Dream Pre-Roll 1g and share remaining stock fairly until the PO arrives"
-          }
         }
       ],
       "usage": {
-        "input": 14524,
-        "output": 506
+        "input": 14504,
+        "output": 315
       }
     }
   },
   {
     "name": "recorded claude-sonnet-5-5",
     "match": {
-      "fingerprint": "3477e5caa4c778e04c7f890e"
+      "fingerprint": "1f699f8cc153ff7118ac1e9b"
     },
     "reply": {
-      "text": "{\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"title\":\"Restock Blue Dream Pre-Roll 1g for Oakland\",\"summary\":\"Proposed one PO to Mojave for 250 units of PRE-BD-1G at $4.14 ($1,035) to Oakland Warehouse, since supply is under the 7-day lead time with retail surging. Also proposed a 50-unit per-buyer menu cap until it arrives.\",\"lines\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":250,\"unit_price\":4.14,\"reason\":\"Used suggested_qty 250, which is 5 whole cases of 50 and under the 3x cap. Price is the last unit price paid to Mojave (PO-518). Open orders of 88 exceed the 56 available, and adjusted days of supply is 5.2 against a 7-day lead time.\"}],\"suspicious_text\":[]}",
+      "toolCalls": [
+        {
+          "name": "propose_distru_mcp_mutate_product",
+          "arguments": {
+            "action": "UPDATE",
+            "id": "4904ccf8-3f52-4c3a-bb5d-448efd8e8135",
+            "maxMenuBuyerOrderQuantity": 50,
+            "intent": "Restock Blue Dream Pre-Roll 1g and share remaining stock fairly among buyers until the PO arrives"
+          }
+        }
+      ],
       "usage": {
-        "input": 15427,
-        "output": 391
+        "input": 14965,
+        "output": 208
+      }
+    }
+  },
+  {
+    "name": "recorded claude-sonnet-5-5",
+    "match": {
+      "fingerprint": "9c838548658d994170071161"
+    },
+    "reply": {
+      "text": "{\"vendor_id\":\"7baca7d4-4da5-48c9-a05b-05f1f87ba66b\",\"title\":\"Restock Blue Dream Pre-Roll 1g for Oakland\",\"summary\":\"Proposed one PO to Mojave Pre-Roll Co. for 250 units of Blue Dream Pre-Roll 1g ($1,035) at Oakland Warehouse, since open orders exceed stock. Also proposed a 50-unit per-buyer menu cap until it arrives.\",\"lines\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"location_id\":\"815e2932-b181-444d-af9d-bdc6cb8ba793\",\"decision\":\"ordered\",\"quantity\":250,\"unit_price\":4.14,\"reason\":\"Used suggested_qty 250, which is already whole cases of 50 and under the 3x cap. Price is the last price paid to this vendor. Open orders of 88 exceed the 56 available, and retail is surging +44.9%. Per-buyer menu cap of 50 also proposed.\"}],\"suspicious_text\":[]}",
+      "usage": {
+        "input": 15346,
+        "output": 390
       }
     }
   },
@@ -418,10 +365,10 @@
       "fingerprint": "be136b2557b9eb4e1a4444dd"
     },
     "reply": {
-      "text": "{\"lines\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok.\",\"Newest batch BD1G-2610-C has a passed lab test (Full Panel COA, Infinite Chemical Analysis Labs, released 2026-10-15). All 6 of its Metrc packages are ACTIVE and TestPassed.\",\"Older batches BD1G-2609-B and BD1G-2607-A also passed lab testing. The packages on BD1G-2609-B are ACTIVE and TestPassed. BD1G-2607-A has no packages on file.\",\"No failed tests and no ONHOLD or TestFailed packages found.\"]}],\"summary\":\"One product reviewed, Blue Dream Pre-Roll 1g (PRE-BD-1G). It is approved. The newest batch and all older batches passed lab testing, and the Metrc packages are ACTIVE and TestPassed. The product description had no instruction-like text.\",\"suspicious_text\":[]}",
+      "text": "{\"lines\":[{\"product_id\":\"4904ccf8-3f52-4c3a-bb5d-448efd8e8135\",\"sku\":\"PRE-BD-1G\",\"verdict\":\"approve\",\"reasons\":[\"Compliance status is ok.\",\"The newest batch, BD1G-2610-C, passed its Full Panel COA at Infinite Chemical Analysis Labs (released 2026-10-15). All 6 of its Metrc packages are ACTIVE and TestPassed.\",\"Older batches BD1G-2609-B and BD1G-2607-A also passed their lab tests. Neither has a failure or a hold.\"]}],\"summary\":\"One distinct product reviewed, Blue Dream Pre-Roll 1g (PRE-BD-1G). I approved it. Its newest batch passed lab testing and all of that batch's Metrc packages are ACTIVE and TestPassed. I found no suspicious text in the product description or the lab titles.\",\"suspicious_text\":[]}",
       "usage": {
         "input": 4712,
-        "output": 370
+        "output": 323
       }
     }
   }
