@@ -6,7 +6,7 @@
 // prev/next stepping (↑/↓) between events.
 import { css, cx } from '@ops/ui/css';
 import { Link } from '@tanstack/react-router';
-import { useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Box, Flex, HStack, styled } from '@ops/ui/jsx';
 
 import { Icons } from '@ops/ui/icons/base';
@@ -23,7 +23,8 @@ import { DrawerFact as Fact, SideDrawer } from '../../system/components/side-dra
 import { Pill } from '../../proposals/components/badges';
 import { PolicyReasons } from '../../proposals/components/policy-panel';
 import { ACTOR_KIND_LABELS, actionLabel, actorName } from '../../proposals/proposal-values';
-import { useProposal } from '../../proposals/proposals-api';
+import { useLocationNames, useProposal } from '../../proposals/proposals-api';
+import { opLabel } from '../../proposals/proposal-record';
 import {
   auditJson,
   formatAuditValue,
@@ -495,6 +496,8 @@ const AuditDrawerBody = ({
   stepping: boolean;
 }) => {
   const outcome = outcomeOf(event);
+  const locations = useLocationNames();
+  const locationNames = useMemo(() => new Map((locations.data ?? []).map((item) => [item.id, item.name])), [locations.data]);
   const op = event.opIndex !== null ? proposal?.ops.find((item) => item.index === event.opIndex) : undefined;
   const key = str(event.data.idempotencyKey) ?? op?.idempotencyKey ?? null;
   const record = str(event.data.recordId) ?? op?.result?.recordId ?? null;
@@ -559,9 +562,9 @@ const AuditDrawerBody = ({
               {proposal ? ` of ${proposal.ops.length}` : ''}
             </Link>
             {op ? (
-              <styled.span color="text.muted">
+              <styled.span color="text.muted" data-audit-op-label="">
                 {' '}
-                · {actionLabel(op.action)} on {op.resource}
+                · {opLabel(op, proposal?.ops ?? [], locationNames)}
               </styled.span>
             ) : null}
             {op?.summary ? (

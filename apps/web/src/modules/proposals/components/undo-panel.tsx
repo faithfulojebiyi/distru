@@ -18,7 +18,9 @@ import type {
   UndoOpInfo,
 } from '../../../api/generated/opsAgentAPI.schemas';
 import { RecordIcon } from '../../system/components/record-tabs';
-import { actionLabel, formatDateTime } from '../proposal-values';
+import { formatDateTime } from '../proposal-values';
+import { opLabel } from '../proposal-record';
+import { useDiffNames } from './diff-view';
 import {
   undoFailureOf,
   useProposal,
@@ -40,18 +42,30 @@ const resolveSummary = (text: string, ops: readonly ProposalOp[]) =>
     return typeof value === 'string' || typeof value === 'number' ? String(value) : token;
   });
 
+/** The record page's op label for an undo row ("Purchase order PO-524 → … · Oakland Warehouse"). */
+const useOpLabels = (proposal: ProposalDetail) => {
+  const names = useDiffNames();
+  return (info: UndoOpInfo) => {
+    const op = proposal.ops.find((item) => item.index === info.opIndex);
+    return op ? opLabel(op, proposal.ops, names) : `Op ${info.opIndex + 1}`;
+  };
+};
+
 /** Why an op stays as it is, worded as the reason the server gave ("can't be undone: …"). */
 const cannotUndo = (op: UndoOpInfo) =>
   op.undoProposalId ? 'Already in an undo proposal' : `Can’t be undone: ${op.reason ?? 'no compensating action'}`;
 
 const OpRow = ({
   op,
+  label,
   summary,
   checked,
   disabled,
   toggle,
 }: {
   op: UndoOpInfo;
+  /** "Purchase order PO-524 → Golden State Edibles · Oakland Warehouse". */
+  label: string;
   summary: string;
   checked: boolean;
   disabled: boolean;
@@ -87,8 +101,8 @@ const OpRow = ({
       </Box>
       <Flex direction="column" gap="0.5" minW="0">
         <HStack gap="1.5" minW="0">
-          <Span fontWeight="500" truncate>
-            {actionLabel(op.action)}
+          <Span fontWeight="500" truncate title={label} data-undo-label="">
+            {label}
           </Span>
           <Span color="text.muted" fontSize="1" flexShrink="0">
             op {op.opIndex + 1}
@@ -114,6 +128,7 @@ const UndoForm = ({ proposal }: { proposal: ProposalDetail }) => {
   const undoable = proposal.undo.ops.filter((op) => op.canUndo && !op.undoProposalId);
   const [selected, setSelected] = useState<ReadonlySet<number>>(() => new Set(undoable.map((op) => op.opIndex)));
   const [reason, setReason] = useState('');
+  const labelOf = useOpLabels(proposal);
   const summaries = useMemo(
     () => new Map(proposal.undo.ops.map((op) => [op.opIndex, resolveSummary(op.summary ?? op.action, proposal.ops)])),
     [proposal.undo.ops, proposal.ops],
@@ -148,6 +163,7 @@ const UndoForm = ({ proposal }: { proposal: ProposalDetail }) => {
           <OpRow
             key={op.opIndex}
             op={op}
+            label={labelOf(op)}
             summary={summaries.get(op.opIndex) ?? op.action}
             checked={selected.has(op.opIndex)}
             disabled={busy}
@@ -228,6 +244,7 @@ const UndoForm = ({ proposal }: { proposal: ProposalDetail }) => {
 /** On an executed (or partly executed) proposal: the Undo card, ToolApprovalCard's frame. */
 export const UndoPanel = ({ proposal }: { proposal: ProposalDetail }) => {
   const { undo } = proposal;
+  const labelOf = useOpLabels(proposal);
   const written = proposal.ops.some((op) => op.status === 'executed');
   if (!written || undo.ops.length === 0) return null;
   const proposed = undo.undoProposalId;
@@ -290,6 +307,7 @@ export const UndoPanel = ({ proposal }: { proposal: ProposalDetail }) => {
               <OpRow
                 key={op.opIndex}
                 op={{ ...op, canUndo: false }}
+                label={labelOf(op)}
                 summary={resolveSummary(op.summary ?? op.action, proposal.ops)}
                 checked={false}
                 disabled

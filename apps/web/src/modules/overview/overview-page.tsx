@@ -20,7 +20,7 @@ import {
 import { useAuditEvents, useProposals } from '../proposals/proposals-api';
 import { RunStatusBadge } from '../runs/run-badges';
 import { triggerOf } from '../runs/run-activity';
-import { useRuns } from '../runs/runs-api';
+import { useRunLabel, useRuns } from '../runs/runs-api';
 import { StartRunButton } from '../runs/start-run-dialog';
 import { useMe } from '../session/session-api';
 import { EmptyState, ErrorState } from '../system/components/states';
@@ -121,6 +121,7 @@ const ListSkeleton = () => (
 /** Recent runs as carbonme's ChatList rows: icon, title, status, time. */
 const RunList = ({ now }: { now: number }) => {
   const runs = useRuns();
+  const labelOf = useRunLabel();
   if (runs.isPending) return <ListSkeleton />;
   if (runs.isError) return <ErrorState title="Could not load runs" retry={() => void runs.refetch()} />;
   if (!runs.data.length)
@@ -144,7 +145,7 @@ const RunList = ({ now }: { now: number }) => {
               _hover={{ bg: 'background.muted' }}
             >
               <styled.span flex="1" minW="0" truncate fontSize="2">
-                Restock run
+                {labelOf(run)}
                 <styled.span color="text.muted" fontSize="1" ml="2">
                   {triggerOf(run.triggeredBy).label}
                 </styled.span>
@@ -315,8 +316,15 @@ export const OverviewPage = () => {
                     value={stats.pending}
                     note={
                       stats.oldestPending
-                        ? `${stats.pendingHighRisk > 0 ? `${stats.pendingHighRisk} high risk · ` : ''}Oldest ${stats.oldestPending}`
+                        ? stats.pendingHighRisk > 0
+                          ? `${stats.pendingHighRisk} high risk`
+                          : `Oldest ${stats.oldestPending}`
                         : 'Inbox is clear'
+                    }
+                    hint={
+                      stats.oldestPending
+                        ? `${stats.pendingHighRisk > 0 ? `${stats.pendingHighRisk} high risk · ` : ''}oldest waiting since ${stats.oldestPending}`
+                        : undefined
                     }
                   />
                 </Link>
@@ -336,9 +344,10 @@ export const OverviewPage = () => {
                   }
                 />
                 <StatCard
-                  label="Proposed this week"
+                  label={`Proposed this week · ${stats.proposedWeekCount}`}
                   value={formatMoneyShort(stats.proposedWeek)}
-                  note={`${formatMoneyShort(stats.approvedWeek)} approved · ${stats.proposedWeekCount} proposal${stats.proposedWeekCount === 1 ? '' : 's'}${stats.undoWeek ? ` · ${stats.undoWeek} undo` : ''}`}
+                  note={`${formatMoneyShort(stats.approvedWeek)} approved`}
+                  hint={`${stats.proposedWeekCount} proposal${stats.proposedWeekCount === 1 ? '' : 's'} this week, ${formatMoneyShort(stats.approvedWeek)} approved${stats.undoWeek ? `, ${stats.undoWeek} undo` : ''}`}
                 />
               </>
             )}

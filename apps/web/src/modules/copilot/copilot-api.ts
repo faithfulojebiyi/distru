@@ -1,11 +1,24 @@
-import { useCallback, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+// Chats: adapted from carbonme modules/chats/chat-api.ts (useChats, useCreateChat, useUpdateChat, useDeleteChat),
+// backed by Mastra Memory threads of the Ops Lead through @mastra/client-js. The server maps the session user to the
+// memory resource, so lists, reads, renames and deletes only ever reach the caller's own threads.
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
+import { getCopilotCapabilities } from '../../api/generated/copilot/copilot';
 import { getQueryScope } from '../../lib/query';
 import { OPS_LEAD_AGENT_ID, mastraClient } from '../../lib/mastra-client';
+import { toast } from '@ops/ui/primitives/toast/toast';
 import { runKeys } from '../runs/runs-api';
 import {
+  CopilotChatSchema,
+  chatTitleOf,
+  sortChats,
+  type CopilotChat,
+} from './copilot-chats-data';
+import {
+  copilotErrorOfChunk,
+  copilotErrorOfThrown,
   newTurn,
   subagentOutput,
   textArrived,
@@ -13,28 +26,129 @@ import {
   toolFinished,
   turnEnded,
   turnsOfHistory,
+  type CopilotError,
   type CopilotTurn,
 } from './copilot-data';
 
 /** Every Copilot query key, built here so invalidation always matches by prefix. */
 export const copilotKeys = {
+  all: (scope: string) => ['copilot', scope] as const,
+  chats: (scope: string) => ['copilot', scope, 'chats'] as const,
   thread: (scope: string, threadId: string) => ['copilot', scope, 'thread', threadId] as const,
 };
 
-/** One memory thread per user, as the Ops Lead documents: resource = user id, thread = ops-lead-<user id>. */
-export const copilotThreadId = (userId: string) => `ops-lead-${userId}`;
+/** What the Ops Lead can answer right now (topics backed by its current tools), for the new-chat page. */
+export const useCopilotCapabilities = () => {
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: [...copilotKeys.all(getQueryScope(client)), 'capabilities'] as const,
+    queryFn: ({ signal }) => getCopilotCapabilities({ signal }),
+    staleTime: 5 * 60_000,
+    meta: { suppressErrorToast: true },
+  });
+};
+
+const isNotFound =(error: unknown) => error instanceof Error && /\b404\b|not found/i.test(error.message);
+
+/** The caller's chats, latest activity first. */
+export const useCopilotChats = (userId: string | undefined) => {
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: copilotKeys.chats(getQueryScope(client)),
+    enabled: Boolean(userId),
+    meta: { suppressErrorToast: true },
+    queryFn: async (): Promise<CopilotChat[]> => {
+      const page = await mastraClient.listMemoryThreads({
+        resourceId: userId,
+        agentId: OPS_LEAD_AGENT_ID,
+        perPage: 100,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
+      return sortChats(page.threads.flatMap((thread) => {
+        const chat = CopilotChatSchema.safeParse(thread);
+        return chat.success ? [chat.data] : [];
+      }));
+    },
+  });
+};
+
+const updateTitle = (threadId: string, title: string) =>
+  mastraClient.getMemoryThread({ threadId, agentId: OPS_LEAD_AGENT_ID }).update({ title });
+
+/**
+ * Chats from before titles existed (the Ops Lead's original `ops-lead-<user>` thread) get one from their first
+ * question, once, so the list never shows "Untitled chat" for them.
+ */
+export const useBackfillChatTitles = (chats: readonly CopilotChat[] | undefined) => {
+  const client = useQueryClient();
+  const tried = useRef(new Set<string>());
+  useEffect(() => {
+    const untitled = (chats ?? []).filter((chat) => !chat.title?.trim() && !tried.current.has(chat.id));
+    if (!untitled.length) return;
+    for (const chat of untitled) tried.current.add(chat.id);
+    void Promise.all(
+      untitled.map(async (chat) => {
+        const page = await mastraClient.listThreadMessages(chat.id, { agentId: OPS_LEAD_AGENT_ID, perPage: 20 });
+        const first = turnsOfHistory(page.messages).find((turn) => turn.question.trim());
+        if (first) await updateTitle(chat.id, chatTitleOf(first.question));
+      }),
+    )
+      .catch(() => undefined)
+      .finally(() => void client.invalidateQueries({ queryKey: copilotKeys.chats(getQueryScope(client)) }));
+  }, [chats, client]);
+};
+
+/** Opens a chat (a thread titled from its first question) before that question streams into it. */
+export const useCreateChat = (userId: string | undefined) => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ threadId, question }: { threadId: string; question: string }) => {
+      if (!userId) throw new Error('Not signed in');
+      await mastraClient.createMemoryThread({
+        agentId: OPS_LEAD_AGENT_ID,
+        resourceId: userId,
+        threadId,
+        title: chatTitleOf(question),
+        metadata: { kind: 'copilot' },
+      });
+    },
+    onSuccess: () => void client.invalidateQueries({ queryKey: copilotKeys.chats(getQueryScope(client)) }),
+  });
+};
+
+export const useRenameChat = () => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ threadId, title }: { threadId: string; title: string }) => updateTitle(threadId, title.trim()),
+    onSuccess: () => void client.invalidateQueries({ queryKey: copilotKeys.chats(getQueryScope(client)) }),
+    onError: () => toast.error('Could not rename the chat.'),
+  });
+};
+
+export const useDeleteChat = () => {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (threadId: string) =>
+      mastraClient.getMemoryThread({ threadId, agentId: OPS_LEAD_AGENT_ID }).delete({ agentId: OPS_LEAD_AGENT_ID }),
+    onSuccess: (_result, threadId) => {
+      const scope = getQueryScope(client);
+      client.removeQueries({ queryKey: copilotKeys.thread(scope, threadId) });
+      void client.invalidateQueries({ queryKey: copilotKeys.chats(scope) });
+    },
+  });
+};
 
 /** The thread's stored messages as turns; a thread that does not exist yet is an empty one. */
-export const useCopilotHistory = (userId: string | undefined) => {
+export const useCopilotHistory = (threadId: string | null) => {
   const client = useQueryClient();
-  const threadId = userId ? copilotThreadId(userId) : '';
   return useQuery({
-    queryKey: copilotKeys.thread(getQueryScope(client), threadId),
-    enabled: Boolean(userId),
+    queryKey: copilotKeys.thread(getQueryScope(client), threadId ?? ''),
+    enabled: Boolean(threadId),
     staleTime: Number.POSITIVE_INFINITY,
     meta: { suppressErrorToast: true },
     retry: false,
     queryFn: async () => {
+      if (!threadId) return [];
       try {
         const page = await mastraClient.listThreadMessages(threadId, {
           agentId: OPS_LEAD_AGENT_ID,
@@ -42,8 +156,8 @@ export const useCopilotHistory = (userId: string | undefined) => {
         });
         return turnsOfHistory(page.messages);
       } catch (error) {
-        // A brand-new user has no thread until their first question.
-        if (error instanceof Error && /404|not found/i.test(error.message)) return [];
+        // A chat has no stored messages until its first question is answered.
+        if (isNotFound(error)) return [];
         throw error;
       }
     },
@@ -60,13 +174,12 @@ const ToolResultSchema = z.object({
 const ToolErrorSchema = z.object({ toolCallId: z.string(), error: z.unknown().optional() });
 const ToolOutputSchema = z.object({ toolCallId: z.string(), output: z.unknown() });
 const TextSchema = z.object({ text: z.string() });
-const ErrorSchema = z.object({ error: z.unknown() });
 
 const messageOfError = (error: unknown) => {
   if (typeof error === 'string') return error;
   if (error instanceof Error) return error.message;
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') return error.message;
-  return 'The Copilot could not answer. Try again.';
+  return 'The tool call failed.';
 };
 
 /**
@@ -74,7 +187,7 @@ const messageOfError = (error: unknown) => {
  * chunk into the live turn: tool calls become step rows and cards, subagent output joins its hand-off, text
  * streams into the answer. The session cookie authenticates; the server maps the resource to the user.
  */
-export const useCopilotStream = (userId: string | undefined) => {
+export const useCopilotStream = (userId: string | undefined, threadId: string | null) => {
   const client = useQueryClient();
   const [live, setLive] = useState<CopilotTurn | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -94,29 +207,31 @@ export const useCopilotStream = (userId: string | undefined) => {
   );
 
   const finish = useCallback(
-    (status: CopilotTurn['status'], error: string | null = null) => {
-      if (!current.current || !userId) return;
+    (status: CopilotTurn['status'], error: CopilotError | null = null) => {
+      if (!current.current || !threadId) return;
       const done = turnEnded(current.current, status, new Date().toISOString(), error);
       // Move the finished turn into the history cache, so the live slot frees up for the next question.
-      const key = copilotKeys.thread(getQueryScope(client), copilotThreadId(userId));
-      client.setQueryData<CopilotTurn[]>(key, (turns) => [...(turns ?? []), done]);
+      const scope = getQueryScope(client);
+      client.setQueryData<CopilotTurn[]>(copilotKeys.thread(scope, threadId), (turns) => [...(turns ?? []), done]);
+      // The chat moved to the top of the list.
+      void client.invalidateQueries({ queryKey: copilotKeys.chats(scope) });
       put(null);
       if (done.links.some((link) => link.kind === 'run'))
         void client.invalidateQueries({ queryKey: runKeys.all(getQueryScope(client)) });
     },
-    [client, put, userId],
+    [client, put, threadId],
   );
 
   const ask = useCallback(
     async (question: string) => {
-      if (!userId || abort.current) return;
+      if (!userId || !threadId || abort.current) return;
       const controller = new AbortController();
       abort.current = controller;
       put(newTurn(crypto.randomUUID(), question));
-      let failed: string | null = null;
+      let failed: CopilotError | null = null;
       try {
         const response = await mastraClient.getAgent(OPS_LEAD_AGENT_ID).stream(question, {
-          memory: { thread: copilotThreadId(userId), resource: userId },
+          memory: { thread: threadId, resource: userId },
           abortSignal: controller.signal,
         });
         await response.processDataStream({
@@ -149,20 +264,24 @@ export const useCopilotStream = (userId: string | undefined) => {
               if (output.success)
                 apply((turn) => subagentOutput(turn, output.data.toolCallId, output.data.output));
             } else if (type === 'error') {
-              const error = ErrorSchema.safeParse(payload);
-              failed = messageOfError(error.success ? error.data.error : payload);
+              // The server adds a stable `code`; the raw provider error is only logged and kept for "Details".
+              failed = copilotErrorOfChunk(payload);
+              console.error('[copilot] the Ops Lead stream failed', failed.code, payload);
             }
           },
         });
         finish(failed ? 'failed' : 'done', failed);
       } catch (error) {
         if (controller.signal.aborted) finish('stopped');
-        else finish('failed', messageOfError(error));
+        else {
+          console.error('[copilot] the Ops Lead request failed', error);
+          finish('failed', copilotErrorOfThrown(error));
+        }
       } finally {
         abort.current = null;
       }
     },
-    [apply, finish, put, userId],
+    [apply, finish, put, userId, threadId],
   );
 
   const stop = useCallback(() => abort.current?.abort(), []);

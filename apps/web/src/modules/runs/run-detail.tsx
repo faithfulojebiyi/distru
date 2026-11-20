@@ -24,7 +24,7 @@ import { ErrorState } from '../system/components/states';
 import { useNow } from '../system/use-now';
 import { runActivityOf, triggerOf } from './run-activity';
 import { RunStatusBadge } from './run-badges';
-import { LIVE_RUN_STATUSES, useRun } from './runs-api';
+import { LIVE_RUN_STATUSES, useRun, useRunLabel } from './runs-api';
 
 const Breadcrumb = ({ runId }: { runId: string }) => (
   <HStack
@@ -95,11 +95,12 @@ const RunHeader = ({ run, now }: { run: RunDetail; now: number }) => {
   const trigger = triggerOf(run.triggeredBy);
   const live = LIVE_RUN_STATUSES.has(run.status) && run.status !== 'suspended';
   const end = live ? now : Date.parse(run.updatedAt);
+  const labelOf = useRunLabel();
   return (
     <Flex direction="column" gap="4">
       <HStack gap="3" flexWrap="wrap">
-        <styled.h2 fontSize={{ base: '4', md: '5' }} fontWeight="600" letterSpacing="-0.015em">
-          Restock run
+        <styled.h2 fontSize={{ base: '4', md: '5' }} fontWeight="600" letterSpacing="-0.015em" title={run.runId}>
+          {labelOf(run)}
         </styled.h2>
         <RunStatusBadge status={run.status} />
       </HStack>

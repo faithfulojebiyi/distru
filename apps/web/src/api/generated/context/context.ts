@@ -9,7 +9,9 @@ import type {
   ContextMemoryList,
   ContextProfile,
   ListContextMemoriesParams,
-  OnboardingReport
+  OnboardingReport,
+  RecallSearchResponse,
+  SearchRecallParams
 } from '../opsAgentAPI.schemas';
 
 import { apiFetch } from '../../client';
@@ -81,6 +83,36 @@ export const getGetOnboardingReportUrl = () => {
 export const getOnboardingReport = async ( options?: Parameters<typeof apiFetch>[1]): Promise<OnboardingReport> => {
 
   return apiFetch<OnboardingReport>(getGetOnboardingReportUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+export const getSearchRecallUrl = (params: SearchRecallParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/recall/search?${stringifiedParams}` : `/api/recall/search`
+}
+
+/**
+ * @summary Semantic search over vendor email, vendor replies and PO notes: passages with date, vendor, PO numbers and a citation ref; text wrapped as untrusted, injection-like text flagged suspicious
+ */
+export const searchRecall = async (params: SearchRecallParams, options?: Parameters<typeof apiFetch>[1]): Promise<RecallSearchResponse> => {
+
+  return apiFetch<RecallSearchResponse>(getSearchRecallUrl(params),
   {
     ...options,
     method: 'GET'

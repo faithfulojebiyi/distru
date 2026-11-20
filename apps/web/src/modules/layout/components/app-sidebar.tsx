@@ -14,6 +14,8 @@ import {
   SidebarMenuItem,
   SidebarTrigger,
 } from '@ops/ui/primitives/sidebar';
+import { ChatsSidebarSection } from '../../copilot/copilot-sidebar';
+import { RunsSidebarSection } from '../../runs/runs-sidebar';
 import { SettingsNav } from '../../settings/settings-nav';
 import { UserMenu } from './user-menu';
 import { WorkspacePicker } from './workspace-picker';
@@ -112,6 +114,9 @@ export const AppSidebar = () => {
             <NavGroup items={WORK} pathname={pathname} />
             <NavGroup label="Observe" items={OBSERVE} pathname={pathname} />
             <NavGroup items={SYSTEM} pathname={pathname} />
+            {/* Recent chats and runs under the main nav (carbonme's sidebar sections); hidden in icon mode. */}
+            <ChatsSidebarSection pathname={pathname} />
+            <RunsSidebarSection pathname={pathname} />
           </>
         )}
       </SidebarContent>

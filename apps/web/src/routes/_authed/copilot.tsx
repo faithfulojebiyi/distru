@@ -1,17 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { Outlet, createFileRoute } from '@tanstack/react-router';
 
-import { CopilotPage } from '../../modules/copilot/copilot-page';
-
-type Search = { q?: string };
-
+/** Copilot chats: /copilot (a new chat) and /copilot/$threadId (one chat). */
 export const Route = createFileRoute('/_authed/copilot')({
-  validateSearch: (search: Record<string, unknown>): Search => ({
-    q: typeof search.q === 'string' && search.q.trim() ? search.q.slice(0, 4000) : undefined,
-  }),
-  component: Copilot,
+  component: Outlet,
 });
-
-function Copilot() {
-  const { q } = Route.useSearch();
-  return <CopilotPage initialQuestion={q ?? null} />;
-}

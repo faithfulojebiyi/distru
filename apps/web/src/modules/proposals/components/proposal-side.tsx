@@ -11,7 +11,7 @@ import { Span } from '@ops/ui/primitives/text';
 import type { ProposalDetail } from '../../../api/generated/opsAgentAPI.schemas';
 import { usePolicyRules } from '../../settings/settings-api';
 import { formatDateTime, formatMoney } from '../proposal-values';
-import { groupsOf } from '../proposal-record';
+import { groupsOf, triggerOfProposal } from '../proposal-record';
 import { PolicyBadge, RiskBadge, StatusBadge } from './badges';
 import { DecisionPanel, type Decision } from './decision-panel';
 import { CreatedBy } from './proposal-inbox';
@@ -89,6 +89,7 @@ const RecordDetails = ({ proposal }: { proposal: ProposalDetail }) => {
   const [all, setAll] = useState(false);
   const systems = groupsOf(proposal);
   const keys = proposal.ops.filter((op) => op.idempotencyKey).length;
+  const trigger = triggerOfProposal(proposal);
   return (
     <SideSection title="Record details" data-side-section="details">
       <Flex direction="column">
@@ -121,6 +122,14 @@ const RecordDetails = ({ proposal }: { proposal: ProposalDetail }) => {
             <CreatedBy principal={proposal.createdBy} />
           </Box>
         </Row>
+        {trigger ? (
+          <Row icon="lightning" label="Trigger">
+            <Span display="block" truncate title={trigger.note ? `${trigger.label} — “${trigger.note}”` : trigger.label} data-detail-trigger="">
+              {trigger.label}
+              {trigger.note ? <Span color="text.muted"> — “{trigger.note}”</Span> : null}
+            </Span>
+          </Row>
+        ) : null}
         <Row icon="calendar" label="Created">
           {formatDateTime(proposal.createdAt)}
         </Row>

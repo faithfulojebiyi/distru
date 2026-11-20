@@ -4,6 +4,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
+import { useCallback, useMemo } from 'react';
 import { z } from 'zod';
 
 import { getRun, listRuns, startRun } from '../../api/generated/runs/runs';
@@ -15,6 +16,8 @@ import type {
 import { getQueryScope } from '../../lib/query';
 import { OPS_LEAD_AGENT_ID, mastraClient } from '../../lib/mastra-client';
 import { toast } from '@ops/ui/primitives/toast/toast';
+import { useLocationNames } from '../proposals/proposals-api';
+import { runLabel } from './run-label';
 
 /** Every run query key, built here so invalidation always matches by prefix. */
 export const runKeys = {
@@ -106,4 +109,11 @@ export const useRunLocations = (enabled: boolean) => {
       return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
     },
   });
+};
+
+/** Labels runs as "Restock · Oakland Warehouse" (scope ids resolved with the cached location list). */
+export const useRunLabel = () => {
+  const locations = useLocationNames();
+  const names = useMemo(() => new Map((locations.data ?? []).map((item) => [item.id, item.name])), [locations.data]);
+  return useCallback((run: Parameters<typeof runLabel>[0]) => runLabel(run, names), [names]);
 };

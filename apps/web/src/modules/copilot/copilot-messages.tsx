@@ -15,7 +15,7 @@ import { ProposalStatus } from '../../api/generated/opsAgentAPI.schemas';
 import { LinkPill } from '../steps/step-cards';
 import { StepTimeline } from '../steps/step-timeline';
 import { ToolRuns } from '../steps/tool-runs';
-import type { CopilotLink, CopilotTurn } from './copilot-data';
+import { COPILOT_ERROR_MESSAGES, type CopilotError, type CopilotLink, type CopilotTurn } from './copilot-data';
 
 /** A sent question: its text in a bubble, right-aligned. */
 export const SentQuestion = ({ text }: { text: string }) => (
@@ -95,17 +95,37 @@ const AnswerLink = ({ link }: { link: CopilotLink }) =>
     />
   );
 
-/** The failed box of carbonme's LastRun. */
-const AnswerFailure = ({ error, retry }: { error: string; retry: () => void }) => (
-  <Box role="alert" rounded="xl" bg="brand.error.3" px="4" py="3" data-answer="error">
+/** The failed box of carbonme's LastRun: our words, the technical detail folded away under "Details". */
+const AnswerFailure = ({ error, retry }: { error: CopilotError | null; retry: () => void }) => (
+  <Box role="alert" rounded="xl" bg="brand.error.3" px="4" py="3" data-answer="error" data-error-code={error?.code ?? 'agent_error'}>
     <HStack gap="2" alignItems="start">
       <Icons.warn size={15} color="text.error" flexShrink="0" mt="0.5" />
       <styled.p fontSize="2" color="text.error" flex="1">
-        {error}
+        {COPILOT_ERROR_MESSAGES[error?.code ?? 'agent_error']}
       </styled.p>
     </HStack>
-    <HStack justify="flex-end" mt="2">
-      <Button size="xs" variant="ghost" rounded="full" onClick={retry}>
+    <HStack justify="space-between" alignItems="start" gap="3" mt="2">
+      {error?.detail ? (
+        <styled.details flex="1" minW="0" data-answer-error-details="">
+          <styled.summary color="text.muted" cursor="pointer" fontSize="1" w="fit-content">
+            Details
+          </styled.summary>
+          <styled.code
+            display="block"
+            mt="1.5"
+            fontFamily="mono"
+            fontSize="1"
+            color="text.muted"
+            whiteSpace="pre-wrap"
+            overflowWrap="anywhere"
+          >
+            {error.detail}
+          </styled.code>
+        </styled.details>
+      ) : (
+        <Box flex="1" />
+      )}
+      <Button size="xs" variant="ghost" rounded="full" flexShrink="0" onClick={retry}>
         <Icons.refresh size={12} />
         Try again
       </Button>
@@ -149,7 +169,7 @@ export const AssistantTurn = ({
         </styled.p>
       )}
       {turn.status === 'failed' && (
-        <AnswerFailure error={turn.error ?? 'The Copilot could not answer.'} retry={() => retry(turn.question)} />
+        <AnswerFailure error={turn.error} retry={() => retry(turn.question)} />
       )}
       {turn.status === 'done' && turn.answer && (
         <Flex align="center" gap="1.5" data-answer-bar="">
@@ -180,6 +200,16 @@ const Chip = styled('button', {
     _focusVisible: { outline: '2px solid', outlineColor: 'brand.info.9' },
   },
 });
+
+/** One question as a chip; one click asks it. */
+export const QuestionChip = ({ question, send }: { question: string; send: (question: string) => void }) => (
+  <Chip type="button" title={question} maxW="full" onClick={() => send(question)}>
+    <Icons.arrowRight size={12} flexShrink="0" />
+    <styled.span truncate minW="0">
+      {question}
+    </styled.span>
+  </Chip>
+);
 
 /** Suggested questions as chips; one click asks it. */
 export const FollowUps = ({

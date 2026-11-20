@@ -18,7 +18,7 @@ import { EmptyState, ErrorState } from '../system/components/states';
 import { useNow } from '../system/use-now';
 import { triggerOf } from './run-activity';
 import { RunStatusBadge } from './run-badges';
-import { LIVE_RUN_STATUSES, useRuns } from './runs-api';
+import { LIVE_RUN_STATUSES, useRunLabel, useRuns } from './runs-api';
 import { StartRunButton } from './start-run-dialog';
 
 const COLUMNS =
@@ -64,7 +64,7 @@ const runDuration = (run: RunSummary, now: number) => {
   return durationText(end - Date.parse(run.createdAt));
 };
 
-const RunRow = ({ run, now }: { run: RunSummary; now: number }) => {
+const RunRow = ({ run, label, now }: { run: RunSummary; label: string; now: number }) => {
   const trigger = triggerOf(run.triggeredBy);
   const TriggerIcon = Icons[TRIGGER_ICONS[trigger.kind]];
   const { totals } = run;
@@ -74,11 +74,8 @@ const RunRow = ({ run, now }: { run: RunSummary; now: number }) => {
         <Flex align="center" gap="3" minW="0" flex={{ base: '1 1 100%', lg: 'initial' }}>
           <TriggerIcon size={15} color="text.muted" flexShrink="0" />
           <Flex direction="column" minW="0">
-            <styled.span truncate fontWeight="500">
-              Restock run
-              <styled.span color="text.muted" fontWeight="400" fontFamily="mono" fontSize="1" ml="2">
-                {run.runId.slice(0, 8)}
-              </styled.span>
+            <styled.span truncate fontWeight="500" title={run.runId}>
+              {label}
             </styled.span>
             <styled.span fontSize="1" color="text.muted" truncate>
               {trigger.label}
@@ -123,6 +120,7 @@ const HEADERS = ['Run', 'Status', 'Started', 'Duration', 'Agents · tools', 'Tok
 
 export const RunsList = () => {
   const runs = useRuns();
+  const labelOf = useRunLabel();
   const now = useNow(5_000);
 
   if (runs.isPending)
@@ -166,7 +164,7 @@ export const RunsList = () => {
       </Box>
       <styled.ul display="flex" flexDirection="column" data-testid="runs-list">
         {runs.data.map((run) => (
-          <RunRow key={run.runId} run={run} now={now} />
+          <RunRow key={run.runId} run={run} label={labelOf(run)} now={now} />
         ))}
       </styled.ul>
     </Box>

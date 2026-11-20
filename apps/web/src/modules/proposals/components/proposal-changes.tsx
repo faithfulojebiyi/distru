@@ -12,7 +12,7 @@ import type { ProposalDetail, ProposalOp } from '../../../api/generated/opsAgent
 import { formatDateTime, formatInline, formatMoney, formatPath, fieldOf } from '../proposal-values';
 import { opLabel, systemOf, type SystemGroup } from '../proposal-record';
 import { Pill, RiskBadge, TONES } from './badges';
-import { DiffCounts, DiffView } from './diff-view';
+import { DiffCounts, DiffView, useDiffNames } from './diff-view';
 
 export const OP_STATUS = {
   pending: { tone: TONES.muted, label: 'Not written' },
@@ -114,6 +114,7 @@ const OpRow = ({
 }) => {
   const status = OP_STATUS[op.status];
   const SystemIcon = Icons[system.icon];
+  const label = opLabel(op, ops, useDiffNames());
   return (
     <Box as="article" id={`op-${op.index}`} scrollMarginTop="0" data-op-index={op.index} data-op-open={open ? 'true' : 'false'}>
       <styled.button
@@ -125,7 +126,7 @@ const OpRow = ({
         zIndex="1"
         w="full"
         display="grid"
-        gridTemplateColumns={{ base: 'auto minmax(0, 1fr) auto', lg: 'auto 2rem 9rem minmax(0, 1fr) auto auto 4rem 5.5rem' }}
+        gridTemplateColumns={{ base: 'auto minmax(0, 1fr) auto', lg: 'auto 2rem auto minmax(0, 1fr) auto auto 3rem 5.5rem' }}
         alignItems="center"
         gap="3"
         px="3"
@@ -145,12 +146,24 @@ const OpRow = ({
           #{op.index + 1}
         </Span>
         <HStack hideBelow="lg" gap="1.5" color="text.label" fontSize="1" minW="0">
-          <SystemIcon size={13} flexShrink="0" />
-          <Span truncate>{system.label}</Span>
+          <SystemIcon size={13} flexShrink="0" aria-label={system.label} />
+          {/* The system name only where there is room; the icon (and the filter chips) carry it otherwise. */}
+          <Span truncate hideBelow="2xl" w="8rem">
+            {system.label}
+          </Span>
         </HStack>
-        <Span fontWeight="500" truncate title={op.summary ?? undefined}>
-          {opLabel(op, ops)}
-        </Span>
+        {/* The part after " · " (location, PO number, date) tells same-vendor rows apart, so it never truncates away. */}
+        <HStack gap="1.5" minW="0" title={op.summary ? `${label}\n${op.summary}` : label} data-op-label={label}>
+          <Span fontWeight="500" truncate>
+            {/* The system icon already says it is a purchase order: "PO-521 → Vendor" / "PO → Vendor" leaves room for the vendor. */}
+            {(label.split(' · ')[0] ?? label).replace(/^Purchase order (PO-\d+)/, '$1').replace(/^Purchase order/, 'PO')}
+          </Span>
+          {label.includes(' · ') ? (
+            <Span color="text.muted" flexShrink="0" whiteSpace="nowrap">
+              {label.split(' · ').slice(1).join(' · ')}
+            </Span>
+          ) : null}
+        </HStack>
         <Box hideBelow="lg">{op.risk ? <RiskBadge risk={op.risk} /> : null}</Box>
         <Pill tone={status.tone} label={status.label} data-op-status={op.status} />
         <Box hideBelow="lg" justifySelf="end">

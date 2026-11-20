@@ -18,7 +18,68 @@ export type CopilotTurn = {
   tools: ToolRunView[];
   links: CopilotLink[];
   status: 'streaming' | 'done' | 'failed' | 'stopped';
-  error: string | null;
+  error: CopilotError | null;
+};
+
+/**
+ * Why a turn failed. `code` is the agent server's stable code (src/api/agent-errors.ts) or `network` when the
+ * request never got an answer; `detail` is the raw technical message, shown only behind "Details".
+ */
+export const CopilotErrorCodeSchema = z.enum([
+  'model_history_invalid',
+  'rate_limited',
+  'model_unavailable',
+  'context_too_long',
+  'agent_error',
+  'network',
+]);
+export type CopilotErrorCode = z.infer<typeof CopilotErrorCodeSchema>;
+export type CopilotError = { code: CopilotErrorCode; detail: string | null };
+
+/** What the operator reads for each code. Never the provider's own message. */
+export const COPILOT_ERROR_MESSAGES: Record<CopilotErrorCode, string> = {
+  model_history_invalid: 'The Ops Lead hit a problem answering that. Try again.',
+  rate_limited: 'The Ops Lead is busy right now. Wait a moment and try again.',
+  model_unavailable: "The Ops Lead's model is unavailable right now. Try again in a minute.",
+  context_too_long: 'This conversation is too long for the Ops Lead to read. Ask a shorter question.',
+  agent_error: 'The Ops Lead hit a problem answering that. Try again.',
+  network: 'Could not reach the Ops Agent server. Check your connection and try again.',
+};
+
+const ErrorLikeSchema = z.object({ name: z.string().optional(), message: z.string() }).passthrough();
+
+/** The technical one-liner behind "Details": "AI_APICallError: messages.5…" (or the JSON when unknown). */
+export const errorDetail = (error: unknown): string | null => {
+  if (error === undefined || error === null) return null;
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  const like = ErrorLikeSchema.safeParse(error);
+  if (like.success) return like.data.name ? `${like.data.name}: ${like.data.message}` : like.data.message;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+};
+
+/** A stream `error` chunk's payload → the turn's error (unknown or missing code → agent_error). */
+export const copilotErrorOfChunk = (payload: unknown): CopilotError => {
+  const parsed = z.object({ code: z.unknown().optional(), error: z.unknown().optional() }).passthrough().safeParse(payload);
+  const code = CopilotErrorCodeSchema.safeParse(parsed.success ? parsed.data.code : undefined);
+  return {
+    code: code.success ? code.data : 'agent_error',
+    detail: errorDetail(parsed.success && parsed.data.error !== undefined ? parsed.data.error : payload),
+  };
+};
+
+/** A thrown request error (HTTP status in the client's message, or a network failure) → the turn's error. */
+export const copilotErrorOfThrown = (error: unknown): CopilotError => {
+  const detail = errorDetail(error);
+  const status = /\bstatus:? (\d{3})\b/i.exec(detail ?? '')?.[1];
+  if (status === '429') return { code: 'rate_limited', detail };
+  if (status && Number(status) >= 500) return { code: 'model_unavailable', detail };
+  if (error instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(detail ?? '')) return { code: 'network', detail };
+  return { code: 'agent_error', detail };
 };
 
 /** The suggested first questions, shown while the thread is empty. */
@@ -63,7 +124,28 @@ const promptOf = (args: unknown) => {
   return null;
 };
 
-const RunResultSchema = z.object({ runId: z.string() });
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A tool call's arguments as one short line for its step row ("location_id: 3f2a9c1e · lead_time_days: 14"), so
+ * repeated calls of one tool read apart. Scalars only, ids shortened, at most 80 characters; null when empty.
+ */
+export const argsSummary = (args: unknown): string | null => {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return null;
+  const parts = Object.entries(args as Record<string, unknown>).flatMap(([key, value]) => {
+    if (value === null || value === undefined || value === '') return [];
+    if (typeof value === 'string') return [`${key}: ${UUID.test(value) ? value.slice(0, 8) : value}`];
+    if (typeof value === 'number' || typeof value === 'boolean') return [`${key}: ${String(value)}`];
+    if (Array.isArray(value) && value.every((item) => typeof item === 'string' || typeof item === 'number'))
+      return value.length ? [`${key}: ${value.map((item) => (typeof item === 'string' && UUID.test(item) ? item.slice(0, 8) : item)).join(', ')}`] : [];
+    return [];
+  });
+  if (!parts.length) return null;
+  const line = parts.join(' · ');
+  return line.length > 80 ? `${line.slice(0, 79)}…` : line;
+};
+
+const RunResultSchema =z.object({ runId: z.string() });
 const ProposalResultSchema = z.object({ proposal_id: z.string(), status: z.string().optional() });
 
 /** The links a tool's result carries: a started run, a created proposal. */
@@ -128,7 +210,7 @@ export const toolCalled = (
     object: agent
       ? { name: agentNameOf(call.toolName), agent: call.toolName }
       : { name: run ? 'a restock run' : toolTitle(call.toolName) },
-    detail: agent ? promptOf(call.args) : null,
+    detail: agent ? promptOf(call.args) : argsSummary(call.args),
     status: 'running',
     startedAt: at,
     finishedAt: null,
@@ -239,7 +321,7 @@ export const turnEnded = (
   turn: CopilotTurn,
   status: CopilotTurn['status'],
   at: string,
-  error: string | null = null,
+  error: CopilotError | null = null,
 ): CopilotTurn => ({
   ...turn,
   status,
@@ -326,12 +408,15 @@ export const turnsOfHistory = (messages: readonly unknown[]): CopilotTurn[] => {
         turn = toolFinished(turn, { toolCallId: id, result: call.result, isError: false }, '');
       } else if (part.type === 'text' && 'text' in part && typeof part.text === 'string') {
         turn = { ...turn, answer: turn.answer ? `${turn.answer}\n\n${part.text}` : part.text };
+      } else if (part.type === 'error') {
+        // A failed turn is stored with the provider's error: show it as failed, in our words.
+        turn = { ...turn, status: 'failed', error: copilotErrorOfChunk(part) };
       }
     });
     if (typeof message.content === 'string') turn = { ...turn, answer: message.content };
     turn = {
       ...turn,
-      activity: { ...turn.activity, outcome: 'answered', endedAt: at, answeredAt: at },
+      activity: { ...turn.activity, outcome: turn.status === 'failed' ? 'failed' : 'answered', endedAt: at, answeredAt: at },
     };
     turns[turns.length - 1] = turn;
   }

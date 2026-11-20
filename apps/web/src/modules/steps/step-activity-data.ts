@@ -83,8 +83,45 @@ export const timelineRows = (activity: StepActivity): StepRow[] => {
       });
   }
 
-  return rows;
+  return foldRepeatedTools(rows);
 };
+
+/** Back-to-back calls of one tool fold into a group from this many on. */
+export const FOLD_REPEATED_TOOLS_AT = 2;
+
+const foldKey = (row: StepRow) =>
+  row.kind === 'step' && row.step.kind === 'tool' && !row.retries.length && row.step.object ? row.step.object.name : null;
+
+/**
+ * Repeated calls of the same tool, back to back and without retries, become one group row (carbonme's chat mockup:
+ * many steps of one kind fold into a group, "Read 14 page ranges"); each call stays inside it with its arguments.
+ */
+export const foldRepeatedTools = (rows: StepRow[]): StepRow[] => {
+  const out: StepRow[] = [];
+  let index = 0;
+  while (index < rows.length) {
+    const key = foldKey(rows[index]!);
+    let end = index + 1;
+    while (key && end < rows.length && foldKey(rows[end]!) === key) end++;
+    const run = rows.slice(index, end);
+    if (key && run.length >= FOLD_REPEATED_TOOLS_AT) {
+      const steps = run.flatMap((row) => (row.kind === 'step' ? [row.step] : []));
+      out.push({ kind: 'group', id: `group:${steps[0]!.id}`, steps });
+    } else out.push(...run);
+    index = end;
+  }
+  return out;
+};
+
+/** A group's status: running while any call runs, failed if one failed, else done. */
+export const groupStatus = (steps: readonly AgentStep[]): AgentStep['status'] =>
+  steps.some((step) => step.status === 'running')
+    ? 'running'
+    : steps.some((step) => step.status === 'failed')
+      ? 'failed'
+      : steps.some((step) => step.status === 'stopped')
+        ? 'stopped'
+        : 'done';
 
 /** The newest note, which stays open while the others fold to one line. */
 export const newestNoteId = (activity: StepActivity) =>

@@ -15,6 +15,7 @@ import {
   formatCost,
   formatTokens,
   formatToolValue,
+  groupStatus,
   liveStatusText,
   newestNoteId,
   plural,
@@ -598,6 +599,37 @@ const StepRowView = ({
   );
 };
 
+/**
+ * Back-to-back calls of one tool as one row, "Called distru.velocity_report 4 times" (carbonme's chat mockup: many
+ * steps of one kind fold into a group). It opens to the calls themselves, each with its arguments as the detail.
+ */
+const GroupRowView = ({ row, slots }: { row: Extract<StepRow, { kind: 'group' }>; slots?: Record<string, ReactNode> }) => {
+  const [expanded, setExpanded] = useState(false);
+  const first = row.steps[0]!;
+  const status = groupStatus(row.steps);
+  const summary: AgentStep = {
+    ...first,
+    id: row.id,
+    status,
+    detail: `${row.steps.length} times`,
+    finishedAt: status === 'running' ? null : (row.steps.at(-1)?.finishedAt ?? first.finishedAt),
+    tokens: null,
+    costUsd: null,
+  };
+  return (
+    <styled.li listStyle="none" minW="0" data-step-group={first.object?.name ?? ''} data-status={status} data-count={row.steps.length}>
+      <StepLine step={summary} expanded={expanded} activate={() => setExpanded(!expanded)} />
+      {expanded && (
+        <styled.ol display="flex" flexDirection="column" gap="1px" ml="7" p="0" minW="0" data-step-group-calls="">
+          {row.steps.map((step) => (
+            <StepRowView key={step.id} row={{ kind: 'step', step, retries: [] }} slot={slots?.[step.id] ?? null} />
+          ))}
+        </styled.ol>
+      )}
+    </styled.li>
+  );
+};
+
 /** A note between steps: one line when folded, the whole note when open (carbonme's Thinking row). */
 const ThinkingRow = ({
   note,
@@ -700,6 +732,8 @@ const TimelineList = ({
               })
             }
           />
+        ) : row.kind === 'group' ? (
+          <GroupRowView key={row.id} row={row} slots={slots} />
         ) : (
           <StepRowView
             key={row.step.id}

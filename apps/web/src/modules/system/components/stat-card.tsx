@@ -1,4 +1,4 @@
-// Copied from carbonme apps/admin/src/ui/stat-card.tsx.
+// Copied from carbonme apps/admin/src/ui/stat-card.tsx (Ops Agent: optional `hint` tooltip for what the note leaves out).
 import { css } from '@ops/ui/css';
 import type { ReactNode } from 'react';
 
@@ -8,13 +8,18 @@ export const StatCard = ({
   value,
   note,
   tone,
+  hint,
 }: {
   label: string;
   value: ReactNode;
+  /** One short line (it never wraps); put anything longer in `hint`. */
   note?: ReactNode;
   tone?: 'bad';
+  /** Tooltip for the whole card (details that do not fit the note). */
+  hint?: string;
 }) => (
   <div
+    title={hint}
     className={css({
       bg: 'brand.panel.3',
       borderRadius: 'xl',
@@ -40,7 +45,7 @@ export const StatCard = ({
     </strong>
     {note ? (
       <span
-        title={typeof note === 'string' ? note : undefined}
+        title={!hint && typeof note === 'string' ? note : undefined}
         className={css({
           color: 'text.muted',
           fontSize: '1',

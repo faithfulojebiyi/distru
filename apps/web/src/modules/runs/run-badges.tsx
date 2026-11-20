@@ -23,3 +23,9 @@ export const RunStatusBadge = ({ status }: { status: RunStatus }) => (
     data-run-status={status}
   />
 );
+
+/** The status as a dot (its tone's colour class) and a label, for compact rows such as the sidebar's Runs. */
+export const runStatusDot = (status: RunStatus) => ({
+  className: RUN_STATUS[status].tone.dot,
+  label: RUN_STATUS[status].label,
+});

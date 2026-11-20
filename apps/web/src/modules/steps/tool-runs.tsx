@@ -203,13 +203,92 @@ export const ToolCallCard = ({ run }: { run: ToolRunView }) => {
   );
 };
 
-/** The live answer's tool calls in order (carbonme ChatToolRuns). */
+/** Calls of one tool, in first-call order: one entry per tool, its calls in order. */
+export const groupToolRuns = (runs: readonly ToolRunView[]): ToolRunView[][] => {
+  const groups = new Map<string, ToolRunView[]>();
+  for (const run of runs) groups.set(run.toolName, [...(groups.get(run.toolName) ?? []), run]);
+  return [...groups.values()];
+};
+
+const groupBadge = (runs: readonly ToolRunView[]): ToolRunStatus =>
+  runs.some((run) => run.status === 'running')
+    ? 'running'
+    : runs.some((run) => run.status === 'awaiting_approval')
+      ? 'awaiting_approval'
+      : runs.some((run) => run.status === 'failed')
+        ? 'failed'
+        : 'succeeded';
+
+/**
+ * Repeated calls of one tool as one card, "distru.velocity_report · 4 calls" (carbonme's chat mockup folds many
+ * steps of one kind into a group). It opens to each call's card.
+ */
+const ToolRunGroupCard = ({ runs }: { runs: readonly ToolRunView[] }) => {
+  const [open, setOpen] = useState(false);
+  const first = runs[0]!;
+  const suspicious = runs.some((run) => run.suspicious);
+  return (
+    <Box rounded="xl" bg="brand.panel.3" data-tool-run-group={first.toolName} data-count={runs.length}>
+      <styled.button
+        type="button"
+        display="flex"
+        alignItems="center"
+        gap="2"
+        w="full"
+        px="3"
+        py="2"
+        textAlign="left"
+        rounded="xl"
+        cursor="pointer"
+        _focusVisible={{ outline: '2px solid', outlineColor: 'brand.panel.10' }}
+        aria-expanded={open}
+        aria-label={`${toolLabel(first)} in ${first.connectionName}, ${runs.length} calls`}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <HStack gap="2.5" minW="0" flex="1">
+          <AppLogo icon={first.icon} name={first.connectionName} />
+          <Box minW="0">
+            <styled.p fontSize="1.5" fontWeight="500" truncate>
+              {toolLabel(first)}
+              <styled.span color="text.muted" fontWeight="400">
+                {` · ${runs.length} calls`}
+              </styled.span>
+            </styled.p>
+            <styled.p fontSize="1" color="text.muted" truncate>
+              {first.connectionName}
+            </styled.p>
+          </Box>
+        </HStack>
+        {suspicious && <SuspiciousChip />}
+        <ToolRunBadge status={groupBadge(runs)} />
+        <styled.span color="text.muted" display="flex" transform={open ? 'rotate(180deg)' : undefined} transition="transform 0.15s">
+          <Icons.caretDown size={12} />
+        </styled.span>
+      </styled.button>
+      {open && (
+        <Flex direction="column" gap="2" px="2" pb="2" data-tool-run-group-calls="">
+          {runs.map((run) => (
+            <Box key={run.id} rounded="xl" bg={{ base: 'background.app', _dark: 'brand.panel.4' }}>
+              <ToolCallCard run={run} />
+            </Box>
+          ))}
+        </Flex>
+      )}
+    </Box>
+  );
+};
+
+/** The live answer's tool calls (carbonme ChatToolRuns); repeated calls of one tool fold into one card. */
 export const ToolRuns = ({ runs }: { runs: readonly ToolRunView[] }) =>
   runs.length ? (
     <Flex direction="column" gap="2" data-testid="tool-runs">
-      {runs.map((run) => (
-        <ToolCallCard key={run.id} run={run} />
-      ))}
+      {groupToolRuns(runs).map((group) =>
+        group.length > 1 ? (
+          <ToolRunGroupCard key={group[0]!.id} runs={group} />
+        ) : (
+          <ToolCallCard key={group[0]!.id} run={group[0]!} />
+        ),
+      )}
     </Flex>
   ) : null;
 

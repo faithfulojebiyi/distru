@@ -22,7 +22,7 @@ import { RecordIcon, RecordTab, RecordTabBar } from '../../system/components/rec
 import { EmptyState, ErrorState } from '../../system/components/states';
 import { useNow } from '../../system/use-now';
 import { LIVE_STATUSES, formatAge, formatMoney } from '../proposal-values';
-import { groupsOf, namesOf, proposalIcon, titleParts } from '../proposal-record';
+import { groupsOf, namesOf, proposalIcon, titleParts, triggerOfProposal } from '../proposal-record';
 import { useAuditEvents, useLocationNames, useProposal } from '../proposals-api';
 import { StatusBadge } from './badges';
 import { DecisionButtons, useDecision } from './decision-panel';
@@ -320,6 +320,7 @@ const RecordPage = ({
   const side: SideTab = search.side === 'undo' && hasUndo ? 'undo' : 'details';
   const systems = groupsOf(proposal);
   const { title, summary } = titleParts(proposal);
+  const trigger = triggerOfProposal(proposal);
   const undoCount = proposal.undo.ops.filter((op) => op.canUndo && !op.undoProposalId).length;
 
   const openUndo = () => setSearch({ side: 'undo', ...(tab === 'details' ? { tab: 'undo' } : {}) });
@@ -396,6 +397,15 @@ const RecordPage = ({
             <MetaChip icon="clock" data-meta="created">
               {formatAge(proposal.createdAt, now)}
             </MetaChip>
+            {trigger ? (
+              <MetaChip icon="lightning" data-meta="trigger">
+                {/* Plain text on purpose: an email address or note here is data, never a link. */}
+                <Span maxW="28rem" truncate title={`Trigger: ${trigger.label}${trigger.note ? ` — “${trigger.note}”` : ''}`}>
+                  Trigger: {trigger.label}
+                  {trigger.note ? ` — “${trigger.note}”` : ''}
+                </Span>
+              </MetaChip>
+            ) : null}
             <StatusBadge status={proposal.status} />
             <MetaChip icon="dollar" data-meta="total">
               <Span fontWeight="600" color="text.app" fontVariantNumeric="tabular-nums" data-proposal-total="">

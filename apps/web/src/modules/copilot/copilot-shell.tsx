@@ -11,8 +11,11 @@ export const CopilotShell = ({
   children,
   composer,
   scrollerRef,
+  actions,
 }: {
   title: string;
+  /** Beside the title, as carbonme's chat header menu. */
+  actions?: React.ReactNode;
   children: React.ReactNode;
   composer: React.ReactNode;
   scrollerRef?: React.Ref<HTMLDivElement>;
@@ -50,6 +53,7 @@ export const CopilotShell = ({
       >
         {title}
       </styled.h1>
+      {actions}
     </HStack>
     <Flex direction="column" flex="1" minH="0">
       <Box

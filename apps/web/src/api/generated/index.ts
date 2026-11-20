@@ -2,6 +2,7 @@ export * from './audit/audit';
 export * from './auth/auth';
 export * from './connectors/connectors';
 export * from './context/context';
+export * from './copilot/copilot';
 export * from './distru/distru';
 export * from './evals/evals';
 export * from './mcp/mcp';

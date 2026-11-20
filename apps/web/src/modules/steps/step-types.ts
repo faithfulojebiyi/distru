@@ -91,6 +91,8 @@ export type StepActivity = {
 /** A step row with the retries that tried it again nested under it. */
 export type StepRow =
   | { kind: 'step'; step: AgentStep; retries: AgentStep[] }
+  /** Back-to-back calls of the same tool, folded into one row ("Called distru.velocity_report 4 times"). */
+  | { kind: 'group'; id: string; steps: AgentStep[] }
   | { kind: 'thinking'; note: StepNote };
 
 export type TaskTally = {

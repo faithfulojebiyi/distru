@@ -95,6 +95,9 @@ const DiffContext = createContext<DiffContextValue>({ names: new Map(), resolveR
 
 export const DiffContextProvider = DiffContext.Provider;
 
+/** The id → name map of the record page (locations, products, vendors), for labels outside a diff. */
+export const useDiffNames = () => useContext(DiffContext).names;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
