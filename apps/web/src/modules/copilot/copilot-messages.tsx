@@ -15,7 +15,7 @@ import { ProposalStatus } from '../../api/generated/opsAgentAPI.schemas';
 import { LinkPill } from '../steps/step-cards';
 import { StepTimeline } from '../steps/step-timeline';
 import { ToolRuns } from '../steps/tool-runs';
-import { COPILOT_ERROR_MESSAGES, type CopilotError, type CopilotLink, type CopilotTurn } from './copilot-data';
+import { copilotErrorText, type CopilotError, type CopilotLink, type CopilotTurn } from './copilot-data';
 
 /** A sent question: its text in a bubble, right-aligned. */
 export const SentQuestion = ({ text }: { text: string }) => (
@@ -101,7 +101,7 @@ const AnswerFailure = ({ error, retry }: { error: CopilotError | null; retry: ()
     <HStack gap="2" alignItems="start">
       <Icons.warn size={15} color="text.error" flexShrink="0" mt="0.5" />
       <styled.p fontSize="2" color="text.error" flex="1">
-        {COPILOT_ERROR_MESSAGES[error?.code ?? 'agent_error']}
+        {copilotErrorText(error)}
       </styled.p>
     </HStack>
     <HStack justify="space-between" alignItems="start" gap="3" mt="2">

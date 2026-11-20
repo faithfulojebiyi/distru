@@ -135,16 +135,20 @@ const EnvSchema = z.object({
   INNGEST_DEV: z.string().optional(),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
-  // --- Public demo hardening ---
+  // --- Public demo hardening + cost guard ---
   /**
    * `1` = public demo: the seeded demo accounts cannot change password / email / profile, policy rules are
-   * read-only, MCP tokens cannot get `approve` (and are deleted on reseed), and RESEND_API_KEY is refused
-   * (no real mail from a public demo).
+   * read-only, MCP tokens cannot get `approve` (and are deleted on reseed), the cost guard is on by default,
+   * and RESEND_API_KEY is refused (no real mail from a public demo).
    */
   DEMO_MODE: z
     .string()
     .optional()
     .transform((v) => v === '1' || v === 'true'),
+  /** Agent requests (Copilot generate/stream, POST /api/runs, A2A) per user per hour. Default 30 in DEMO_MODE, else 0 (off). */
+  AGENT_RATE_LIMIT_PER_HOUR: z.coerce.number().int().nonnegative().optional(),
+  /** Estimated LLM spend per UTC day (USD) after which agent requests get 429. Default 10 in DEMO_MODE, else off. */
+  DAILY_SPEND_CAP_USD: z.coerce.number().nonnegative().optional(),
   /**
    * Header Better Auth reads the client IP from (rate limiting, session IP), e.g. `fly-client-ip`, or
    * `x-forwarded-for` behind our own proxy. Default: x-forwarded-for / x-real-ip outside production; none in
@@ -156,8 +160,12 @@ const EnvSchema = z.object({
 });
 
 type ParsedEnv = z.infer<typeof EnvSchema>;
-export type Env = Omit<ParsedEnv, 'DISTRU_WEBHOOK_SECRET' | 'TRUSTED_IP_HEADER' | 'DISTRU_WEBHOOK_TOLERANCE_SECONDS'> & {
+export type Env = Omit<ParsedEnv, 'DISTRU_WEBHOOK_SECRET' | 'AGENT_RATE_LIMIT_PER_HOUR' | 'DAILY_SPEND_CAP_USD' | 'TRUSTED_IP_HEADER' | 'DISTRU_WEBHOOK_TOLERANCE_SECONDS'> & {
   DISTRU_WEBHOOK_SECRET: string;
+  /** 0 = off. */
+  AGENT_RATE_LIMIT_PER_HOUR: number;
+  /** null = off. */
+  DAILY_SPEND_CAP_USD: number | null;
   /** Lowercase header names; empty = none trusted. */
   TRUSTED_IP_HEADERS: string[];
   /** 0 = off. */
@@ -202,10 +210,12 @@ function loadEnv(): Env {
     console.error('DEMO_MODE must not run with RESEND_API_KEY set: a public demo never sends real email.');
     process.exit(1);
   }
-  const { TRUSTED_IP_HEADER, DISTRU_WEBHOOK_TOLERANCE_SECONDS, ...rest } = env;
+  const { AGENT_RATE_LIMIT_PER_HOUR, DAILY_SPEND_CAP_USD, TRUSTED_IP_HEADER, DISTRU_WEBHOOK_TOLERANCE_SECONDS, ...rest } = env;
   return {
     ...rest,
     DISTRU_WEBHOOK_SECRET: env.DISTRU_WEBHOOK_SECRET ?? 'mock-webhook-secret',
+    AGENT_RATE_LIMIT_PER_HOUR: AGENT_RATE_LIMIT_PER_HOUR ?? (env.DEMO_MODE ? 30 : 0),
+    DAILY_SPEND_CAP_USD: DAILY_SPEND_CAP_USD ?? (env.DEMO_MODE ? 10 : null),
     TRUSTED_IP_HEADERS: trustedIpHeaders(env.NODE_ENV, TRUSTED_IP_HEADER),
     DISTRU_WEBHOOK_TOLERANCE_SECONDS: DISTRU_WEBHOOK_TOLERANCE_SECONDS ?? (env.NODE_ENV === 'production' ? 300 : 0),
   };

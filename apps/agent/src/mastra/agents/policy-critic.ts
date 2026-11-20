@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import { z } from 'zod';
 import { AGENTS } from './roster';
-import { UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions, historyErrorProcessors } from './shared';
+import { UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions, historyErrorProcessors, usageOnFinish } from './shared';
 
 export const RevisionInstructionSchema = z
   .object({
@@ -57,7 +57,7 @@ export function policyCriticPrompt(task: CritiqueTask): string {
   ].join('\n');
 }
 
-export function createPolicyCritic<TTools extends ToolsInput>({ model, tools }: AgentFactoryOptions<TTools>) {
+export function createPolicyCritic<TTools extends ToolsInput>({ model, tools, onUsage }: AgentFactoryOptions<TTools>) {
   return new Agent({
     id: AGENTS.policyCritic.id,
     name: AGENTS.policyCritic.name,
@@ -67,5 +67,6 @@ export function createPolicyCritic<TTools extends ToolsInput>({ model, tools }: 
     model,
     tools,
     errorProcessors: historyErrorProcessors(),
+    defaultOptions: usageOnFinish(onUsage),
   });
 }

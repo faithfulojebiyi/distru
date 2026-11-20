@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { foldRepeatedTools } from '../steps/step-activity-data';
 import type { AgentStep, StepRow } from '../steps/step-types';
 import { chatTitleOf, isChatId } from './copilot-chats-data';
-import { argsSummary, copilotErrorOfChunk, copilotErrorOfThrown, turnsOfHistory } from './copilot-data';
+import { argsSummary, copilotErrorOfChunk, copilotErrorOfThrown, copilotErrorText, turnsOfHistory } from './copilot-data';
 
 describe('chat titles', () => {
   test('short questions stay as they are; long ones cut at a word, ≤ 60 chars', () => {
@@ -54,6 +54,19 @@ describe('errors', () => {
     expect(copilotErrorOfThrown(new Error('HTTP error! status: 429 - slow down')).code).toBe('rate_limited');
     expect(copilotErrorOfThrown(new Error('HTTP error! status: 503')).code).toBe('model_unavailable');
     expect(copilotErrorOfThrown(new TypeError('Failed to fetch')).code).toBe('network');
+  });
+
+  test("thrown: the server cost guard (429 rate_limited / daily_spend_cap) shows the server's friendly message", () => {
+    const limited = copilotErrorOfThrown(
+      new Error('HTTP error! status: 429 - {"error":"rate_limited","message":"You have reached the limit of 30 agent requests per hour. Try again in 12 minutes."}'),
+    );
+    expect(limited).toEqual({ code: 'usage_limited', detail: null, message: 'You have reached the limit of 30 agent requests per hour. Try again in 12 minutes.' });
+    expect(copilotErrorText(limited)).toContain('Try again in 12 minutes');
+    const capped = copilotErrorOfThrown(Object.assign(new Error('HTTP error! status: 429'), { body: { error: 'daily_spend_cap', message: 'Budget used up.' } }));
+    expect(capped.code).toBe('daily_cap');
+    expect(copilotErrorText(capped)).toBe('Budget used up.');
+    // A provider 429 without our body stays rate_limited, in our generic words.
+    expect(copilotErrorText(copilotErrorOfThrown(new Error('HTTP error! status: 429 - slow down')))).toContain('busy');
   });
 
   test('a stored failed turn reads as failed, in our words', () => {

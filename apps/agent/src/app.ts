@@ -9,6 +9,9 @@ import { agentStreamErrorCodes } from './api/agent-errors';
 import { A2A_CARD_PATH, publicAgentCard } from './api/a2a-card';
 import { createApiRoutes } from './api/routes';
 import { mastraRouteAllowlist, studioOriginBypass } from './api/mastra-allowlist';
+import { costGuard, HourlyRateLimiter } from './api/cost-guard';
+import { appSpend } from './services/spend';
+import { bearerOf, hashToken, MCP_TOKEN_PREFIX } from './services/mcp-tokens';
 import type { ApiServices } from './api/services';
 import { auth } from './auth/auth';
 import { MASTRA_STUDIO_AUTH_PATHS } from './auth/mastra-auth';
@@ -121,6 +124,26 @@ export async function createApp(services: ApiServices & { mcpRoutes?: Hono } = c
       maxAge: 600,
     }),
   );
+
+  // Cost guard: per-user hourly limit (AGENT_RATE_LIMIT_PER_HOUR) and daily spend cap (DAILY_SPEND_CAP_USD) on
+  // the routes that spend tokens (Copilot stream/generate, POST /api/runs, A2A): 429 with a friendly message.
+  if (env.AGENT_RATE_LIMIT_PER_HOUR > 0 || env.DAILY_SPEND_CAP_USD !== null) {
+    app.use(
+      '*',
+      costGuard({
+        limiter: env.AGENT_RATE_LIMIT_PER_HOUR > 0 ? new HourlyRateLimiter(env.AGENT_RATE_LIMIT_PER_HOUR) : null,
+        ledger: appSpend,
+        dailyCapUsd: env.DAILY_SPEND_CAP_USD,
+        callerOf: async (c) => {
+          const user = await services.resolveSession(c.req.raw.headers).catch(() => null);
+          if (user) return `user:${user.id}`;
+          // A2A callers with a per-client MCP token: one bucket per token (Mastra's auth validates it).
+          const bearer = bearerOf(c.req.header('authorization'));
+          return bearer?.startsWith(MCP_TOKEN_PREFIX) ? `token:${(await hashToken(bearer)).slice(0, 32)}` : null;
+        },
+      }),
+    );
+  }
 
   // Better Auth owns /api/auth/*, except the few Mastra auth paths Studio calls (capabilities, me,
   // credentials sign-in): those fall through to MastraServer below.

@@ -32,9 +32,17 @@ export const CopilotErrorCodeSchema = z.enum([
   'context_too_long',
   'agent_error',
   'network',
+  /** The server's cost guard: this user's hourly agent-request limit (HTTP 429 `rate_limited`). */
+  'usage_limited',
+  /** The server's cost guard: today's AI spend cap is reached (HTTP 429 `daily_spend_cap`). */
+  'daily_cap',
 ]);
 export type CopilotErrorCode = z.infer<typeof CopilotErrorCodeSchema>;
-export type CopilotError = { code: CopilotErrorCode; detail: string | null };
+/** `message`: our own server's friendly wording (the cost guard's 429), shown instead of the code's default. */
+export type CopilotError = { code: CopilotErrorCode; detail: string | null; message?: string };
+
+/** What the operator reads for a failed turn. */
+export const copilotErrorText = (error: CopilotError | null): string => error?.message ?? COPILOT_ERROR_MESSAGES[error?.code ?? 'agent_error'];
 
 /** What the operator reads for each code. Never the provider's own message. */
 export const COPILOT_ERROR_MESSAGES: Record<CopilotErrorCode, string> = {
@@ -44,6 +52,25 @@ export const COPILOT_ERROR_MESSAGES: Record<CopilotErrorCode, string> = {
   context_too_long: 'This conversation is too long for the Ops Lead to read. Ask a shorter question.',
   agent_error: 'The Ops Lead hit a problem answering that. Try again.',
   network: 'Could not reach the Ops Agent server. Check your connection and try again.',
+  usage_limited: "You've asked the Ops Lead a lot this hour. Take a short break and try again later.",
+  daily_cap: "Today's AI budget for this demo is used up. The Ops Lead is back at 00:00 UTC; everything else still works.",
+};
+
+/** The cost guard's 429 body (`{ error, message }`), as the Mastra client puts it in its error message. */
+const CostGuardBodySchema = z.object({ error: z.enum(['rate_limited', 'daily_spend_cap']), message: z.string() });
+
+const costGuardBodyOf = (error: unknown, detail: string | null) => {
+  const body = z.object({ body: z.unknown() }).safeParse(error);
+  const direct = CostGuardBodySchema.safeParse(body.success ? body.data.body : undefined);
+  if (direct.success) return direct.data;
+  const json = /status:? 429 - (\{.*\})/s.exec(detail ?? '')?.[1];
+  if (!json) return null;
+  try {
+    const parsed = CostGuardBodySchema.safeParse(JSON.parse(json));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 };
 
 const ErrorLikeSchema = z.object({ name: z.string().optional(), message: z.string() }).passthrough();
@@ -76,7 +103,12 @@ export const copilotErrorOfChunk = (payload: unknown): CopilotError => {
 export const copilotErrorOfThrown = (error: unknown): CopilotError => {
   const detail = errorDetail(error);
   const status = /\bstatus:? (\d{3})\b/i.exec(detail ?? '')?.[1];
-  if (status === '429') return { code: 'rate_limited', detail };
+  if (status === '429') {
+    // Our own cost guard (per-user hourly limit / daily spend cap) vs the model provider's rate limit.
+    const guard = costGuardBodyOf(error, detail);
+    if (guard) return { code: guard.error === 'daily_spend_cap' ? 'daily_cap' : 'usage_limited', detail: null, message: guard.message };
+    return { code: 'rate_limited', detail };
+  }
   if (status && Number(status) >= 500) return { code: 'model_unavailable', detail };
   if (error instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(detail ?? '')) return { code: 'network', detail };
   return { code: 'agent_error', detail };

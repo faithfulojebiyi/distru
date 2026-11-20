@@ -16,6 +16,25 @@ export interface AgentFactoryOptions<TTools> {
    * scenarios without a recall index), so prompts there stay exactly as they were.
    */
   recall?: boolean;
+  /** Called with the model usage of every finished call (the cost guard's daily spend; src/api/cost-guard.ts). */
+  onUsage?: UsageListener;
+}
+
+/** Receives a finished agent call's token usage (Mastra / AI SDK `totalUsage`). */
+export type UsageListener = (usage: unknown) => void;
+
+/** `defaultOptions.onFinish` that reports usage. Mastra merges call options over these, and no caller passes `onFinish`. */
+export function usageOnFinish(onUsage: UsageListener | undefined) {
+  if (!onUsage) return {};
+  return {
+    onFinish: (result: { totalUsage?: unknown; usage?: unknown }) => {
+      try {
+        onUsage(result.totalUsage ?? result.usage);
+      } catch {
+        /* accounting never breaks an answer */
+      }
+    },
+  };
 }
 
 /**

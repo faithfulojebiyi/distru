@@ -3,7 +3,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import { z } from 'zod';
 import { contextPromptLine } from '../workflows/context-block';
 import { AGENTS } from './roster';
-import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions, withRecall, historyErrorProcessors } from './shared';
+import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions, withRecall, historyErrorProcessors, usageOnFinish } from './shared';
 
 /**
  * Vendor Liaison: reads a vendor's email reply to one of our purchase orders and turns it into
@@ -107,7 +107,7 @@ export const LIAISON_RECALL_USAGE = `
   come only from the reply in front of you; mention the earlier email (date + ref) in summary when it explains
   the reply.`;
 
-export function createVendorLiaison<TTools extends ToolsInput>({ model, tools, recall }: AgentFactoryOptions<TTools>) {
+export function createVendorLiaison<TTools extends ToolsInput>({ model, tools, recall, onUsage }: AgentFactoryOptions<TTools>) {
   return new Agent({
     id: AGENTS.vendorLiaison.id,
     name: AGENTS.vendorLiaison.name,
@@ -117,5 +117,6 @@ export function createVendorLiaison<TTools extends ToolsInput>({ model, tools, r
     model,
     tools,
     errorProcessors: historyErrorProcessors(),
+    defaultOptions: usageOnFinish(onUsage),
   });
 }

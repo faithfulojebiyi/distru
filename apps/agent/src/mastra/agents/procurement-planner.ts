@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { AtRiskSku } from './inventory-analyst';
 import { contextPromptLine } from '../workflows/context-block';
 import { AGENTS } from './roster';
-import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions, withRecall, historyErrorProcessors } from './shared';
+import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions, withRecall, historyErrorProcessors, usageOnFinish } from './shared';
 
 export const PlannedLineSchema = z
   .object({
@@ -175,7 +175,7 @@ export const PLANNER_RECALL_USAGE = `
   (e.g. a longer lead time during an equipment outage). It can justify covering a longer lead time; quantities
   and prices still come from numeric tool data. Mention the email (date + ref) in the affected line's reason.`;
 
-export function createProcurementPlanner<TTools extends ToolsInput>({ model, tools, recall }: AgentFactoryOptions<TTools>) {
+export function createProcurementPlanner<TTools extends ToolsInput>({ model, tools, recall, onUsage }: AgentFactoryOptions<TTools>) {
   return new Agent({
     id: AGENTS.procurementPlanner.id,
     name: AGENTS.procurementPlanner.name,
@@ -185,5 +185,6 @@ export function createProcurementPlanner<TTools extends ToolsInput>({ model, too
     model,
     tools,
     errorProcessors: historyErrorProcessors(),
+    defaultOptions: usageOnFinish(onUsage),
   });
 }

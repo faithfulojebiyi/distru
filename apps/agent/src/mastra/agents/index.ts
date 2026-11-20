@@ -10,6 +10,7 @@ import { createPolicyCritic } from './policy-critic';
 import { createProcurementPlanner } from './procurement-planner';
 import { createVendorLiaison } from './vendor-liaison';
 import type { AgentKey } from './roster';
+import type { UsageListener } from './shared';
 
 export interface AgentDeps<TCtx> extends HarnessToolDeps<TCtx> {
   models: Record<AgentKey, MastraModelConfig>;
@@ -21,6 +22,8 @@ export interface AgentDeps<TCtx> extends HarnessToolDeps<TCtx> {
    * section in their instructions (their `recall_search` tool comes from the registry either way).
    */
   recall?: boolean;
+  /** Every agent's finished-call usage (the cost guard's daily spend). */
+  onUsage?: UsageListener;
 }
 
 /** Per-agent model ids from env (each falls back to OPS_AGENT_MODEL). Strings are Mastra model-router ids. */
@@ -53,13 +56,14 @@ export function createAgents<TCtx>(deps: AgentDeps<TCtx>) {
     cache.set(key, { registry, tools: built });
     return built;
   };
-  const inventoryAnalyst = createInventoryAnalyst({ model: deps.models.inventoryAnalyst, tools: tools('inventoryAnalyst') });
+  const usage = deps.onUsage ? { onUsage: deps.onUsage } : {};
+  const inventoryAnalyst = createInventoryAnalyst({ model: deps.models.inventoryAnalyst, tools: tools('inventoryAnalyst'), ...usage });
   const recall = deps.recall ?? false;
-  const procurementPlanner = createProcurementPlanner({ model: deps.models.procurementPlanner, tools: tools('procurementPlanner'), recall });
-  const complianceReviewer = createComplianceReviewer({ model: deps.models.complianceReviewer, tools: tools('complianceReviewer') });
-  const policyCritic = createPolicyCritic({ model: deps.models.policyCritic, tools: tools('policyCritic') });
+  const procurementPlanner = createProcurementPlanner({ model: deps.models.procurementPlanner, tools: tools('procurementPlanner'), recall, ...usage });
+  const complianceReviewer = createComplianceReviewer({ model: deps.models.complianceReviewer, tools: tools('complianceReviewer'), ...usage });
+  const policyCritic = createPolicyCritic({ model: deps.models.policyCritic, tools: tools('policyCritic'), ...usage });
   // Vendor-reply workflow only (not a supervisor subagent): classifies vendor emails.
-  const vendorLiaison = createVendorLiaison({ model: deps.models.vendorLiaison, tools: tools('vendorLiaison'), recall });
+  const vendorLiaison = createVendorLiaison({ model: deps.models.vendorLiaison, tools: tools('vendorLiaison'), recall, ...usage });
   const startRestockRun = createStartRestockRunTool(deps.launcher);
   const opsLead = createOpsLead({
     model: deps.models.opsLead,
@@ -67,6 +71,7 @@ export function createAgents<TCtx>(deps: AgentDeps<TCtx>) {
     agents: { inventoryAnalyst, procurementPlanner, complianceReviewer, policyCritic },
     ...(deps.memory ? { memory: deps.memory } : {}),
     recall,
+    ...usage,
   });
   return { opsLead, inventoryAnalyst, procurementPlanner, complianceReviewer, policyCritic, vendorLiaison };
 }

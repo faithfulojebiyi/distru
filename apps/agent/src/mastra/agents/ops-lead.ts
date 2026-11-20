@@ -4,7 +4,7 @@ import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import type { RestockLauncher } from '../restock-launcher';
 import { AGENTS } from './roster';
-import { UNTRUSTED_DATA_RULES, cachedInstructions, PROMPT_CACHE_OPTIONS, withRecall, historyErrorProcessors } from './shared';
+import { UNTRUSTED_DATA_RULES, cachedInstructions, PROMPT_CACHE_OPTIONS, withRecall, historyErrorProcessors, usageOnFinish, type UsageListener } from './shared';
 import type { MastraModelConfig } from '@mastra/core/llm';
 
 export const OPS_LEAD_INSTRUCTIONS = `
@@ -95,6 +95,8 @@ export interface OpsLeadOptions<TTools extends ToolsInput, TAgents extends Recor
   memory?: Memory;
   /** The recall connector is wired: add the recall section to the instructions. */
   recall?: boolean;
+  /** Usage of every finished Ops Lead call (Copilot, A2A): the cost guard's daily spend. */
+  onUsage?: UsageListener;
 }
 
 /**
@@ -118,6 +120,6 @@ export function createOpsLead<TTools extends ToolsInput, TAgents extends Record<
     // produced them, which change between deploys and as the history window slides): see thinking-history.ts.
     errorProcessors: historyErrorProcessors(),
     // Copilot turns cache too (system + tools, and the growing conversation).
-    defaultOptions: { maxSteps: 12, ...PROMPT_CACHE_OPTIONS },
+    defaultOptions: { maxSteps: 12, ...PROMPT_CACHE_OPTIONS, ...usageOnFinish(options.onUsage) },
   });
 }

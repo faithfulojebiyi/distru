@@ -5,6 +5,7 @@ import { auth, signInWithEmail } from '../auth/auth';
 import { BetterAuthMastraProvider } from '../auth/mastra-auth';
 import { a2aTokenResolver } from '../auth/a2a-tokens';
 import { appMcpTokens } from '../services/app-mcp-tokens';
+import { appSpend } from '../services/spend';
 import { betterAuthResolver } from '../auth/session';
 import { db } from '../db/client';
 import { env } from '../env';
@@ -73,6 +74,8 @@ export const agents = createAgents({
   afterPropose: afterPropose(sendProposalApproved),
   models: modelsFromEnv(env),
   launcher: restockLauncher,
+  // Cost guard (DAILY_SPEND_CAP_USD): every finished agent call adds its estimated cost to today's total.
+  onUsage: (usage) => appSpend.addUsage(usage),
   // Semantic recall: `recall_search` for the Ops Lead / Planner / Vendor Liaison, and Copilot memory with
   // Mastra semanticRecall over the operator's earlier turns (FastEmbed → pgvector). Off with RECALL_ENABLED=0.
   recall: env.RECALL_ENABLED,
