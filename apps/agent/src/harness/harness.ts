@@ -12,10 +12,13 @@ import {
   type StepRunner,
 } from '@ops/harness';
 import { db as defaultDb, type DB } from '../db/client';
+import { env } from '../env';
+import { otelSettings } from '../observability/otel';
 import { DrizzleAuditSink } from './audit-sink';
 import { appPolicyEngine } from './policy';
 import { DrizzlePolicyRuleSource } from './policy-rules';
 import { DrizzleProposalStore } from './proposal-store';
+import { traceAudit, traceHarness, tracePolicyEngine, traceRegistry, traceSteps } from './tracing';
 
 export interface AppHarnessOptions<TCtx> {
   /** The registry, or a getter for the current one (the app rebuilds it when MCP tools change). */
@@ -35,6 +38,11 @@ export interface AppHarnessOptions<TCtx> {
   ids?: IdGenerator;
   /** Escape hatch for anything else in HarnessConfig (retry policy, separation of duties, …). */
   config?: Partial<Omit<HarnessConfig<TCtx>, 'registry' | 'store' | 'audit' | 'policyRules'>>;
+  /**
+   * OpenTelemetry spans for propose / policy / decide / execute / write / verify (src/harness/tracing.ts).
+   * Default: on when OTel export is configured (OTEL_EXPORTER_OTLP_ENDPOINT), so tests and evals run the bare harness.
+   */
+  tracing?: boolean;
 }
 
 /**
@@ -43,18 +51,24 @@ export interface AppHarnessOptions<TCtx> {
  */
 export function createAppHarness<TCtx>(options: AppHarnessOptions<TCtx>): Harness<TCtx> {
   const db = options.db ?? defaultDb;
-  return createHarness<TCtx>({
-    registry: options.registry,
+  const tracing = options.tracing ?? otelSettings(env) !== null;
+  const registry = options.registry;
+  const steps = options.steps ?? inlineStepRunner;
+  const audit = new DrizzleAuditSink(db);
+  const policyEngine = options.policyEngine ?? appPolicyEngine;
+  const harness = createHarness<TCtx>({
+    registry: tracing ? traceRegistry(typeof registry === 'function' ? registry : () => registry) : registry,
     store: new DrizzleProposalStore(db),
-    audit: new DrizzleAuditSink(db),
+    audit: tracing ? traceAudit(audit) : audit,
     policyRules: new DrizzlePolicyRuleSource(db),
     clock: options.clock ?? systemClock,
-    steps: options.steps ?? inlineStepRunner,
+    steps: tracing ? traceSteps(steps) : steps,
     ...(options.errors ? { errors: options.errors } : {}),
     ...(options.ids ? { ids: options.ids } : {}),
-    policyEngine: options.policyEngine ?? appPolicyEngine,
+    policyEngine: tracing ? tracePolicyEngine(policyEngine) : policyEngine,
     ...options.config,
   });
+  return tracing ? traceHarness(harness) : harness;
 }
 
 // ---------------------------------------------------------------------------------------------

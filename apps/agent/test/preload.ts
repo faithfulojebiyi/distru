@@ -31,6 +31,8 @@ if (new URL(testUrl).pathname === new URL(devUrl).pathname && new URL(testUrl).h
 }
 process.env.DATABASE_URL = testUrl;
 process.env.TEST_DATABASE_URL = testUrl;
+// A dev .env may point at a local collector; tests never export traces.
+delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
 const SCHEMA_FILES = ['../src/db/schema.ts', '../../../packages/context/src/drizzle/schema.ts'].map((p) => fileURLToPath(new URL(p, import.meta.url)));
 

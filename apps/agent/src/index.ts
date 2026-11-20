@@ -3,6 +3,7 @@ import { sql } from './db/client';
 import { env } from './env';
 import { appConnectors } from './harness/registry';
 import { mastra } from './mastra';
+import { stopHarnessTracing } from './observability/otel';
 import { appSweepExecutions } from './services/ops-wiring';
 
 // Build the registry before serving: connects the Distru MCP bridge from a live tools/list. If the MCP
@@ -36,6 +37,7 @@ async function shutdown(signal: string) {
   await server.stop();
   await appConnectors.stop();
   await mastra.shutdown();
+  await stopHarnessTracing();
   await sql.end({ timeout: 5 });
   process.exit(0);
 }

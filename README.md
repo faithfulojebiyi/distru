@@ -329,6 +329,30 @@ Each emulator is a drop-in for the real thing, so switching is just configuratio
 | Email | `RESEND_API_KEY`, `EMAIL_FROM` |
 | Inngest Cloud | `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY`, and remove `INNGEST_DEV` |
 
+### Tracing
+
+The run page in the dashboard shows what a run did, but sometimes you want the raw timings: how long each
+model call took, which tool calls ran inside which step, where an execution spent its retries. For that the
+agent can export OpenTelemetry traces. It's off unless you point it at a collector.
+
+To look at them locally with Jaeger:
+
+```bash
+docker compose --profile observability up -d          # Jaeger, UI on :16686, OTLP on :4318
+echo 'OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318' >> apps/agent/.env
+bun run dev:agent                                     # restart the agent so it picks the variable up
+```
+
+Run something (a restock run, a Copilot question, an approval), then open http://localhost:16686 and pick
+the `ops-agent` service. You'll see two kinds of traces. Mastra's own: agent runs, model calls, tool calls
+and workflow steps. And the harness's: `harness.propose` with its `harness.policy` check, `harness.decide`,
+and `harness.execute`, which breaks down into one step per change with the `harness.write` and
+`harness.verify` calls inside, and the audit events attached along the way. Search by the `ops.proposal.id`
+tag to follow one proposal.
+
+Any OTLP backend works the same way: set `OTEL_EXPORTER_OTLP_ENDPOINT` to its HTTP endpoint and put its API
+key in `OTEL_EXPORTER_OTLP_HEADERS`.
+
 ## What's in the repo
 
 | Folder | What it is |

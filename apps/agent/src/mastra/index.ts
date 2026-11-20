@@ -22,6 +22,11 @@ import { createRestockWorkflow, type RestockDeps } from './workflows/restock';
 import { createVendorReplyWorkflow, type VendorReplyDeps } from './workflows/vendor-reply';
 import { appNotifier } from '../slack';
 import { loadFastembed, opsLeadMemory } from '../context/recall';
+import { mastraOtelExporter, otelSettings, startHarnessTracing } from '../observability/otel';
+
+/** OpenTelemetry export (agent runs, model + tool calls, workflow steps, harness spans); null = off. */
+const otel = otelSettings(env);
+if (otel) startHarnessTracing(otel);
 
 /** What the restock workflow runs against: the app harness (Postgres), the Distru connector, the seeded policy. */
 export const restockDeps: RestockDeps = {
@@ -94,9 +99,10 @@ export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       default: {
-        serviceName: 'ops-agent',
+        serviceName: env.OTEL_SERVICE_NAME,
         requestContextKeys: ['userId'],
-        exporters: [new MastraStorageExporter()],
+        // Storage feeds Studio; OTLP (when OTEL_EXPORTER_OTLP_ENDPOINT is set) feeds Jaeger or any OTel backend.
+        exporters: [new MastraStorageExporter(), ...(otel ? [mastraOtelExporter(otel)] : [])],
         // PostgresStore has no batch log writes; logs go to stdout via Mastra's logger instead.
         logging: { enabled: false },
       },

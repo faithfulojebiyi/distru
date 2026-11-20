@@ -18,5 +18,15 @@ services:
       timeout: 5s
       retries: 10
 
+  # Optional trace viewer: `docker compose --profile observability up -d`, then set
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 for the agent. UI on http://localhost:16686.
+  # Traces live in memory and are gone when the container stops.
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    profiles: [observability]
+    ports:
+      - '127.0.0.1:16686:16686' # UI
+      - '127.0.0.1:4318:4318' # OTLP over HTTP
+
 volumes:
   ops-pg:

@@ -112,6 +112,13 @@ const EnvSchema = z.object({
   UNDO_WINDOW_HOURS: z.coerce.number().positive().default(168),
   /** Public base URL of this server, used for the MCP endpoint shown with a new token (`<url>/mcp`). Default: BETTER_AUTH_URL. */
   PUBLIC_URL: z.url().optional(),
+  // --- OpenTelemetry (off unless the endpoint is set; see src/observability/otel.ts) ---
+  /** OTLP/HTTP collector base URL, e.g. http://localhost:4318 (Jaeger). Empty or unset = no OTel export. */
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.union([z.url(), z.literal('')]).optional(),
+  /** Extra OTLP headers, `key=value` pairs separated by commas (API keys for hosted backends). */
+  OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
+  /** `service.name` on every exported span. */
+  OTEL_SERVICE_NAME: z.string().min(1).default('ops-agent'),
   INNGEST_DEV: z.string().optional(),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
