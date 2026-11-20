@@ -15,6 +15,7 @@ import type {
   StartRunRequest,
 } from './schemas';
 import type { ContextMemoriesQuerySchema, ContextMemorySchema, ContextProfile, EvalResult, OnboardingReportSchema } from './schemas-insight';
+import type { RecallApiService } from '../services/recall';
 import type { CreateMcpTokenRequest, LocationList, McpToken, PolicyRule, PolicyRuleInput, PolicyRuleType, ResumeRequest, UndoRequest } from './schemas-ops';
 
 /** Everything the custom routes depend on. Injected so routes can be tested without a database. */
@@ -84,6 +85,15 @@ export type ApiServices = {
     memories: (q: z.infer<typeof ContextMemoriesQuerySchema>) => Promise<Array<z.infer<typeof ContextMemorySchema>>>;
     onboarding: () => Promise<z.input<typeof OnboardingReportSchema>>;
   };
+  /**
+   * The Copilot (GET /api/copilot/capabilities): the registry tool names the Ops Lead has right now. Optional: without
+   * it the route assumes the full allowlist.
+   */
+  copilot?: {
+    opsLeadTools: () => string[];
+  };
+  /** Semantic recall (GET /api/recall/search): passages with citations, wrapped as untrusted text. */
+  recall: RecallApiService;
   webhooks: {
     /** HMAC secret for `x-distru-signature`. */
     distruSecret: string;

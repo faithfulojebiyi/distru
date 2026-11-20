@@ -17,7 +17,7 @@ import type { AppCtx } from '../../harness/registry';
 import { complianceReviewPrompt, ComplianceReviewSchema } from '../agents/compliance-reviewer';
 import { AtRiskSkuSchema, inventoryAnalystPrompt, InventoryAnalysisSchema, type AtRiskSku } from '../agents/inventory-analyst';
 import { PolicyCritiqueSchema, policyCriticPrompt } from '../agents/policy-critic';
-import { GuardSuggestionSchema, PlannerResultSchema, plannerPrompt, plannerRevisionPrompt } from '../agents/procurement-planner';
+import { GuardSuggestionSchema, PlannedLineSchema, PlannerResultSchema, plannerPrompt, plannerRevisionPrompt } from '../agents/procurement-planner';
 import { AGENTS, principalFor } from '../agents/roster';
 import { SuspiciousTextFlagSchema, type SuspiciousTextFlag } from '../agents/shared';
 import type { ProposalNotifier } from '../../slack/approvals';
@@ -26,7 +26,8 @@ import { AWAIT_DECISION_STEP, RESTOCK_WORKFLOW_ID, RestockResumeSchema, RestockT
 import { draftOpFrom, DraftOpSchema, DraftProposal, type DraftOp } from '../tools/run-context';
 import { AgentTraceEntrySchema, sumTrace, type AgentTraceEntry, type Pricing } from '../trace';
 import { callAgent } from './agent-call';
-import { chooseHeadline, restockTemplateTitle, untrustedTextsIn, type HeadlineFacts } from '../../harness/titles';
+import { chooseHeadline, restockSummary, restockTemplateTitle, untrustedTextsIn, type HeadlineFacts } from '../../harness/titles';
+import { composeRestockRationale, recallFromToolCalls } from './restock-rationale';
 import { contextBlock } from './context-block';
 import { DemandCandidateSchema, mergeWithScan, scanDemand } from './demand';
 import {
@@ -103,7 +104,14 @@ const VendorTaskSchema = z.object({
   guardNote: z.string().nullable().default(null),
 });
 type VendorTask = z.infer<typeof VendorTaskSchema>;
-const PlanResultSchema = z.object({ vendor: VendorRefSchema, ops: z.array(DraftOpSchema), result: PlannerResultSchema, agentTrace: TraceList });
+const PlanResultSchema = z.object({
+  vendor: VendorRefSchema,
+  ops: z.array(DraftOpSchema),
+  result: PlannerResultSchema,
+  agentTrace: TraceList,
+  /** The account-context block that was in the Planner's prompt (for the rationale's vendor facts). */
+  context: z.string().nullable().default(null),
+});
 
 export const VetoedLineSchema = z
   .object({
@@ -114,6 +122,8 @@ export const VetoedLineSchema = z
     quantity: z.number().nullable(),
     reasons: z.array(z.string()),
     source: z.enum(['compliance-reviewer', 'compliance_check', 'both']),
+    /** The review round that vetoed it. */
+    round: z.number().int().nullable().default(null),
   })
   .meta({ id: 'VetoedLine' });
 export type VetoedLine = z.infer<typeof VetoedLineSchema>;
@@ -135,6 +145,10 @@ const ReviewStateSchema = z.object({
   plannerSummaries: z.array(z.object({ vendor: z.string(), summary: z.string() })),
   /** The latest Planner headline per vendor (validated in code before use as the proposal title). */
   plannerHeadlines: z.array(z.object({ vendor_id: z.string(), title: z.string().nullable(), summary: z.string() })).default([]),
+  /** The latest Planner lines per vendor (how each quantity was chosen), for the rationale. */
+  plannerLines: z.array(z.object({ vendor_id: z.string(), lines: z.array(PlannedLineSchema) })).default([]),
+  /** The account-context block each vendor's Planner saw. */
+  plannerContexts: z.array(z.object({ vendor_id: z.string(), context: z.string().nullable() })).default([]),
   complianceSummary: z.string().nullable(),
   done: z.boolean(),
   outcome: z.enum(['pending', 'ready', 'empty', 'exhausted']),
@@ -418,7 +432,7 @@ export function createRestockSteps(deps: RestockDeps) {
       // A Planner run is scoped to one vendor: drafts for any other vendor (or caps on others' SKUs) are discarded.
       const productIds = inputData.items.map((i) => i.product_id);
       const ops = pruneCaps(draft.ops.filter((op) => opBelongsTo(op, inputData.vendor.id, productIds)));
-      return { vendor: inputData.vendor, ops, result: object, agentTrace: [trace] };
+      return { vendor: inputData.vendor, ops, result: object, agentTrace: [trace], context };
     },
   });
 
@@ -445,6 +459,8 @@ export function createRestockSteps(deps: RestockDeps) {
         analysisSummaries: analyses.map((a) => `${a.location.name}: ${a.analysis.summary}`),
         plannerSummaries: inputData.map((p) => ({ vendor: p.vendor.name, summary: p.result.summary })),
         plannerHeadlines: inputData.map((p) => ({ vendor_id: p.vendor.id, title: p.result.title, summary: p.result.summary })),
+        plannerLines: inputData.map((p) => ({ vendor_id: p.vendor.id, lines: p.result.lines })),
+        plannerContexts: inputData.map((p) => ({ vendor_id: p.vendor.id, context: p.context })),
         complianceSummary: null,
         done: vendors.length === 0,
         outcome: vendors.length === 0 ? ('empty' as const) : ('pending' as const),
@@ -495,8 +511,10 @@ export function createRestockSteps(deps: RestockDeps) {
         const prev = vetoes.get(p.product_id);
         vetoes.set(p.product_id, { reasons: uniq([...(prev?.reasons ?? []), ...p.reasons]), agent: prev?.agent ?? false, check: true, sku: p.sku });
       }
+      // One record per product × location: a later round never re-adds a line it already vetoed.
+      const already = new Set(state.vetoed.map((v) => `${v.product_id}|${v.location_id ?? ''}`));
       const newlyVetoed: VetoedLine[] = lines
-        .filter((l) => vetoes.has(l.product_id))
+        .filter((l) => vetoes.has(l.product_id) && !already.has(`${l.product_id}|${l.location_id}`))
         .map((l) => {
           const v = vetoes.get(l.product_id)!;
           return {
@@ -506,6 +524,7 @@ export function createRestockSteps(deps: RestockDeps) {
             location_id: l.location_id,
             quantity: l.quantity,
             reasons: v.reasons,
+            round,
             source: v.agent && v.check ? ('both' as const) : v.agent ? ('compliance-reviewer' as const) : ('compliance_check' as const),
           };
         });
@@ -599,6 +618,10 @@ export function createRestockSteps(deps: RestockDeps) {
           ...state.plannerHeadlines.filter((h) => !revised.some((r) => r.vendor_id === h.vendor_id)),
           ...revised.map((r) => ({ vendor_id: r.vendor_id, title: r.result.title, summary: r.result.summary })),
         ],
+        plannerLines: [
+          ...state.plannerLines.filter((h) => !revised.some((r) => r.vendor_id === h.vendor_id)),
+          ...revised.map((r) => ({ vendor_id: r.vendor_id, lines: r.result.lines })),
+        ],
         plannerSummaries: [
           ...state.plannerSummaries,
           ...revised.map((r) => ({ vendor: state.vendors.find((v) => v.vendor.id === r.vendor_id)?.vendor.name ?? r.vendor_id, summary: `Revision ${state.revisions + 1}: ${r.result.summary}` })),
@@ -646,17 +669,13 @@ export function createRestockSteps(deps: RestockDeps) {
       const count = (action: string) => assembled.ops.filter((o) => o.action === action).length;
       const total = pos.every((op) => op.value !== null) ? pos.reduce((s, op) => s + (op.value ?? 0), 0) : null;
       const vendorNames = uniq(pos.map((op) => state.vendors.find((v) => v.vendor.id === opVendorId(op))?.vendor.name ?? opVendorId(op) ?? '?'));
-      const extras = [
-        count(CAP_ACTION) ? `${count(CAP_ACTION)} buyer cap${count(CAP_ACTION) === 1 ? '' : 's'}` : null,
-        count(EMAIL_ACTION) ? `${count(EMAIL_ACTION)} vendor email${count(EMAIL_ACTION) === 1 ? '' : 's'}` : null,
-        count(TASK_ACTION) ? `${count(TASK_ACTION)} receiving task${count(TASK_ACTION) === 1 ? '' : 's'}` : null,
-      ].filter(Boolean);
-      // Headline: the Planner's title/summary when exactly one vendor is ordered and it passes the code
-      // validator (numbers, dates, vendors, no instructions, no echo of untrusted text); else a template.
-      const longSummary = `${pos.length} PO${pos.length === 1 ? '' : 's'} (${money(total)}) for ${vendorNames.join(', ')}${extras.length ? ` + ${extras.join(', ')}` : ''}.`;
       const poVendorIds = uniq(pos.map(opVendorId).filter((v): v is string => v !== null));
       const poLines = linesOf(pos);
       const locationNames = uniq(poLines.map((l) => state.atRisk.find((a) => a.location_id === l.location_id)?.location_name ?? l.location_id));
+      // Headline: the Planner's title/summary when exactly one vendor is ordered and it passes the code
+      // validator (numbers, dates, vendors, no instructions, no echo of untrusted text); else a template.
+      // The template summary is one human sentence that does not repeat the title.
+      const longSummary = restockSummary({ poCount: pos.length, total, vendors: vendorNames, locations: locationNames, caps: count(CAP_ACTION), emails: count(EMAIL_ACTION), tasks: count(TASK_ACTION) });
       const allVendors = z.array(AnalyseTaskSchema).safeParse(await getStepResultAsync('prepare'));
       const headlineFacts: HeadlineFacts = {
         money: [total ?? 0, ...pos.map((op) => op.value ?? 0), ...pos.flatMap((op) => purchaseInput(op)?.lines.flatMap((l) => [l.unit_price, l.unit_price * l.quantity]) ?? [])],
@@ -689,28 +708,45 @@ export function createRestockSteps(deps: RestockDeps) {
       const capped = new Map(assembled.ops.filter((o) => o.action === CAP_ACTION).map((o) => [z.object({ id: z.string() }).parse(o.input).id, o.source]));
       const guardStatus = guard.map((g) => ({ ...g, status: capped.get(g.product_id) ?? ('dropped: not ordered' as const) }));
       const spend = sumTrace(state.agentTrace);
-      const rationale = [
-        `Triggered by ${state.trigger.triggeredBy}${state.trigger.scenarioNote ? `: ${state.trigger.scenarioNote}` : ''}.`,
-        '## Inventory analysis',
-        ...state.analysisSummaries,
-        '## Purchase plan',
-        ...state.plannerSummaries.map((p) => `${p.vendor}: ${p.summary}`),
-        guard.length
-          ? `## Allocation guard (per-buyer menu caps, computed in code)\n${guardStatus.map((g) => `- ${g.reason}${g.current_cap !== null ? ` (current cap ${g.current_cap})` : ''} [${g.status}]`).join('\n')}${assembled.backfilledCaps.length ? `\nAdded by the workflow (the Planner did not propose them): ${assembled.backfilledCaps.join(', ')}` : ''}`
-          : null,
-        count(EMAIL_ACTION) || count(TASK_ACTION)
-          ? `## Hand-offs\nEach PO is followed by its vendor email and a receiving task; both reference the PO number with {{op:N.purchase_number}}, resolved from the PO when it is written (the diff shows the placeholder).`
-          : null,
-        ...guardNotes,
-        ...assembled.notes,
-        state.complianceSummary ? `## Compliance\n${state.complianceSummary}` : null,
-        state.vetoed.length ? `Vetoed lines: ${state.vetoed.map((v) => `${v.sku ?? v.product_id} (${v.reasons[0] ?? 'blocked'})`).join('; ')}` : null,
-        state.critiques.length ? `## Policy revisions\n${state.critiques.map((c) => `Round ${c.round}: ${c.explanation}`).join('\n')}` : null,
-        outcome === 'exhausted' ? `Policy still denies after ${MAX_REVISIONS} revisions; proposed for the record (it cannot be executed).` : null,
-        state.suspicious.length ? `Ignored suspicious ERP text: ${state.suspicious.map((s) => `${s.sku ?? s.product_id ?? '?'} (${s.source})`).join(', ')}` : null,
-      ]
-        .filter((s): s is string => Boolean(s))
-        .join('\n');
+      // The rationale is composed in code from the agents' structured outputs (no trigger line: that is meta).
+      const vendorIdByName = new Map(state.vendors.map((v) => [v.vendor.name, v.vendor.id]));
+      const recallByVendor = new Map<string, ReturnType<typeof recallFromToolCalls>>();
+      for (const t of state.agentTrace) {
+        if (t.agent !== AGENTS.procurementPlanner.id) continue;
+        const name = /^vendor (.+?)(?: \(revision \d+\))?$/.exec(t.label)?.[1];
+        const id = name ? vendorIdByName.get(name) : undefined;
+        if (!id) continue;
+        recallByVendor.set(id, [...(recallByVendor.get(id) ?? []), ...recallFromToolCalls(t.toolCalls)]);
+      }
+      const rationale = composeRestockRationale({
+        vendors: state.vendors.map((v) => v.vendor),
+        atRisk: state.atRisk,
+        plans: state.vendors.map((v) => ({
+          vendor_id: v.vendor.id,
+          summary: state.plannerHeadlines.find((h) => h.vendor_id === v.vendor.id)?.summary ?? null,
+          lines: state.plannerLines.find((l) => l.vendor_id === v.vendor.id)?.lines ?? [],
+          context: state.plannerContexts.find((c) => c.vendor_id === v.vendor.id)?.context ?? null,
+          recall: recallByVendor.get(v.vendor.id) ?? [],
+        })),
+        ordered: pos.flatMap((op) => {
+          const input = purchaseInput(op);
+          return input ? input.lines.map((l) => ({ vendor_id: input.vendor_id, location_id: input.location_id, product_id: l.product_id, quantity: l.quantity, unit_price: l.unit_price })) : [];
+        }),
+        locations: new Map(state.atRisk.filter((a) => a.location_id && a.location_name).map((a) => [a.location_id!, a.location_name!])),
+        vetoed: state.vetoed,
+        critiques: state.critiques,
+        complianceSummary: state.complianceSummary,
+        guard: guard.length
+          ? [
+              ...guardStatus.map((g) => `${g.reason}${g.current_cap !== null ? ` (current cap ${g.current_cap})` : ''} [${g.status}]`),
+              ...(assembled.backfilledCaps.length ? [`Added by the workflow (the Planner did not propose them): ${assembled.backfilledCaps.join(', ')}`] : []),
+            ]
+          : [],
+        notes: [...guardNotes, ...assembled.notes],
+        handoffs: count(EMAIL_ACTION) > 0 || count(TASK_ACTION) > 0,
+        suspicious: state.suspicious,
+        exhausted: outcome === 'exhausted' ? { maxRevisions: MAX_REVISIONS } : null,
+      });
       const proposal = await deps.harness.propose({
         ctx: deps.contexts().read,
         principal: plannerPrincipal,

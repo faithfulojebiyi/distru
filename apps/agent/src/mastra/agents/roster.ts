@@ -50,13 +50,15 @@ export const AGENT_TOOLS: Record<AgentKey, readonly string[]> = {
     // Account context (packages/context): vendor reliability from synced history, and learned / told memories.
     'context.vendor_profile',
     'context.memories_search',
+    // Semantic recall over vendor email / PO notes (present only while the `recall` connector is registered).
+    'recall.search',
   ],
   inventoryAnalyst: ['distru.velocity_report', 'distru.inventory', 'distru.open_orders', 'distru.products_get', 'headset.retail_trends', 'headset.demand_signal'],
   // `distru_mcp.mutate_product` (per-buyer menu cap) is only present while the MCP bridge is connected.
-  procurementPlanner: ['distru.vendors', 'distru.vendor_purchase_history', 'distru.products_get', 'context.context_for', 'distru.purchases.upsert', 'distru_mcp.mutate_product'],
+  procurementPlanner: ['distru.vendors', 'distru.vendor_purchase_history', 'distru.products_get', 'context.context_for', 'recall.search', 'distru.purchases.upsert', 'distru_mcp.mutate_product'],
   complianceReviewer: ['distru.compliance_check', 'distru.products_get'],
   policyCritic: ['distru.vendors', 'distru.products_get'],
-  vendorLiaison: ['distru.vendor_purchase_history', 'distru.products_get', 'context.context_for', 'composio.gmail_fetch_message_by_thread_id', 'composio.gmail_fetch_message_by_message_id'],
+  vendorLiaison: ['distru.vendor_purchase_history', 'distru.products_get', 'context.context_for', 'recall.search', 'composio.gmail_fetch_message_by_thread_id', 'composio.gmail_fetch_message_by_message_id'],
 };
 
 /** Per-agent budget for one agent call (tool calls = steps). The run budget caps the sum. */

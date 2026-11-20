@@ -105,3 +105,31 @@ export function createContextFunctions(options: ContextFunctionOptions): Inngest
   );
   return [record, cron];
 }
+
+export interface RecallFunctionOptions {
+  /** Inngest cron for the incremental mailbox pass; empty disables (arrivals are still indexed). */
+  cron: string;
+  /** One incremental pass over the purchasing mailbox (Composio Gmail, `after:` cursor). */
+  indexMailbox: () => Promise<unknown>;
+  /** Index one message from a `composio/gmail.new_message` event (vendor replies as they arrive). */
+  indexIncoming: (event: unknown) => Promise<unknown>;
+}
+
+/**
+ * Semantic recall indexing: `recall-index-on-email` (the same Gmail trigger event the vendor-reply loop
+ * consumes; a second, independent function, so indexing never delays or breaks a reply run) and
+ * `recall-index` (cron: the incremental mailbox pass, catching mail the trigger never saw, e.g. our own
+ * sent messages). PO notes are indexed by the context sync (`onFreeText`), not here.
+ */
+export function createRecallFunctions(options: RecallFunctionOptions): InngestFunction.Like[] {
+  const onEmail = inngest.createFunction(
+    { id: 'recall-index-on-email', name: 'Recall: index an arriving email', triggers: [{ event: COMPOSIO_GMAIL_EVENT }], concurrency: { limit: 2 } },
+    async ({ event, step }) => step.run('index-message', () => options.indexIncoming(event.data)),
+  );
+  if (!options.cron) return [onEmail];
+  const cron = inngest.createFunction(
+    { id: 'recall-index', name: 'Recall: index the mailbox', triggers: [{ cron: options.cron }], concurrency: { limit: 1 } },
+    async ({ step }) => step.run('index-mailbox', () => options.indexMailbox()),
+  );
+  return [onEmail, cron];
+}

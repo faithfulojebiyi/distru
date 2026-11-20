@@ -1,7 +1,7 @@
 import type { ApiServices } from '../../src/api/services';
 
 /** No-op services for route tests that don't exercise them. */
-export const stubServices = (): Pick<ApiServices, 'runs' | 'connectors' | 'webhooks' | 'undo' | 'resume' | 'evals' | 'context' | 'mcpTokens' | 'policyRules' | 'locations'> => ({
+export const stubServices = (): Pick<ApiServices, 'runs' | 'connectors' | 'webhooks' | 'undo' | 'resume' | 'evals' | 'context' | 'mcpTokens' | 'policyRules' | 'locations' | 'recall'> => ({
   runs: {
     list: async () => [],
     get: async () => null,
@@ -37,4 +37,5 @@ export const stubServices = (): Pick<ApiServices, 'runs' | 'connectors' | 'webho
   },
   policyRules: { list: async () => [], available: () => [], replace: async () => [] },
   locations: { list: async () => ({ items: [], fetchedAt: new Date(0).toISOString() }) },
+  recall: { enabled: false, search: async () => Promise.reject(new Error('recall not stubbed')) },
 });

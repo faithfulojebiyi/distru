@@ -21,6 +21,7 @@ import { helloWorkflow } from './workflows/hello';
 import { createRestockWorkflow, type RestockDeps } from './workflows/restock';
 import { createVendorReplyWorkflow, type VendorReplyDeps } from './workflows/vendor-reply';
 import { appNotifier } from '../slack';
+import { loadFastembed, opsLeadMemory } from '../context/recall';
 
 /** What the restock workflow runs against: the app harness (Postgres), the Distru connector, the seeded policy. */
 export const restockDeps: RestockDeps = {
@@ -64,6 +65,10 @@ export const agents = createAgents({
   afterPropose: afterPropose(sendProposalApproved),
   models: modelsFromEnv(env),
   launcher: restockLauncher,
+  // Semantic recall: `recall_search` for the Ops Lead / Planner / Vendor Liaison, and Copilot memory with
+  // Mastra semanticRecall over the operator's earlier turns (FastEmbed → pgvector). Off with RECALL_ENABLED=0.
+  recall: env.RECALL_ENABLED,
+  ...(env.RECALL_ENABLED && env.RECALL_EMBEDDER === 'fastembed' ? { memory: opsLeadMemory(env.DATABASE_URL, await loadFastembed()) } : {}),
 });
 
 export const restockWorkflow = createRestockWorkflow(restockDeps);

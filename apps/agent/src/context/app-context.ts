@@ -22,6 +22,7 @@ import {
   onboardingReport,
   signalsFromAudit,
   type ContextStore,
+  type DistruSyncOptions,
   type HarnessSignal,
   type IngestResult,
   type Memory,
@@ -37,10 +38,16 @@ import { auditEvent } from '../db/schema';
 
 export type AppContextSync = ReturnType<typeof createDistruSync>;
 
-export function createAppContextSync(store: ContextStore, config: { baseUrl: string; token: string }) {
+export function createAppContextSync(store: ContextStore, config: { baseUrl: string; token: string } & Pick<DistruSyncOptions, 'onFreeText' | 'onFreeTextError'>) {
   const observer = createDistruObserver();
   const client = createDistruClient({ baseUrl: config.baseUrl, token: config.token, fetch: observer.wrap((url, init) => fetch(url, init)) });
-  return createDistruSync({ client, store, observer });
+  return createDistruSync({
+    client,
+    store,
+    observer,
+    ...(config.onFreeText ? { onFreeText: config.onFreeText } : {}),
+    ...(config.onFreeTextError ? { onFreeTextError: config.onFreeTextError } : {}),
+  });
 }
 
 export const createAppContextStore = (db: DB): ContextStore => new DrizzleContextStore(db);

@@ -69,6 +69,8 @@ async function ensureTestDatabase(): Promise<void> {
   const statements = await generateMigration(empty, generateDrizzleJson({ ...appSchema, ...contextTables }, empty.id, ['public', 'context']));
   const sql = postgres(testUrl, { max: 1, onnotice: () => {} });
   try {
+    // pgvector (semantic recall); best effort so a plain postgres image still runs the other tests.
+    await sql.unsafe('create extension if not exists vector').catch((err: unknown) => console.warn(`[test preload] pgvector unavailable: ${err instanceof Error ? err.message : String(err)}`));
     for (const s of statements) await sql.unsafe(s);
     await sql.unsafe('create table public.__test_schema (hash text not null)');
     await sql`insert into public.__test_schema (hash) values (${hash})`;

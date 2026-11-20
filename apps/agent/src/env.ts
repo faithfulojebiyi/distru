@@ -74,6 +74,16 @@ const EnvSchema = z.object({
   RESTOCK_CRON: z.string().default('TZ=America/Los_Angeles 0 7 * * *'),
   /** Context layer: Inngest cron for Distru sync → account profile (default every 30 min; empty disables). */
   CONTEXT_SYNC_CRON: z.string().default('*/30 * * * *'),
+  // --- Semantic recall (packages/context `recall`; pgvector + a local embedder) ---
+  /** `0` / `false` turns semantic recall off (no `recall` connector, no indexing, plain Copilot memory). */
+  RECALL_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => !(v === '0' || v === 'false')),
+  /** `fastembed` (local ONNX bge-small-en-v1.5, 384 dims; default) or `hash` (lexical, no model download). */
+  RECALL_EMBEDDER: z.enum(['fastembed', 'hash']).default('fastembed'),
+  /** Inngest cron for the incremental mailbox pass (empty disables; new vendor replies are indexed on arrival either way). */
+  RECALL_INDEX_CRON: z.string().default('*/15 * * * *'),
   // --- Composio (connector `composio`: Gmail/Calendar tools + the Gmail new-message trigger) ---
   /** Composio project key. Default: the local emulator's key (`bun run dev:emulators`). Empty disables the connector. */
   COMPOSIO_API_KEY: z.string().default('ak_emulator_goldencoast_local0001'),

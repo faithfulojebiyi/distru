@@ -30,6 +30,7 @@ import { discardAudit } from './webhook-support';
 import { toHttpError } from './harness-errors';
 import type { ApiServices } from './services';
 import { registerInsightRoutes } from './insight-routes';
+import { registerCopilotRoutes } from './copilot-routes';
 import { registerOpsRoutes } from './ops-routes';
 import { z } from 'zod';
 
@@ -338,6 +339,9 @@ export function createApiRoutes(services: ApiServices) {
 
   // Evals, context profile + memories, onboarding (src/api/insight-routes.ts).
   registerInsightRoutes(api, services, session);
+
+  // What the Ops Lead can answer, for the Copilot's new-chat page (src/api/copilot-routes.ts).
+  registerCopilotRoutes(api, services, session);
 
   api.doc31(OPENAPI_PATH, {
     openapi: '3.1.0',

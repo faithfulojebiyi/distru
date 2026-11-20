@@ -140,6 +140,8 @@ export function toRunDetail(state: WorkflowState, link: ProposalLink | null): Ru
     createdAt: iso(state.createdAt) ?? new Date(0).toISOString(),
     updatedAt: iso(state.updatedAt) ?? new Date(0).toISOString(),
     proposal: link,
+    scope: runScopeOf(input, stepResults(steps, 'prepare')[0]?.output),
+    outcome: outcomeOf(state.result),
     input,
     result: asRecord(state.result),
     error: state.error?.message ?? null,
@@ -148,6 +150,26 @@ export function toRunDetail(state: WorkflowState, link: ProposalLink | null): Ru
     suspendPayload: asRecord(suspended?.suspendPayload),
   };
 }
+
+const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+
+/** The run's scope from its input and the `prepare` step's output (the locations it analysed). */
+export function runScopeOf(input: Record<string, unknown> | null, prepareOutput: unknown): RunSummary['scope'] {
+  const names = Array.isArray(prepareOutput)
+    ? prepareOutput.map((t) => asRecord(asRecord(t)?.location)?.name).filter((n): n is string => typeof n === 'string')
+    : [];
+  return {
+    locationIds: strings(input?.locationIds),
+    locationNames: [...new Set(names)],
+    vendorIds: strings(input?.vendorIds),
+    scenarioNote: typeof input?.scenarioNote === 'string' && input.scenarioNote.trim() ? input.scenarioNote.trim() : null,
+  };
+}
+
+const outcomeOf = (result: unknown): string | null => {
+  const status = asRecord(result)?.status;
+  return typeof status === 'string' ? status : null;
+};
 
 export interface RunsServiceDeps {
   launcher: RestockLauncher;
@@ -173,6 +195,8 @@ export function createRunsService({ launcher, proposalLinks }: RunsServiceDeps):
           updatedAt: iso(r.updatedAt) ?? new Date(0).toISOString(),
           proposal: links.get(r.runId) ?? null,
           totals,
+          scope: runScopeOf(input, asRecord(snapshot?.context.prepare)?.output),
+          outcome: outcomeOf(snapshot?.result),
         };
       });
     },

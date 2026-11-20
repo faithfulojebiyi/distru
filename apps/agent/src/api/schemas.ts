@@ -326,6 +326,17 @@ export const TokenUsageSchema = z
   .object({ input: z.number().int(), output: z.number().int(), total: z.number().int() })
   .meta({ id: 'RunTokenUsage' });
 
+/** A run's scope: the locations / vendors it was limited to (empty = all) and the trigger note. */
+export const RunScopeSchema = z
+  .object({
+    locationIds: z.array(z.string()),
+    /** Names of the locations the run analysed (from its first step; empty before it ran or when nothing was at risk). */
+    locationNames: z.array(z.string()),
+    vendorIds: z.array(z.string()),
+    scenarioNote: z.string().nullable(),
+  })
+  .meta({ id: 'RunScope' });
+
 /** Spend and activity of a run so far (sum over its agent calls). */
 export const RunTotalsSchema = z
   .object({ tokens: TokenUsageSchema, costUsd: z.number(), agentCalls: z.number().int(), toolCalls: z.number().int() })
@@ -342,6 +353,10 @@ export const RunSummarySchema = z
     /** The proposal the run created (null before the propose step, or when nothing needed ordering). */
     proposal: RunProposalLinkSchema.nullable(),
     totals: RunTotalsSchema,
+    /** What the run was asked to cover (for a human label: "Restock · Oakland Warehouse"). */
+    scope: RunScopeSchema,
+    /** The workflow result's status once finished (`executed`, `nothing_to_order`, …), else null. */
+    outcome: z.string().nullable(),
   })
   .meta({ id: 'RunSummary' });
 

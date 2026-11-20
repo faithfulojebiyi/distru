@@ -123,7 +123,11 @@ describe('cross-tool proposal: PO → buyer cap → vendor email → receiving t
     expect(p.rationale).toContain('Allocation guard');
     // Short title (three vendors: the code template), the detail in summary.
     expect(p.title).toBe('Restock 3 vendors · Oakland Warehouse');
-    expect(p.summary).toMatch(new RegExp(`3 POs .* \\+ ${caps.length} buyer caps?, 3 vendor emails, 3 receiving tasks`));
+    // The summary is one human sentence that does not repeat the title.
+    expect(p.summary).toMatch(new RegExp(`^3 purchase orders worth \\$[\\d,.]+ across three vendors for Oakland Warehouse, with ${caps.length} buyer caps?, 3 vendor emails and 3 receiving tasks\\.$`));
+    // The rationale is the agents' reasoning (answer table, per vendor), not the trigger line.
+    expect(p.rationale).not.toContain('Triggered by');
+    expect(p.rationale).toContain('| Vendor | SKU | Location |');
     expect(p.meta).toMatchObject({ titleSource: 'template', titleRejectedReason: 'no single agent headline for this proposal' });
 
     // Nothing written while proposing.

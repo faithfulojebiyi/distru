@@ -12,12 +12,12 @@ import {
   type ComposioCtx,
   type ComposioToolsClient,
 } from '@ops/connector-composio';
-import { contextConnector, InMemoryContextStore, type ContextCtx, type ContextService } from '@ops/context';
+import { contextConnector, createRecall, HashEmbedder, InMemoryContextStore, InMemoryRecallStore, InMemoryRecallVectorIndex, recallConnector, type ContextCtx, type ContextService, type RecallCtx, type RecallService } from '@ops/context';
 import { Registry, routeErrorClassifier, type AnyTrigger, type ConnectorDefinition, type ErrorClassifier } from '@ops/harness';
 import { db } from '../db/client';
 import { env } from '../env';
 import { DrizzleSentEmailRecord } from './email-record';
-import { appContextStore } from '../context';
+import { appContextStore, appRecall } from '../context';
 import { appTriggers } from './triggers';
 
 /**
@@ -30,6 +30,8 @@ import { appTriggers } from './triggers';
  * | `email`      | email     | `send_vendor_po` (high risk, always a human); mock outbox or Resend   |
  * | `distru_mcp` | erp       | Distru's MCP server through the generic bridge (`mutate_product` = per-buyer menu cap, …) |
  * | `composio`   | other     | Gmail / Calendar via Composio (emulator locally): thread reads, `gmail_reply_to_thread`, … + the Gmail new-message trigger |
+ * | `context`    | analytics | account profile, learned memories, unified query (read-only)          |
+ * | `recall`     | other     | semantic search over vendor email, vendor replies and PO notes (`recall_search`; read-only; RECALL_ENABLED) |
  *
  * Triggers: `distru.order_created` (Distru connector), `composio.gmail.new_message` (Composio
  * connector), and the app-level `slack.interaction` + `schedule.morning_restock` (`./triggers`).
@@ -56,7 +58,7 @@ export type DistruMcpCtx = McpCtx<typeof DISTRU_MCP_ID>;
 export const COMPOSIO_ID = 'composio';
 export type AppComposioCtx = ComposioCtx<typeof COMPOSIO_ID>;
 
-export type AppCtx = DistruCtx & HeadsetCtx & EmailCtx & DistruMcpCtx & AppComposioCtx & ContextCtx & {
+export type AppCtx = DistruCtx & HeadsetCtx & EmailCtx & DistruMcpCtx & AppComposioCtx & ContextCtx & RecallCtx & {
   tenantId: string;
   /** `intent` etc. for MCP servers that require them (Distru); see connector-mcp `runContextOf`. */
   run?: { intent?: string; userSatisfactionEstimate?: number };
@@ -69,10 +71,16 @@ export type AppComposioConnector = ConnectorDefinition<AppComposioCtx>;
  * Builds the registry from the static connectors plus the MCP bridge / Composio connectors when
  * available, and the app-level triggers (Slack interactions, the morning schedule).
  */
-export function buildAppRegistry(mcp: DistruMcpConnector | null, composio: AppComposioConnector | null = null, triggers: readonly AnyTrigger[] = appTriggers()): Registry<AppCtx> {
+export function buildAppRegistry(
+  mcp: DistruMcpConnector | null,
+  composio: AppComposioConnector | null = null,
+  triggers: readonly AnyTrigger[] = appTriggers(),
+  opts: { recall?: boolean } = {},
+): Registry<AppCtx> {
   return new Registry<AppCtx>({
     // `context` (read-only): account profile, learned memories, unified query (packages/context).
-    connectors: [distruConnector, headsetConnector, emailConnector, contextConnector, ...(mcp ? [mcp] : []), ...(composio ? [composio] : [])],
+    // `recall` (read-only): semantic search over unstructured history, when enabled.
+    connectors: [distruConnector, headsetConnector, emailConnector, contextConnector, ...(opts.recall ? [recallConnector] : []), ...(mcp ? [mcp] : []), ...(composio ? [composio] : [])],
     triggers,
   });
 }
@@ -132,6 +140,8 @@ export interface AppConnectorsOptions {
   connectComposio?: (() => Promise<ComposioBridge<typeof COMPOSIO_ID>>) | null;
   /** Composio user id for the placeholder client while it is down. */
   composioUserId?: string;
+  /** Register the `recall` connector (semantic search; `recall_search` for the Ops Lead, Planner, Vendor Liaison). */
+  recall?: boolean;
 }
 
 export interface RefreshResult {
@@ -145,7 +155,7 @@ const errorMessage = (err: unknown) => (err instanceof Error ? err.message : Str
 
 /** Holds the current registry and the MCP bridge; see the module comment for the degraded mode. */
 export class AppConnectors {
-  #registry: Registry<AppCtx> = buildAppRegistry(null);
+  #registry: Registry<AppCtx>;
   #bridge: McpBridge<typeof DISTRU_MCP_ID> | null = null;
   #mcpConnector: DistruMcpConnector | null = null;
   #composio: ComposioBridge<typeof COMPOSIO_ID> | null = null;
@@ -159,6 +169,7 @@ export class AppConnectors {
 
   constructor(options: AppConnectorsOptions) {
     this.#options = options;
+    this.#registry = buildAppRegistry(null, null, appTriggers(), { recall: options.recall ?? false });
     const url = options.mcpUrl ?? null;
     this.#fallback = new McpBridgeClient({ url: url ?? 'http://127.0.0.1:9/mcp-disabled' });
     this.#status = {
@@ -190,7 +201,7 @@ export class AppConnectors {
   }
 
   #rebuild(): void {
-    this.#registry = buildAppRegistry(this.#mcpConnector, this.#composio?.connector ?? null);
+    this.#registry = buildAppRegistry(this.#mcpConnector, this.#composio?.connector ?? null, appTriggers(), { recall: this.#options.recall ?? false });
   }
 
   /** Connect Composio once (its tool list is static); never throws. Returns true when the registry changed. */
@@ -332,7 +343,12 @@ export interface AppContextConfig {
   composioClient?: () => ComposioToolsClient;
   /** The context layer (default: an empty in-memory store). */
   context?: ContextService;
+  /** Semantic recall (default: an empty in-memory index; only reachable when the connector is registered). */
+  recall?: RecallService;
 }
+
+/** An empty, dependency-free recall service (lexical embedder, in-memory index). */
+export const emptyRecallService = (): RecallService => createRecall({ index: new InMemoryRecallVectorIndex(), store: new InMemoryRecallStore(), embedder: new HashEmbedder() }).service;
 
 export function buildAppContexts(config: AppContextConfig): AppContexts {
   const { baseUrl, token, fetch } = config;
@@ -347,6 +363,7 @@ export function buildAppContexts(config: AppContextConfig): AppContexts {
   const fallbackComposio = unavailableComposioClient(env.COMPOSIO_USER_ID, 'Composio is not configured');
   const composioClient = config.composioClient ?? (() => fallbackComposio);
   const context: ContextService = config.context ?? { store: new InMemoryContextStore() };
+  const recall: RecallService = config.recall ?? emptyRecallService();
   const ctx = (distru: DistruCtx['connectors']['distru']): AppCtx => ({
     connectors: {
       distru,
@@ -359,6 +376,7 @@ export function buildAppContexts(config: AppContextConfig): AppContexts {
         return composioClient();
       },
       context,
+      recall,
     },
     tenantId,
     run: { intent: 'Ops Agent restock: governed write approved by a human' },
@@ -393,6 +411,7 @@ export const appConnectors = new AppConnectors({
         })
     : null,
   composioUserId: env.COMPOSIO_USER_ID,
+  recall: env.RECALL_ENABLED,
 });
 
 let contexts: AppContexts | null = null;
@@ -406,6 +425,7 @@ export function appContexts(): AppContexts {
     mcpClient: () => appConnectors.mcpClient(),
     composioClient: () => appConnectors.composioClient(),
     context: { store: appContextStore },
+    recall: appRecall.service,
   });
   return contexts;
 }

@@ -287,6 +287,34 @@ The server speaks MCP 2026-07-28 and serves 2025-era clients (that open with `in
   gets `context_vendor_profile` and `context_memories_search` for Copilot questions.
 - API: `GET /api/context/profile`, `GET /api/context/memories`, `GET /api/onboarding`.
 
+## Semantic recall (`src/context/recall.ts`, `@ops/context` `recall`)
+
+Retrieval over unstructured text, next to the relational context layer (which never stores free text):
+
+- **Embedder**: FastEmbed `bge-small-en-v1.5` (`@mastra/fastembed`, local ONNX, 384 dims): no API key, no
+  per-call cost, offline after a one-time ~30 MB model download to `~/.cache/mastra` on the first embed (the
+  module is imported lazily). `RECALL_EMBEDDER=hash` swaps in the lexical `HashEmbedder` (no download).
+- **Vectors**: `PgVector` (`@mastra/pg`), schema `recall`, index `recall_chunks_384` (HNSW, cosine, btree on
+  `docId` / `vendorId`). Not in `context`: drizzle-kit owns that schema and would drop unknown tables.
+  **Ledger + cursors**: `context.recall_documents` (one row per source document: content hash, chunk count,
+  embedder; unchanged documents are never re-embedded) and `context.recall_cursors`.
+- **Sources**: the purchasing mailbox through Composio Gmail (`GMAIL_FETCH_EMAILS`, `after:` cursor with a
+  10-minute overlap, paged by narrowing `before:`); a vendor reply as it arrives (Inngest
+  `recall-index-on-email` on the same `composio/gmail.new_message` event as the vendor-reply loop, reads the
+  message by id); Distru PO descriptions / notes handed over by the context sync (`onFreeText`, boilerplate like
+  "Restock from <vendor>" is skipped). Inngest cron `recall-index` (`RECALL_INDEX_CRON`, default every 15 min)
+  runs the incremental mailbox pass. `bun run recall:index` runs one pass by hand (`-- --reindex` forgets
+  everything, reconciles the Distru sync and re-embeds it all) and prints a probe search.
+- **Tool**: the `recall` connector (registered unless `RECALL_ENABLED=0`): `recall.search` → `recall_search`
+  for the Ops Lead, Procurement Planner and Vendor Liaison (`AGENT_TOOLS`); their instructions get the recall
+  section only when it is registered (`withRecall`).
+- **Copilot memory**: the Ops Lead's `Memory` uses Mastra `semanticRecall` (`topK 3`, `messageRange 1`,
+  `scope: 'resource'`) on PgVector (schema `mastra`) with the same FastEmbed model, so earlier Copilot turns
+  of the same operator are recalled across threads.
+- **API**: `GET /api/recall/search?q=&vendorId=&since=&source=&limit≤8` (operator / approver) → passages
+  with `ref`, date, vendor, PO numbers, score; text wrapped as untrusted, `suspicious` flagged; 503 when
+  disabled. The Copilot page has a small "Search history" box on top of it.
+
 ## Restock quality and cost
 
 - **Deterministic demand scan** (`src/mastra/workflows/demand.ts`): Distru velocity per location and vendor
@@ -406,6 +434,7 @@ apps/agent/
 | `POST /api/proposals/:id/resume` | **approver** | resume a failed proposal through `proposal-execute` → 202 `{ proposal, queued }`; 409 `not_resumable` |
 | `GET /api/evals` · `GET /api/evals/:scenario/history` | session | latest `eval_run` row per scenario · one scenario over time |
 | `GET /api/context/profile` · `GET /api/context/memories` · `GET /api/onboarding` | session | account profile, learned memories, onboarding report |
+| `GET /api/recall/search?q=&vendorId=&since=&source=&limit=` | operator/approver | semantic recall over vendor email, vendor replies, PO notes: passages (`ref`, date, vendor, PO numbers, score, untrusted-wrapped subject/from/text, `suspicious`) + `embedder`, `documents`; 503 when `RECALL_ENABLED=0` |
 | `GET /api/locations` | session | own Distru locations (ids for `POST /api/runs`), cached 5 min |
 | `GET /api/policy-rules` · `PUT /api/policy-rules` | session · **approver** | rules + rule types (params JSON Schema); PUT replaces the set, validated against the engine's rules (400 `invalid_policy` + issues), audited `policy.changed` |
 | `POST /api/mcp-tokens` · `GET` · `DELETE /api/mcp-tokens/:id` | **approver** | per-client MCP tokens (see "MCP server"): create returns the token once |
@@ -438,14 +467,15 @@ apps/agent/
 
 ```bash
 # from the repo root
-docker compose up -d                       # postgres on 127.0.0.1:5482
+docker compose up -d                       # postgres 16 + pgvector on 127.0.0.1:5482
 bun install
 cp apps/agent/.env.example apps/agent/.env # then set BETTER_AUTH_SECRET (openssl rand -base64 32)
 
 cd apps/agent
-bun run db:push                            # drizzle-kit push (public schema; see Known issues for renames)
+bun run db:push                            # pgvector extension, then drizzle-kit push (public + context; see Known issues)
 bun run db:seed                            # operator@demo.dev / approver@demo.dev, password demo-password
 bun run db:seed:history                    # optional: decision history → memories on the next context:sync
+bun run recall:index                       # optional: index the mailbox (needs dev:emulators) + PO notes for recall
 bun run dev                                # http://localhost:4111
 
 # second terminal: Inngest dev server (UI on http://localhost:8288)

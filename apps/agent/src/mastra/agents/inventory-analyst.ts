@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import { z } from 'zod';
 import { AGENTS } from './roster';
-import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions } from './shared';
+import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions, historyErrorProcessors } from './shared';
 
 export const AtRiskSkuSchema = z
   .object({
@@ -122,5 +122,6 @@ export function createInventoryAnalyst<TTools extends ToolsInput>({ model, tools
     instructions: cachedInstructions(INVENTORY_ANALYST_INSTRUCTIONS),
     model,
     tools,
+    errorProcessors: historyErrorProcessors(),
   });
 }

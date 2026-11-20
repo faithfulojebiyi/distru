@@ -2,7 +2,7 @@
  * Boundary schemas for the read-only "insight" routes: eval results (`eval_run`), the context layer's
  * account profile and memories, and the onboarding report. Every top-level schema has `.meta({ id })`.
  */
-import { MemorySchema, ProductProfileSchema, VendorProfileSchema, type OnboardingReport } from '@ops/context';
+import { MemorySchema, ProductProfileSchema, RecallSearchResultSchema, RecallSourceSchema, VendorProfileSchema, type OnboardingReport } from '@ops/context';
 import { z } from 'zod';
 
 // ── Evals ────────────────────────────────────────────────────────────────────────────────────
@@ -98,3 +98,19 @@ export const OnboardingReportSchema = z
 
 // The package's report type must stay assignable to the schema (compile-time drift check).
 export const assertOnboardingShape = (r: OnboardingReport): z.input<typeof OnboardingReportSchema> => r;
+
+// ── Semantic recall ──────────────────────────────────────────────────────────────────────────
+
+export const RecallSearchQuerySchema = z.object({
+  q: z.string().trim().min(2).max(300).describe('What to look for, in plain words'),
+  vendorId: z.string().min(1).max(100).optional().describe('Only text about this Distru vendor id'),
+  since: z.iso.date().optional().describe('Only text written on or after this date (YYYY-MM-DD)'),
+  source: RecallSourceSchema.optional().describe('email, vendor_reply or po_note (default: all)'),
+  limit: z.coerce.number().int().min(1).max(8).default(5),
+});
+
+export const RecallSearchResponseSchema = RecallSearchResultSchema.extend({
+  embedder: z.string().describe('Embedding model the index was built with'),
+  documents: z.number().int().nullable().describe('Indexed documents'),
+}).meta({ id: 'RecallSearchResponse' });
+export type RecallSearchResponse = z.infer<typeof RecallSearchResponseSchema>;

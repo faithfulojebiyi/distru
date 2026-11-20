@@ -128,7 +128,8 @@ export function chooseHeadline(agent: { title?: string | null; summary?: string 
   if (!agent?.title) return { ...template, meta: { titleSource: 'template', titleRejectedReason: agent ? 'the agent wrote no title' : 'no single agent headline for this proposal' } };
   const check = validateHeadline({ title: agent.title, summary: agent.summary ?? null }, facts);
   if (!check.ok) return { ...template, meta: { titleSource: 'template', titleRejectedReason: check.reason } };
-  return { title: agent.title.trim(), summary: agent.summary?.trim() || template.summary, meta: { titleSource: 'agent' } };
+  const summary = agent.summary?.trim() || null;
+  return { title: agent.title.trim(), summary: summary && !summaryRepeatsTitle(agent.title, summary) ? summary : template.summary, meta: { titleSource: 'agent' } };
 }
 
 /** Joins a template from parts, shortening the variable part (never the prefix) to fit 60 characters. */
@@ -141,6 +142,46 @@ export const restockTemplateTitle = (args: { vendors: readonly string[]; skuCoun
   args.vendors.length === 1
     ? fitTitle(`Restock ${args.skuCount} SKU${args.skuCount === 1 ? '' : 's'} · `, args.vendors[0]!)
     : fitTitle(`Restock ${args.vendors.length} vendors · `, args.locations.length === 1 ? args.locations[0]! : `${args.locations.length} locations`);
+
+/** A summary that opens with the title's words (or the old "Restock: N POs (…) for …" form) adds nothing under it. */
+export function summaryRepeatsTitle(title: string | null, summary: string | null): boolean {
+  if (!summary) return false;
+  if (/^Restock:\s/i.test(summary)) return true;
+  if (!title) return false;
+  const head = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean).slice(0, 2).join(' ');
+  return head(title).length > 0 && head(summary) === head(title);
+}
+
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+/** "six vendors", "1 vendor email", … small counts of the subject in words, the rest in digits. */
+const count = (n: number, noun: string, words = false) => `${words && n <= 10 ? NUMBER_WORDS[n] : n} ${noun}${n === 1 ? '' : 's'}`;
+const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** "A", "A and B", "A, B and C". */
+export const joinWords = (xs: readonly string[]) => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/**
+ * The restock proposal's summary as one human sentence that never repeats the title:
+ * "14 purchase orders worth $22,999.57 across six vendors for Oakland Warehouse, with 2 buyer caps and 4 vendor emails."
+ */
+export function restockSummary(a: {
+  poCount: number;
+  total: number | null;
+  vendors: readonly string[];
+  locations: readonly string[];
+  caps?: number;
+  emails?: number;
+  tasks?: number;
+}): string {
+  const worth = a.total === null ? '' : ` worth ${usd(a.total)}`;
+  const to = a.vendors.length === 1 ? ` to ${a.vendors[0]}` : ` across ${count(a.vendors.length, 'vendor', true)}`;
+  const where = a.locations.length === 0 ? '' : a.locations.length <= 3 ? ` for ${joinWords(a.locations)}` : ` for ${a.locations.length} locations`;
+  const extras = [
+    a.caps ? count(a.caps, 'buyer cap') : null,
+    a.emails ? count(a.emails, 'vendor email') : null,
+    a.tasks ? count(a.tasks, 'receiving task') : null,
+  ].filter((x): x is string => x !== null);
+  return `${count(a.poCount, 'purchase order')}${worth}${to}${where}${extras.length ? `, with ${joinWords(extras)}` : ''}.`;
+}
 
 const KIND_LABEL: Record<string, string> = { partial: 'partial shipment', delay: 'delay', confirm: 'confirmation', price_change: 'price change', other: 'update' };
 export const vendorReplyTemplateTitle = (poNumber: string, kind: string): string => fitTitle('Vendor reply · ', `${poNumber} ${KIND_LABEL[kind] ?? kind}`);

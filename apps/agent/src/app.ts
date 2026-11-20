@@ -5,6 +5,7 @@ import { sql as dsql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
+import { agentStreamErrorCodes } from './api/agent-errors';
 import { A2A_CARD_PATH, publicAgentCard } from './api/a2a-card';
 import { createApiRoutes } from './api/routes';
 import type { ApiServices } from './api/services';
@@ -14,8 +15,10 @@ import { betterAuthResolver } from './auth/session';
 import { db } from './db/client';
 import { env } from './env';
 import { mastra } from './mastra';
-import { createContextFunctions, createRestockFunctions, createVendorReplyFunctions } from './mastra/functions';
-import { appContextStore, appContextSync } from './context';
+import { createContextFunctions, createRecallFunctions, createRestockFunctions, createVendorReplyFunctions } from './mastra/functions';
+import { appContextStore, appContextSync, appRecall } from './context';
+import { indexIncomingMessage, indexMailbox } from './context/recall';
+import { recallPassDeps, recallSearchService } from './services/recall';
 import { learnFromHistory, memoriesList, onboarding, profileSummary, syncAndProfile } from './context/app-context';
 import { createEvalsService } from './services/evals';
 import { createWebhookRoutes } from './api/webhooks';
@@ -31,6 +34,7 @@ import { createRunsService, dbProposalLinks } from './services/runs';
 import { appOnDecided, appOpSystems, appSweepExecutions, createOpsServices } from './services/ops-wiring';
 import { createProposalExecutionFunctions } from './mastra/proposal-executor';
 import { requestIdMiddleware } from './harness/request-context';
+import { toolDescriptorsFor } from './mastra/tools/harness-tools';
 
 export function createServices(): ApiServices & { mcpRoutes: ReturnType<typeof createOpsServices>['mcpRoutes'] } {
   const logger = () => mastra.getLogger();
@@ -65,6 +69,9 @@ export function createServices(): ApiServices & { mcpRoutes: ReturnType<typeof c
       memories: (q) => memoriesList(appContextStore, q),
       onboarding: () => onboarding(appContextStore),
     },
+    recall: recallSearchService(appRecall, env.RECALL_ENABLED),
+    // The Ops Lead's tools from the live registry (recall / MCP tools come and go with their connectors).
+    copilot: { opsLeadTools: () => toolDescriptorsFor(appConnectors.registry, 'opsLead').map((tool) => tool.name) },
     webhooks: {
       distruSecret: env.DISTRU_WEBHOOK_SECRET,
       audit: appAuditSink,
@@ -124,6 +131,13 @@ export async function createApp(services: ApiServices & { mcpRoutes?: Hono } = c
       syncAndProfile: () => syncAndProfile(appContextSync, appContextStore, () => learnFromHistory(db, appContextStore)),
       handleWebhook: (body) => appContextSync.handleWebhook(body),
     }),
+    ...(env.RECALL_ENABLED
+      ? createRecallFunctions({
+          cron: env.RECALL_INDEX_CRON,
+          indexMailbox: () => indexMailbox(recallPassDeps()),
+          indexIncoming: (event) => indexIncomingMessage(recallPassDeps(), event),
+        })
+      : []),
     ...createProposalExecutionFunctions({
       harnessFor: (steps) => createAppHarness({ registry: () => appConnectors.registry, errors: appErrorClassifier, policyEngine: appPolicyEngine, steps, config: { undoWindowMs: env.UNDO_WINDOW_HOURS * 3_600_000 } }),
       ctx: () => appContexts().execute,
@@ -146,6 +160,11 @@ export async function createApp(services: ApiServices & { mcpRoutes?: Hono } = c
   // In-memory: a paused A2A task resumes only on the process that started it (Mastra docs).
   // The A2A card publishes the agent's short public description, never its instructions.
   app.use(A2A_CARD_PATH, publicAgentCard(mastra));
+  // Agent stream error chunks carry a stable `code` (model_history_invalid, rate_limited, …), so the Copilot
+  // maps failures to its own wording instead of showing the provider's raw message.
+  const streamErrors = agentStreamErrorCodes((code, error) => mastra.getLogger()?.warn('Agent stream failed', { code, error }));
+  app.use('/api/agents/:agentId/stream', streamErrors);
+  app.use('/api/agents/:agentId/stream/*', streamErrors);
   const mastraServer = new MastraServer({ app, mastra, taskStore: new InMemoryTaskStore() });
   await mastraServer.init();
 

@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import { z } from 'zod';
 import { AGENTS } from './roster';
-import { UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions } from './shared';
+import { UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions, historyErrorProcessors } from './shared';
 
 export const RevisionInstructionSchema = z
   .object({
@@ -66,5 +66,6 @@ export function createPolicyCritic<TTools extends ToolsInput>({ model, tools }: 
     instructions: cachedInstructions(POLICY_CRITIC_INSTRUCTIONS),
     model,
     tools,
+    errorProcessors: historyErrorProcessors(),
   });
 }

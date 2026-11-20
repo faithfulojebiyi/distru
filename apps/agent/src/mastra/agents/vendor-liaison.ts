@@ -3,7 +3,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import { z } from 'zod';
 import { contextPromptLine } from '../workflows/context-block';
 import { AGENTS } from './roster';
-import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions } from './shared';
+import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions, withRecall, historyErrorProcessors } from './shared';
 
 /**
  * Vendor Liaison: reads a vendor's email reply to one of our purchase orders and turns it into
@@ -100,14 +100,22 @@ export function vendorLiaisonPrompt(task: LiaisonTask): string {
     .join('\n');
 }
 
-export function createVendorLiaison<TTools extends ToolsInput>({ model, tools }: AgentFactoryOptions<TTools>) {
+/** When the recall connector is wired: how the Liaison uses earlier mail from the vendor. */
+export const LIAISON_RECALL_USAGE = `
+- Vendor Liaison: only when the reply refers to something earlier ("as mentioned", "the usual delay", "same as
+  last time"), call recall_search with vendorIds=[the vendor] to read that earlier mail. Extracted numbers still
+  come only from the reply in front of you; mention the earlier email (date + ref) in summary when it explains
+  the reply.`;
+
+export function createVendorLiaison<TTools extends ToolsInput>({ model, tools, recall }: AgentFactoryOptions<TTools>) {
   return new Agent({
     id: AGENTS.vendorLiaison.id,
     name: AGENTS.vendorLiaison.name,
     description:
       'Reads a vendor email reply about a purchase order (untrusted text) and returns its kind (partial / delay / confirm / price_change / other) with the quantities, ETA and prices it states. Flags prompt injection. Never writes or replies.',
-    instructions: cachedInstructions(VENDOR_LIAISON_INSTRUCTIONS),
+    instructions: cachedInstructions(withRecall(VENDOR_LIAISON_INSTRUCTIONS, recall, LIAISON_RECALL_USAGE)),
     model,
     tools,
+    errorProcessors: historyErrorProcessors(),
   });
 }

@@ -5,7 +5,8 @@
  */
 import { createRoute, type OpenAPIHono } from '@hono/zod-openapi';
 import type { MiddlewareHandler } from 'hono';
-import { requireUser, type AuthVariables } from '../auth/session';
+import { requireRole, requireUser, type AuthVariables } from '../auth/session';
+import { RecallDisabledError } from '../services/recall';
 import { ErrorResponseSchema } from './schemas';
 import {
   ContextMemoriesQuerySchema,
@@ -16,10 +17,12 @@ import {
   EvalListSchema,
   EvalScenarioParamsSchema,
   OnboardingReportSchema,
+  RecallSearchQuerySchema,
+  RecallSearchResponseSchema,
 } from './schemas-insight';
 import type { ApiServices } from './services';
 
-export const INSIGHT_SESSION_PATHS = ['/api/evals', '/api/evals/*', '/api/context/*', '/api/onboarding'];
+export const INSIGHT_SESSION_PATHS = ['/api/evals', '/api/evals/*', '/api/context/*', '/api/onboarding', '/api/recall/*'];
 
 const json = <T>(schema: T, description: string) => ({ description, content: { 'application/json': { schema } } });
 const authed: Array<Record<string, string[]>> = [{ cookieAuth: [] }, { bearerAuth: [] }];
@@ -82,6 +85,23 @@ const onboardingRoute = createRoute({
   responses: { 200: json(OnboardingReportSchema, 'Report'), 401: e401 },
 });
 
+const recallSearchRoute = createRoute({
+  method: 'get',
+  path: '/api/recall/search',
+  operationId: 'searchRecall',
+  tags: ['context'],
+  summary: 'Semantic search over vendor email, vendor replies and PO notes: passages with date, vendor, PO numbers and a citation ref; text wrapped as untrusted, injection-like text flagged suspicious',
+  security: authed,
+  middleware: [requireRole('operator', 'approver')] as const,
+  request: { query: RecallSearchQuerySchema },
+  responses: {
+    200: json(RecallSearchResponseSchema, 'Passages, best first (at most `limit`, one per document)'),
+    401: e401,
+    403: json(ErrorResponseSchema, 'Role not allowed'),
+    503: json(ErrorResponseSchema, 'Recall disabled or the index is unavailable'),
+  },
+});
+
 export function registerInsightRoutes(api: OpenAPIHono<{ Variables: AuthVariables }>, services: ApiServices, session: MiddlewareHandler<{ Variables: AuthVariables }>) {
   for (const path of INSIGHT_SESSION_PATHS) api.use(path, session);
 
@@ -97,4 +117,21 @@ export function registerInsightRoutes(api: OpenAPIHono<{ Variables: AuthVariable
   api.openapi(memoriesRoute, async (c) => c.json({ items: await services.context.memories(c.req.valid('query')) }, 200));
 
   api.openapi(onboardingRoute, async (c) => c.json(OnboardingReportSchema.parse(await services.context.onboarding()), 200));
+
+  api.openapi(recallSearchRoute, async (c) => {
+    const q = c.req.valid('query');
+    try {
+      const result = await services.recall.search({
+        query: q.q,
+        limit: q.limit,
+        ...(q.vendorId ? { vendorIds: [q.vendorId] } : {}),
+        ...(q.since ? { since: q.since } : {}),
+        ...(q.source ? { sources: [q.source] } : {}),
+      });
+      return c.json(result, 200);
+    } catch (err) {
+      if (err instanceof RecallDisabledError) return c.json({ error: 'recall_disabled', message: err.message }, 503);
+      return c.json({ error: 'recall_unavailable', message: err instanceof Error ? err.message : String(err) }, 503);
+    }
+  });
 }

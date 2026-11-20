@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { AtRiskSku } from './inventory-analyst';
 import { contextPromptLine } from '../workflows/context-block';
 import { AGENTS } from './roster';
-import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions } from './shared';
+import { SuspiciousTextFlagSchema, UNTRUSTED_DATA_RULES, type AgentFactoryOptions, cachedInstructions, withRecall, historyErrorProcessors } from './shared';
 
 export const PlannedLineSchema = z
   .object({
@@ -168,14 +168,22 @@ export function plannerRevisionPrompt(task: RevisionTask): string {
     .join('\n');
 }
 
-export function createProcurementPlanner<TTools extends ToolsInput>({ model, tools }: AgentFactoryOptions<TTools>) {
+/** When the recall connector is wired: how the Planner uses vendor email history. */
+export const PLANNER_RECALL_USAGE = `
+- Planner: before sizing a vendor's order you may call recall_search once with vendorIds=[the vendor] and a
+  query like "supply problems, delays, lead time or price changes" to catch what the vendor told us by email
+  (e.g. a longer lead time during an equipment outage). It can justify covering a longer lead time; quantities
+  and prices still come from numeric tool data. Mention the email (date + ref) in the affected line's reason.`;
+
+export function createProcurementPlanner<TTools extends ToolsInput>({ model, tools, recall }: AgentFactoryOptions<TTools>) {
   return new Agent({
     id: AGENTS.procurementPlanner.id,
     name: AGENTS.procurementPlanner.name,
     description:
       'Picks quantities and unit prices for one vendor from purchase history and proposes draft purchase orders (propose only; never writes, never approves). Follows policy revision instructions.',
-    instructions: cachedInstructions(PROCUREMENT_PLANNER_INSTRUCTIONS),
+    instructions: cachedInstructions(withRecall(PROCUREMENT_PLANNER_INSTRUCTIONS, recall, PLANNER_RECALL_USAGE)),
     model,
     tools,
+    errorProcessors: historyErrorProcessors(),
   });
 }

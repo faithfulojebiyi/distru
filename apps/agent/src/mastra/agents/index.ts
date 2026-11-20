@@ -16,6 +16,11 @@ export interface AgentDeps<TCtx> extends HarnessToolDeps<TCtx> {
   launcher: RestockLauncher;
   /** Ops Lead memory (defaults to a Memory on the Mastra instance's storage). */
   memory?: Memory;
+  /**
+   * The `recall` connector is registered: the Ops Lead, Planner and Vendor Liaison get the recall
+   * section in their instructions (their `recall_search` tool comes from the registry either way).
+   */
+  recall?: boolean;
 }
 
 /** Per-agent model ids from env (each falls back to OPS_AGENT_MODEL). Strings are Mastra model-router ids. */
@@ -49,17 +54,19 @@ export function createAgents<TCtx>(deps: AgentDeps<TCtx>) {
     return built;
   };
   const inventoryAnalyst = createInventoryAnalyst({ model: deps.models.inventoryAnalyst, tools: tools('inventoryAnalyst') });
-  const procurementPlanner = createProcurementPlanner({ model: deps.models.procurementPlanner, tools: tools('procurementPlanner') });
+  const recall = deps.recall ?? false;
+  const procurementPlanner = createProcurementPlanner({ model: deps.models.procurementPlanner, tools: tools('procurementPlanner'), recall });
   const complianceReviewer = createComplianceReviewer({ model: deps.models.complianceReviewer, tools: tools('complianceReviewer') });
   const policyCritic = createPolicyCritic({ model: deps.models.policyCritic, tools: tools('policyCritic') });
   // Vendor-reply workflow only (not a supervisor subagent): classifies vendor emails.
-  const vendorLiaison = createVendorLiaison({ model: deps.models.vendorLiaison, tools: tools('vendorLiaison') });
+  const vendorLiaison = createVendorLiaison({ model: deps.models.vendorLiaison, tools: tools('vendorLiaison'), recall });
   const startRestockRun = createStartRestockRunTool(deps.launcher);
   const opsLead = createOpsLead({
     model: deps.models.opsLead,
     tools: () => ({ ...tools('opsLead')(), start_restock_run: startRestockRun }),
     agents: { inventoryAnalyst, procurementPlanner, complianceReviewer, policyCritic },
     ...(deps.memory ? { memory: deps.memory } : {}),
+    recall,
   });
   return { opsLead, inventoryAnalyst, procurementPlanner, complianceReviewer, policyCritic, vendorLiaison };
 }
