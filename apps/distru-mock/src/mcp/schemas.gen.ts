@@ -1350,6 +1350,44 @@ export const searchActivity = {
   }),
 } satisfies DistruToolDef;
 
+export const searchMetrcActivities = {
+  name: 'distru-search-metrc-activities',
+  title: 'Search Metrc sync history',
+  kind: 'read',
+  reaches: [],
+  summary: 'Searches Metrc activities — the changes Distru sends to Metrc.',
+  description:
+    "Searches Metrc activities — the changes Distru sends to Metrc. When a user makes a change in Distru that Metrc must also record (e.g. creating, adjusting or moving a package), Distru saves it and queues an activity that syncs in the background. Each license's activities sync one at a time, in creation order; a failed one holds back every later activity of its license until it is retried or undone, so a license has at most one FAILED activity at a time. Use it to find why a change isn't in Metrc yet, what is blocking a license's sync, or what is still queued. lastError is the latest error from sending it, null once it syncs. The package and assembly are null when there is none or the caller cannot see it.",
+  doc: 'docs/research/mcptools/search-metrc-activities.md',
+  input: z.object({
+    limit: z.number().int().min(1).max(100).describe('Default: `10`').optional(),
+    cursor: z.string().describe('nextCursor of the previous call; keep the other arguments unchanged.').optional(),
+    assemblyIds: z.array(z.string()).describe('Resolve via distru-search-assemblies.').optional(),
+    createdDateAfter: z
+      .string()
+      .describe('Inclusive. YYYY-MM-DD (start of day, company timezone) or ISO 8601 with a UTC offset.')
+      .optional(),
+    createdDateBefore: z
+      .string()
+      .describe('Inclusive. YYYY-MM-DD (end of day, company timezone) or ISO 8601 with a UTC offset.')
+      .optional(),
+    creatorIds: z.array(z.string()).describe('Resolve via distru-search-users.').optional(),
+    ids: z.array(z.string()).optional(),
+    licenseIds: z.array(z.string()).describe('Resolve via distru-search-licenses.').optional(),
+    packageIds: z
+      .array(z.string())
+      .describe(
+        'Activities acting on, creating (as assembly output), moving, or packaging plant batches into these packages. Resolve via distru-search-packages.',
+      )
+      .optional(),
+    sortBy: z
+      .object({ direction: z.enum(['ASC', 'DESC']), field: z.enum(['INSERTED_AT']) })
+      .describe('Default INSERTED_AT DESC.')
+      .optional(),
+    statuses: z.array(z.enum(['QUEUED', 'FAILED', 'COMPLETED'])).optional(),
+  }),
+} satisfies DistruToolDef;
+
 export const emailPdf = {
   name: 'distru-email-pdf',
   title: 'Email a PDF',
@@ -1970,6 +2008,7 @@ export const TOOL_DEFS = {
   'distru-search-users': searchUsers,
   'distru-get-record-history': getRecordHistory,
   'distru-search-activity': searchActivity,
+  'distru-search-metrc-activities': searchMetrcActivities,
   'distru-email-pdf': emailPdf,
   'distru-search-menus': searchMenus,
   'distru-get-menu-settings': getMenuSettings,

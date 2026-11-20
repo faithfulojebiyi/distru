@@ -67,7 +67,8 @@ Note on the velocity report: as in Distru, without `lead_time_days` no row has a
     - `rate_limit`: `fail_next`, `every`, `retry_after`, plus `list.{enabled,capacity,refill_per_minute,free_window_days,tokens}` and `pdf.{per_minute,per_day}`;
     - `mcp_rate_limit`;
     - `webhook_url` and `webhook_retry_delays_ms`;
-    - `metrc_fail_next`.
+    - `metrc_fail_next` (the next N adjustments of a Metrc package save in Distru, then fail in Metrc);
+    - `metrc_retry_failed: true` (one-shot: the failed Metrc activities are retried and sync).
   - `POST /__mock/reset` (`{ scenario?, now?, po_variation? }`) and `POST /__mock/simulate/order` (takes an optional `menu_id` and `placed_by: buyer|sales_rep`).
 
 ## MCP
@@ -90,7 +91,7 @@ Note on the velocity report: as in Distru, without `lead_time_days` no row has a
 
 | Tool (`distru-` prefix omitted) | Kind | Reaches |
 |---|---|---|
-| get-me, search-products, get-product, report-inventory-valuation, report-inventory-assets, search-purchase-orders, get-purchase-order, search-companies, get-company, search-packages, get-package, search-test-results, search-sales-orders, get-sales-order, search-tasks, search-users, get-record-history, search-activity, search-menus, get-menu-settings, search-menu-products, search-menu-collections | read | none |
+| get-me, search-products, get-product, report-inventory-valuation, report-inventory-assets, search-purchase-orders, get-purchase-order, search-companies, get-company, search-packages, get-package, search-test-results, search-sales-orders, get-sales-order, search-tasks, search-users, get-record-history, search-activity, search-metrc-activities, search-menus, get-menu-settings, search-menu-products, search-menu-collections | read | none |
 | mutate-purchase-order (CREATE/UPDATE/DELETE) | write | quickbooks |
 | adjust-inventory | write | biotrack, metrc |
 | email-pdf (added to an outbox, never sent) | write | email |

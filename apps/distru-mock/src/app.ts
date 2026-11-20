@@ -1215,6 +1215,7 @@ export function createMockServer(opts: MockOptions = {}) {
    * - rate_limit: { fail_next, every, retry_after, list: { enabled, capacity, refill_per_minute, free_window_days, tokens }, pdf: { per_minute, per_day } }
    * - mcp_rate_limit: { burst, per_minute, per_hour, writes_per_minute, pdf_per_minute, pdf_per_day, max_in_flight, max_batch, fail_next, retry_after, latency_ms }
    * - webhook_url, webhook_retry_delays_ms, metrc_fail_next
+   * - metrc_retry_failed: true (one-shot) retries every FAILED Metrc activity, which then syncs
    */
   app.post('/__mock/config', async (c) => {
     const parsed = await readJson(c);
@@ -1268,7 +1269,14 @@ export function createMockServer(opts: MockOptions = {}) {
       else errors.push({ message: 'must be a list of non-negative numbers (ms) or null', pointer: ['webhook_retry_delays_ms'] });
     }
     if (body.metrc_fail_next !== undefined && nonNeg(body.metrc_fail_next, ['metrc_fail_next'])) state.metrc.fail_next = body.metrc_fail_next;
+    if (body.metrc_retry_failed !== undefined && typeof body.metrc_retry_failed !== 'boolean') errors.push({ message: 'must be a boolean', pointer: ['metrc_retry_failed'] });
     if (errors.length) return err(c, 400, errors);
+    // One-shot: someone fixed the cause in Metrc and retried the failed activities in Distru; they sync now.
+    if (body.metrc_retry_failed === true) {
+      for (const a of state.store.adjustments.values()) {
+        if (a.compliance_activity?.status === 'FAILED') a.compliance_activity = { ...a.compliance_activity, status: 'SUCCESS', error: null };
+      }
+    }
     return c.json(configView());
   });
 

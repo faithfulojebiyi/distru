@@ -10,7 +10,7 @@ import { TASK_COLORS } from '../records';
 import type { Serializer } from '../serialize';
 import { SELF_COMPANY, type Store } from '../store';
 import type { ApiErrorItem } from '../upsert';
-import type { LotRec, MenuCollectionRec, MenuRec, OrderRec, ProductRec, PurchaseRec, TaskRec } from '../types';
+import type { LotRec, MenuCollectionRec, MenuRec, OrderRec, ProductRec, PurchaseRec, StockAdjustmentRec, TaskRec } from '../types';
 import { fmtNum, money } from '../util';
 import { fromMcpId, fromMcpIds, IdError, mid, type IdKind } from './ids';
 import type { DistruToolName, TOOL_DEFS } from './schemas.gen';
@@ -1376,6 +1376,51 @@ export const HANDLERS: { [N in DistruToolName]: Handler<N> } = {
     });
     if (a.sortBy?.direction !== 'ASC') list = list.reverse();
     return paged(list, a, (e) => views.activity(e, a.recordTypes as string[] | undefined));
+  },
+
+  // Metrc activities: one per adjustment of a Metrc package (the change Distru queued for Metrc). The
+  // mock syncs instantly, so an activity is COMPLETED, or FAILED with lastError when the mock was told
+  // Metrc rejects it (/__mock/config metrc_fail_next; metrc_retry_failed retries them).
+  'distru-search-metrc-activities': (a, { s, views, userId }) => {
+    const idList = a.ids;
+    const packages = ids('package', a.packageIds, 'packageIds');
+    const licenses = ids('license', a.licenseIds, 'licenseIds');
+    const after = dateBound(a.createdDateAfter, false, 'createdDateAfter');
+    const before = dateBound(a.createdDateBefore, true, 'createdDateBefore');
+    const status = (c: NonNullable<StockAdjustmentRec['compliance_activity']>) => (c.status === 'SUCCESS' ? 'COMPLETED' : c.status);
+    const licenseOf = (adj: StockAdjustmentRec) => {
+      const loc = adj.location_id ? s.locations.get(adj.location_id) : undefined;
+      return loc ? (s.licenses.get(loc.license_id) ?? null) : null;
+    };
+    let list = [...s.adjustments.values()].filter((adj): adj is StockAdjustmentRec & { compliance_activity: NonNullable<StockAdjustmentRec['compliance_activity']> } => {
+      const c = adj.compliance_activity;
+      if (!c) return false;
+      if (idList && !idList.includes(c.id)) return false;
+      if (packages && !(adj.package_id && packages.includes(adj.package_id))) return false;
+      if (licenses && !licenses.includes(licenseOf(adj)?.id ?? '')) return false;
+      if (a.statuses && !a.statuses.includes(status(c))) return false;
+      return inRange(adj.inserted_datetime, after, before);
+    });
+    list = sorted(list, a.sortBy, { INSERTED_AT: (adj) => adj.inserted_datetime }, { field: 'INSERTED_AT', direction: 'DESC' });
+    return paged(list, a, (adj) => {
+      const c = adj.compliance_activity;
+      const lot = adj.package_id ? s.lots.get(adj.package_id) : undefined;
+      const lic = licenseOf(adj);
+      return {
+        id: c.id,
+        type: 'ADJUST_PACKAGE',
+        title: `Adjust package ${lot?.compliance_label ?? ''}`.trim(),
+        description: `${adj.quantity > 0 ? '+' : ''}${fmtNum(adj.quantity)}${adj.description ? ` (${adj.description})` : ''}`,
+        status: status(c),
+        lastError: c.error,
+        insertedAt: adj.inserted_datetime,
+        updatedAt: adj.inserted_datetime,
+        license: { id: mid('license', lic?.id ?? ''), licenseNumber: lic?.license_number ?? '' },
+        creator: views.userRef(userId) ?? { id: mid('user', userId), profile: { fullName: '' } },
+        package: lot?.compliance_label ? { id: mid('package', lot.id), metrcLabel: lot.compliance_label } : null,
+        assembly: null,
+      };
+    });
   },
 
   'distru-email-pdf': emailPdf,

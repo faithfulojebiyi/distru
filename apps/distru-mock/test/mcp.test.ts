@@ -374,6 +374,16 @@ describe('other writes', () => {
     const hist = await ok(client, 'distru-get-record-history', { recordType: 'PACKAGE', recordId: pkg.id });
     expect(hist.items).toHaveLength(2);
     expect(hist.items[0].source).toBe('MCP');
+
+    // the Metrc sync history: newest first; the rejected one FAILED with lastError
+    const acts = await ok(client, 'distru-search-metrc-activities', { packageIds: [pkg.id] });
+    expect(acts.items.map((a: Json) => a.status)).toEqual(['COMPLETED', 'FAILED']);
+    expect(acts.items[1]).toMatchObject({ id: r.stockAdjustment.complianceActivity.id, type: 'ADJUST_PACKAGE', package: { id: pkg.id, metrcLabel: pkg.metrcLabel }, lastError: expect.stringContaining('Metrc rejected') });
+    expect((await ok(client, 'distru-search-metrc-activities', { statuses: ['FAILED'] })).items).toHaveLength(1);
+    // retried in Distru after the cause was fixed in Metrc: it syncs
+    await config({ metrc_retry_failed: true });
+    const retried = await ok(client, 'distru-search-metrc-activities', { ids: [r.stockAdjustment.complianceActivity.id] });
+    expect(retried.items[0]).toMatchObject({ status: 'COMPLETED', lastError: null });
   });
 
   test('email-pdf records to the outbox, never sends; refuses drafts', async () => {

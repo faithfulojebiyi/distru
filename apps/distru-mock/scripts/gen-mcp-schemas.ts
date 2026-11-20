@@ -37,6 +37,7 @@ export const MOCKED_TOOLS = [
   'search-users',
   'get-record-history',
   'search-activity',
+  'search-metrc-activities',
   'email-pdf',
   // DistruCommerce menus (+ the product field that caps what one buyer may order)
   'search-menus',
