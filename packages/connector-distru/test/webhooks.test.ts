@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { FakeClock, InMemoryAuditSink, ingestWebhook, Registry } from '@ops/harness';
-import { distruConnector, DISTRU_ORDER_TRIGGER_ID, signDistruBody } from '../src';
+import { FakeClock, InMemoryAuditSink, ingestWebhook, Registry, triggerSource } from '@ops/harness';
+import { createDistruOrderCreatedTrigger, distruConnector, distruTimestampProblem, DISTRU_ORDER_TRIGGER_ID, signDistruBody } from '../src';
 
 const SECRET = 'mock-webhook-secret';
 const registry = Registry.fromConnectors([distruConnector]);
@@ -46,5 +46,42 @@ describe('distru.order_created trigger', () => {
     expect((await ingest(order, '')).result).toMatchObject({ status: 'rejected', httpStatus: 401 });
     expect((await ingest('not json')).result).toMatchObject({ status: 'rejected', reason: 'invalid_body', httpStatus: 400 });
     expect((await ingest({ hello: 1 })).result).toMatchObject({ status: 'rejected', reason: 'invalid_body', httpStatus: 400 });
+  });
+});
+
+describe('replay protection (occurred_datetime tolerance)', () => {
+  const NOW = new Date('2026-11-19T12:00:00Z');
+  const strict = triggerSource([createDistruOrderCreatedTrigger({ toleranceSeconds: 300, now: () => NOW })]);
+  async function ingestStrict(body: unknown) {
+    const raw = JSON.stringify(body);
+    const headers = new Headers({ 'x-distru-signature': signDistruBody(raw, SECRET) });
+    const audit = new InMemoryAuditSink();
+    return { result: await ingestWebhook(strict, DISTRU_ORDER_TRIGGER_ID, raw, headers, { DISTRU_WEBHOOK_SECRET: SECRET }, { audit, clock: new FakeClock(NOW) }), audit };
+  }
+
+  test('a fresh, correctly signed delivery is accepted', async () => {
+    expect((await ingestStrict({ ...order, occurred_datetime: '2026-11-19T11:58:30Z' })).result.status).toBe('accepted');
+    // Small clock skew the other way is fine too.
+    expect((await ingestStrict({ ...order, occurred_datetime: '2026-11-19T12:01:00Z' })).result.status).toBe('accepted');
+  });
+
+  test('a replayed (validly signed) delivery older than the tolerance is rejected and audited', async () => {
+    const { result, audit } = await ingestStrict({ ...order, occurred_datetime: '2026-11-19T11:54:59Z' });
+    expect(result).toMatchObject({ status: 'rejected', reason: 'stale_delivery', httpStatus: 401 });
+    expect(result.status === 'rejected' && result.message).toContain('old');
+    expect(audit.events.map((e) => e.type)).toEqual(['trigger.rejected']);
+  });
+
+  test('far-future, missing or unparseable timestamps are rejected while the check is on', async () => {
+    expect((await ingestStrict({ ...order, occurred_datetime: '2026-11-19T12:10:00Z' })).result).toMatchObject({ status: 'rejected', reason: 'stale_delivery' });
+    expect((await ingestStrict(order)).result).toMatchObject({ status: 'rejected', reason: 'stale_delivery' });
+    expect((await ingestStrict({ ...order, occurred_datetime: 'yesterday' })).result).toMatchObject({ status: 'rejected', reason: 'stale_delivery' });
+  });
+
+  test('tolerance 0 (default, and the connector\'s registered trigger) skips the check', () => {
+    expect(distruTimestampProblem('2020-01-01T00:00:00Z', 0, NOW)).toBeNull();
+    expect(distruTimestampProblem(undefined, 0, NOW)).toBeNull();
+    expect(distruTimestampProblem('2026-11-19T11:55:00Z', 300, NOW)).toBeNull();
+    expect(distruTimestampProblem('2026-11-19T11:54:00Z', 300, NOW)).toContain('360s old');
   });
 });

@@ -4,6 +4,11 @@
  * Distru signs each delivery with `x-distru-signature: sha256=<hex HMAC-SHA256 of the raw body>` (the
  * mock does the same). The envelope is `{ type, event, id, object, changes, occurred_datetime }`; an
  * ORDER CREATE becomes `{ productIds, locationIds }` to restock-check, anything else is ignored.
+ *
+ * Replay protection: with a tolerance (`createDistruOrderCreatedTrigger({ toleranceSeconds })`, the app's
+ * DISTRU_WEBHOOK_TOLERANCE_SECONDS, default 300 in production) a delivery whose signed `occurred_datetime`
+ * is older (or further in the future) than the tolerance is rejected, so a captured body cannot be replayed
+ * later. Distru keeps `occurred_datetime` on its retries, so a retry after the window is refused too.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { defineTrigger, headerValue, type TriggerVerification } from '@ops/harness';
@@ -76,31 +81,63 @@ export const DistruOrderCreatedEventSchema = z
   .meta({ id: 'DistruOrderCreatedEvent' });
 export type DistruOrderCreatedEvent = z.infer<typeof DistruOrderCreatedEventSchema>;
 
-export const distruOrderCreatedTrigger = defineTrigger<DistruOrderCreatedEvent>({
-  id: DISTRU_ORDER_TRIGGER_ID,
-  source: 'distru',
-  description: 'A sales order was created in Distru (ORDER CREATE webhook): restock-check the ordered products at the order location.',
-  eventName: 'distru/order.created',
-  event: DistruOrderCreatedEventSchema,
-  secret: DISTRU_WEBHOOK_SECRET,
-  verify: (rawBody, headers, secrets): TriggerVerification => {
-    if (!verifyDistruSignature(rawBody, headerValue(headers, 'x-distru-signature'), secrets[DISTRU_WEBHOOK_SECRET] ?? '')) {
-      return { ok: false, reason: 'invalid_signature', message: 'Missing or invalid x-distru-signature' };
-    }
-    let raw: unknown;
-    try {
-      raw = JSON.parse(rawBody);
-    } catch {
-      return { ok: false, reason: 'invalid_body', message: 'Body is not JSON' };
-    }
-    // Distru sends no delivery id header; (type, id, occurred_datetime) identifies the change.
-    const env = DistruWebhookSchema.safeParse(raw);
-    if (!env.success) return { ok: false, reason: 'invalid_body', message: 'Not a Distru webhook envelope' };
-    return { ok: true, webhookId: distruWebhookKey(env.data), raw };
-  },
-  normalize: (raw, { eventId }) => {
-    const hook = DistruWebhookSchema.parse(raw);
-    const scope = restockScopeFor(hook);
-    return scope ? { source: 'distru', eventId, orderId: hook.id, ...scope } : null;
-  },
-});
+export interface DistruTriggerOptions {
+  /** Max age (and future skew) of `occurred_datetime`, in seconds. 0 / unset = no check. */
+  toleranceSeconds?: number;
+  now?: () => Date;
+}
+
+/**
+ * Freshness of a delivery's signed timestamp: null when within `toleranceSeconds` of now (or the check is
+ * off), else why it is refused. A missing / unparseable timestamp is refused while the check is on.
+ */
+export function distruTimestampProblem(occurred: string | null | undefined, toleranceSeconds: number, now: Date): string | null {
+  if (!toleranceSeconds) return null;
+  if (!occurred) return 'Missing occurred_datetime';
+  const at = Date.parse(occurred);
+  if (Number.isNaN(at)) return 'Unparseable occurred_datetime';
+  const skewSeconds = (now.getTime() - at) / 1000;
+  if (skewSeconds > toleranceSeconds) return `Delivery is ${Math.round(skewSeconds)}s old (tolerance ${toleranceSeconds}s)`;
+  if (-skewSeconds > toleranceSeconds) return `Delivery is ${Math.round(-skewSeconds)}s in the future (tolerance ${toleranceSeconds}s)`;
+  return null;
+}
+
+/** The `distru.order_created` trigger, optionally rejecting stale deliveries (see `DistruTriggerOptions`). */
+export function createDistruOrderCreatedTrigger(options: DistruTriggerOptions = {}) {
+  const tolerance = options.toleranceSeconds ?? 0;
+  const now = options.now ?? (() => new Date());
+  return defineTrigger<DistruOrderCreatedEvent>({
+    id: DISTRU_ORDER_TRIGGER_ID,
+    source: 'distru',
+    description: 'A sales order was created in Distru (ORDER CREATE webhook): restock-check the ordered products at the order location.',
+    eventName: 'distru/order.created',
+    event: DistruOrderCreatedEventSchema,
+    secret: DISTRU_WEBHOOK_SECRET,
+    verify: (rawBody, headers, secrets): TriggerVerification => {
+      if (!verifyDistruSignature(rawBody, headerValue(headers, 'x-distru-signature'), secrets[DISTRU_WEBHOOK_SECRET] ?? '')) {
+        return { ok: false, reason: 'invalid_signature', message: 'Missing or invalid x-distru-signature' };
+      }
+      let raw: unknown;
+      try {
+        raw = JSON.parse(rawBody);
+      } catch {
+        return { ok: false, reason: 'invalid_body', message: 'Body is not JSON' };
+      }
+      // Distru sends no delivery id header; (type, id, occurred_datetime) identifies the change.
+      const env = DistruWebhookSchema.safeParse(raw);
+      if (!env.success) return { ok: false, reason: 'invalid_body', message: 'Not a Distru webhook envelope' };
+      // The timestamp is inside the signed body, so an old capture cannot be refreshed without the secret.
+      const stale = distruTimestampProblem(env.data.occurred_datetime, tolerance, now());
+      if (stale) return { ok: false, reason: 'stale_delivery', message: stale };
+      return { ok: true, webhookId: distruWebhookKey(env.data), raw };
+    },
+    normalize: (raw, { eventId }) => {
+      const hook = DistruWebhookSchema.parse(raw);
+      const scope = restockScopeFor(hook);
+      return scope ? { source: 'distru', eventId, orderId: hook.id, ...scope } : null;
+    },
+  });
+}
+
+/** The trigger without a freshness check (the connector's registered trigger; the app builds its own with the tolerance). */
+export const distruOrderCreatedTrigger = createDistruOrderCreatedTrigger();

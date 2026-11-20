@@ -40,7 +40,10 @@ export {
 } from './tools/receivables';
 export { complianceCheckTool, evaluateTestResult, packageProblem, ACTION_LEVELS, type ProductCompliance } from './tools/compliance';
 export {
+  createDistruOrderCreatedTrigger,
   distruOrderCreatedTrigger,
+  distruTimestampProblem,
+  type DistruTriggerOptions,
   DistruOrderCreatedEventSchema,
   DistruWebhookSchema,
   DISTRU_ORDER_TRIGGER_ID,
