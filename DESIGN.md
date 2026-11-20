@@ -74,7 +74,7 @@ someone who's allowed to has looked at exactly what's going to happen."*
  dashboard, Slack,    Ops Lead, Analyst,       propose → policy →        Distru REST,     Distru, Commerce
  Claude Code (MCP),   Planner, Compliance,     approve → execute →       Distru MCP,      menus, Headset,
  A2A, triggers        Critic, Vendor Liaison   verify → audit / undo     Headset, email,  email, Gmail,
-                                                                          Composio, Slack  Slack
+                                                                          Composio, Slack  Sheets, Slack
                          ▲
                  context layer: synced data, profiles, memories, semantic recall
 ```
@@ -155,7 +155,7 @@ the proposal; and policy plus a human sit in front of every write.
 | **A customer wants auto-approval for routine reorders** | Raise `auto_approve_below` or add a vendor-scoped rule; the proposal still gets policy-checked and audited. | Writes still go through the executor and verification. |
 | **Writes must reach Metrc directly** | Mark those actions high risk (always a human) and add a compensating action where Metrc allows one; otherwise they're listed as not undoable. | The diff, approval and verification flow. |
 | **The approver is a team, not a person** | Add a quorum rule (n of m approvers) as a decision policy; compare-and-set already prevents races. | Agents still can't approve; proposers still can't approve their own. |
-| **A new system (CRM, sheets, accounting)** | Write a connector, or point the MCP bridge at its MCP server with a small preset for risk and verification. | Safety code, UI and evals harness. |
+| **A new system (CRM, sheets, accounting)** | Write a connector, or point the MCP bridge at its MCP server with a small preset for risk and verification. Google Sheets went in this way through Composio: a read tool and an allowlisted `sheets.append_rows` with a marker cell for dedupe, read-back verify and a clear-the-rows undo. | Safety code, UI and evals harness. |
 | **Volume grows 100×** | Run more workers (Inngest concurrency per account), shard sync per account, move recall to a dedicated index. | The proposal model and its guarantees. |
 | **Distru's MCP becomes the only interface** | The MCP bridge already governs it: reads pass through, writes become proposals with risk from tool metadata. | Everything above the connector layer. |
 | **Model behaviour drifts** | Evals catch it in CI; the plan guard, validators and policy keep a bad suggestion from becoming a bad write. | The guarantee that nothing writes without approval. |

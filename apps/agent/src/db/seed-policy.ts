@@ -98,6 +98,19 @@ export const SUPERSEDED_DEFAULTS: Array<{
       ],
     },
   },
+  // Before the weekly reorder log (Google Sheets append through Composio).
+  {
+    key: RULE_KEYS.allowedActions,
+    params: {
+      actions: [
+        "distru.purchases.upsert",
+        "distru_mcp.mutate_product",
+        "email.send_vendor_po",
+        "distru.tasks.create",
+        "composio.gmail_reply_to_thread",
+      ],
+    },
+  },
 ];
 /**
  * Inserts missing default rules and upgrades never-edited superseded defaults. Idempotent. A rule an

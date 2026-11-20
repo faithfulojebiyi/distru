@@ -196,6 +196,7 @@ const ACTION_LABELS: Record<string, string> = {
   'distru.tasks.create': 'Receiving task',
   'distru_mcp.mutate_product': 'Buyer cap',
   'composio.gmail_reply_to_thread': 'Gmail reply',
+  'composio.sheets.append_rows': 'Reorder log rows',
 };
 
 export const actionLabel = (action: string) => ACTION_LABELS[action] ?? action;

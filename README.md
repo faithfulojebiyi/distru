@@ -10,7 +10,7 @@ approves it. Then plain, boring code (not the AI) carries it out, checks it work
 
 It's built against [Distru](https://www.distru.com), the cannabis ERP, using their public API and MCP
 documentation. This is a portfolio project and **isn't affiliated with Distru**. Everything external (Distru,
-Headset, Gmail, Slack, Composio) runs locally as an emulator, so you can try the whole thing on a laptop.
+Headset, Gmail, Google Sheets, Slack, Composio) runs locally as an emulator, so you can try the whole thing on a laptop.
 
 ![The Ops Agent dashboard: ask the agents a question, start a restock run, and see what needs a decision](.github/assets/overview.png)
 
@@ -73,7 +73,8 @@ Five agents work it like a small purchasing team:
 5. Everything becomes **one proposal**. A typical one holds 14 changes across four systems: four purchase
    orders in Distru, two order limits on the online menu so one big customer can't take all the remaining
    stock before the delivery arrives, four emails to vendors, and four "receive this PO" tasks for the
-   warehouse team.
+   warehouse team. With Google Sheets connected, a last change appends one row per order line to the
+   purchasing team's weekly reorder log (and an undo clears exactly those rows).
 
 <table>
   <tr>
@@ -192,6 +193,7 @@ list it should tell you it can't see, rather than guess.
 | Products | *"Tell me about VAP-BD-1G"* · *"Which vapes do we carry from Coastal Cloud?"* | Distru product catalogue |
 | Vendors | *"Which vendor has the longest lead time?"* · *"How reliable is Sierra Extracts?"* · *"What did we last pay Mojave for pre-rolls?"* | Vendor list, purchase history, and the reliability profiles the context layer computes |
 | Vendor history | *"Has Sierra Extracts mentioned supply problems before?"* | Search over past vendor emails and PO notes, with dates |
+| Spreadsheets | *"What does the vendor price sheet say Sierra Extracts charges for VAP-BD-1G?"* · *"What did we reorder last week?"* | The purchasing team's Google Sheets (vendor price sheet, weekly reorder log) through Composio |
 | Lab results and compliance | *"Can we reorder Wedding Cake 3.5g?"* · *"Any products on hold?"* | Distru lab results and Metrc package status |
 | Open orders | *"What do customers have on order for Blue Dream?"* | Open sales orders in Distru |
 | Money owed to us | *"Which invoices are overdue? Sum by customer."* · *"Who should we chase first?"* | Distru invoices and payments, with aging |
@@ -226,7 +228,7 @@ Here's what each one stands in for:
 |---|---|
 | `apps/distru-mock` | Distru's REST API **and** its MCP server, sharing one set of data: a distributor with three warehouses, six vendors, six dispensaries, 43 products, a year of orders, invoices, lab results and Metrc packages. Built from Distru's published OpenAPI spec and tool docs, including their quirks: pagination, rate limits, error formats, webhooks. |
 | `apps/headset-mock` | Retail sell-through for the same products, with a few deliberate trends to find. |
-| `apps/emulators` | Composio, Gmail, Slack and Resend. Vendors have mailboxes and can reply; Slack has a workspace with real Approve buttons. |
+| `apps/emulators` | Composio, Gmail, Google Calendar, Google Sheets, Slack and Resend. Vendors have mailboxes and can reply; purchasing has a vendor price sheet and a weekly reorder log; Slack has a workspace with real Approve buttons. |
 | `packages/emulators` | The engine underneath, including an emulator for the Claude API that records and replays model calls. |
 
 The Distru and Headset emulators were written for this project from Distru's published OpenAPI spec and MCP
@@ -324,7 +326,7 @@ Each emulator is a drop-in for the real thing, so switching is just configuratio
 |---|---|
 | Distru API | `DISTRU_BASE_URL`, `DISTRU_API_TOKEN` |
 | Distru MCP | `DISTRU_MCP_URL=https://mcp.distru.com/mcp`, `DISTRU_MCP_KEY` |
-| Composio (Gmail, Calendar) | `COMPOSIO_API_KEY`, and remove `COMPOSIO_BASE_URL` |
+| Composio (Gmail, Calendar, Sheets) | `COMPOSIO_API_KEY`, remove `COMPOSIO_BASE_URL`, and list your spreadsheets in `COMPOSIO_GOOGLESHEETS_SPREADSHEETS` |
 | Slack | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, and remove `SLACK_API_URL` |
 | Email | `RESEND_API_KEY`, `EMAIL_FROM` |
 | Inngest Cloud | `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY`, and remove `INNGEST_DEV` |
@@ -358,10 +360,10 @@ key in `OTEL_EXPORTER_OTLP_HEADERS`.
 | Folder | What it is |
 |---|---|
 | `packages/harness` | The safety layer: connectors, proposals and diffs, rules, permissions, decisions, durable execution, undo, triggers, budgets and the audit trail. Plain TypeScript with no database or framework inside. |
-| `packages/connector-*` | One package per outside system: Distru, any MCP server, Headset, email, and Composio. |
+| `packages/connector-*` | One package per outside system: Distru, any MCP server, Headset, email, and Composio (Gmail, Calendar, Sheets). |
 | `packages/context` | The context layer: syncing Distru, vendor and product profiles, and learned memories. |
 | `packages/evals` | The scenario tests, with recorded model calls. |
-| `packages/emulators` | Local stand-ins for Composio, Google, Slack, Resend and the Claude API. |
+| `packages/emulators` | Local stand-ins for Composio, Google (Gmail, Calendar, Drive, Sheets), Slack, Resend and the Claude API. |
 | `packages/distru-client` | A typed Distru API client, generated from their OpenAPI spec. |
 | `packages/ui` | The UI kit the dashboard is built from. |
 | `apps/agent` | The server: agents, workflows, sign-in, API, MCP and A2A. Built on Mastra. |

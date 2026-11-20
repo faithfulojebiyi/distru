@@ -68,6 +68,13 @@ export const COPILOT_TOPICS: readonly Topic[] = [
     tools: ['recall.search'],
   },
   {
+    id: 'spreadsheets',
+    title: 'Spreadsheets',
+    source: "The purchasing team's Google Sheets: the vendor price sheet and the weekly reorder log",
+    examples: ['What does the vendor price sheet say Sierra Extracts charges for VAP-BD-1G?', 'What did we reorder last week?'],
+    tools: ['composio.sheets.read_rows'],
+  },
+  {
     id: 'compliance',
     title: 'Lab results and compliance',
     source: 'Distru lab results and Metrc package status',

@@ -63,6 +63,14 @@ const EnvSchema = z.object({
   EMAIL_FROM: z.string().min(3).optional(),
   /** Role of the Distru user who gets the "Receive PO-… on <date>" hand-off task. */
   RESTOCK_TASK_OWNER_ROLE: z.string().min(1).default('Purchasing Manager'),
+  /**
+   * Google Sheet (spreadsheet id) the restock proposal appends one row per PO line to, through Composio's
+   * `sheets.append_rows`. Default: the emulator's "Weekly reorder log". Empty disables the log op. The
+   * spreadsheet must also be appendable in COMPOSIO_GOOGLESHEETS_SPREADSHEETS.
+   */
+  RESTOCK_REORDER_LOG_SPREADSHEET: z.string().default('1GcWeeklyReorderLog0goldencoast0000000000000'),
+  /** Tab of the reorder log the rows are appended to. */
+  RESTOCK_REORDER_LOG_SHEET: z.string().min(1).default('Reorders'),
   /** HMAC secret for `x-distru-signature` on POST /api/webhooks/distru (the mock's default in dev). */
   DISTRU_WEBHOOK_SECRET: z.string().min(1).optional(),
   /** `1` registers the morning restock cron (Inngest). Off by default. */
@@ -84,13 +92,18 @@ const EnvSchema = z.object({
   RECALL_EMBEDDER: z.enum(['fastembed', 'hash']).default('fastembed'),
   /** Inngest cron for the incremental mailbox pass (empty disables; new vendor replies are indexed on arrival either way). */
   RECALL_INDEX_CRON: z.string().default('*/15 * * * *'),
-  // --- Composio (connector `composio`: Gmail/Calendar tools + the Gmail new-message trigger) ---
+  // --- Composio (connector `composio`: Gmail/Calendar/Sheets tools + the Gmail new-message trigger) ---
   /** Composio project key. Default: the local emulator's key (`bun run dev:emulators`). Empty disables the connector. */
   COMPOSIO_API_KEY: z.string().default('ak_emulator_goldencoast_local0001'),
   /** Emulator origin. Empty = real Composio (https://backend.composio.dev). */
   COMPOSIO_BASE_URL: z.union([z.url(), z.literal('')]).default('http://localhost:4700'),
   COMPOSIO_USER_ID: z.string().min(1).default('golden-coast'),
-  COMPOSIO_TOOLKITS: z.string().default('gmail,googlecalendar'),
+  COMPOSIO_TOOLKITS: z.string().default('gmail,googlecalendar,googlesheets'),
+  /**
+   * Google Sheets the agents know by name (`Name=spreadsheetId`, comma-separated); a leading `+` puts one on the
+   * `sheets.append_rows` allowlist. Default: the emulator's vendor price sheet (read-only) and weekly reorder log.
+   */
+  COMPOSIO_GOOGLESHEETS_SPREADSHEETS: z.string().default('Vendor price sheet=1GcVendorPriceSheet0goldencoast0000000000000,+Weekly reorder log=1GcWeeklyReorderLog0goldencoast0000000000000'),
   /** Secret Composio signs trigger webhooks with (POST /api/webhooks/composio). Default: the emulator's. */
   COMPOSIO_WEBHOOK_SECRET: z.string().min(1).default('whsec_emulator_goldencoast_local'),
   /** Retry interval while Composio is unreachable (degraded mode), in ms. */

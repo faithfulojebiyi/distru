@@ -39,7 +39,10 @@ export const restockDeps: RestockDeps = {
   contexts: appContexts,
   pricing: { inputUsdPerMTok: env.LLM_INPUT_USD_PER_MTOK, outputUsdPerMTok: env.LLM_OUTPUT_USD_PER_MTOK },
   findProposalByRunId: (runId) => findProposalByRunId(db, runId),
-  crossTool: { taskOwnerRole: env.RESTOCK_TASK_OWNER_ROLE },
+  crossTool: {
+    taskOwnerRole: env.RESTOCK_TASK_OWNER_ROLE,
+    reorderLog: env.RESTOCK_REORDER_LOG_SPREADSHEET ? { spreadsheet: env.RESTOCK_REORDER_LOG_SPREADSHEET, sheet: env.RESTOCK_REORDER_LOG_SHEET } : false,
+  },
   notifier: appNotifier,
 };
 

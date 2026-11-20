@@ -15,7 +15,7 @@ export const appPolicyEngine = new PolicyEngine(APP_POLICY_RULES);
  * Every action agents may propose: the restock flow is cross-tool (PO → buyer cap → vendor email →
  * hand-off task); the vendor-reply loop adds the acknowledgement reply in the vendor's Gmail thread.
  */
-export const DEFAULT_ALLOWED_ACTIONS = ['distru.purchases.upsert', 'distru_mcp.mutate_product', 'email.send_vendor_po', 'distru.tasks.create', 'composio.gmail_reply_to_thread'];
+export const DEFAULT_ALLOWED_ACTIONS = ['distru.purchases.upsert', 'distru_mcp.mutate_product', 'email.send_vendor_po', 'distru.tasks.create', 'composio.gmail_reply_to_thread', 'composio.sheets.append_rows'];
 
 /** The mock vendors' purchase-order email domains (distru-mock seed: orders@<vendor name>.com). */
 export const DEFAULT_EMAIL_DOMAINS = [

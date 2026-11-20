@@ -14,6 +14,9 @@
  *   `{{op:<i>.recordId}}`) that the harness resolves at execute time from the PO op's result (the PO
  *   number only exists after the PO is written). The diff shows the placeholder; the op result records
  *   the resolved value.
+ * - **Reorder log** (opt-in, `options.reorderLog`): one last op appends a row per PO line to the
+ *   team's Google Sheet through Composio (`composio.sheets.append_rows`), its PO column an op reference
+ *   too. Added only while that action is registered (Composio connected with the googlesheets toolkit).
  */
 import { unprefixId } from '@ops/connector-mcp';
 import { opRef, type OpRequest, type Registry } from '@ops/harness';
@@ -31,6 +34,7 @@ export const PURCHASE_ACTION = 'distru.purchases.upsert';
 export const CAP_ACTION = 'distru_mcp.mutate_product';
 export const EMAIL_ACTION = 'email.send_vendor_po';
 export const TASK_ACTION = 'distru.tasks.create';
+export const SHEET_ACTION = 'composio.sheets.append_rows';
 
 /** Look-back for "active buyers" of a SKU. */
 export const ACTIVE_BUYER_DAYS = 14;
@@ -46,6 +50,11 @@ export interface CrossToolOptions {
   taskOwnerRole?: string;
   /** Signature line of the vendor email. */
   signature?: string;
+  /**
+   * Append one row per PO line to this Google Sheet tab (`composio.sheets.append_rows`) as the last op.
+   * Off unless given (the spreadsheet must be on the connector's append allowlist).
+   */
+  reorderLog?: { spreadsheet: string; sheet: string } | false;
 }
 
 const analyst = principalFor('inventoryAnalyst');
@@ -253,7 +262,7 @@ export interface AssembleArgs {
 }
 
 export interface AssembledOp extends OpRequest {
-  /** Index of the PO op this op belongs to (null for the PO itself). */
+  /** Index of the PO op this op belongs to (null for the PO itself and for the proposal-wide reorder log). */
   forPo: number | null;
   source: 'planner' | 'guard-backfill' | 'workflow';
 }
@@ -308,6 +317,7 @@ export async function assembleProposal(a: AssembleArgs): Promise<Assembled> {
 
   const out: AssembledOp[] = [];
   const placedCaps = new Set<string>();
+  const logRows: (string | number)[][] = [];
   for (const poOp of pos) {
     const po = purchaseOf(poOp)!;
     const poIndex = out.length;
@@ -321,6 +331,12 @@ export async function assembleProposal(a: AssembleArgs): Promise<Assembled> {
     }
     const vendor = a.vendors.find((v) => v.id === po.vendor_id) ?? { id: po.vendor_id, name: po.vendor_id, lead_time_days: null, purchase_order_email: null };
     const receiveOn = isoDay(addDays(a.now, vendor.lead_time_days ?? 14));
+    const locationName = a.atRisk.find((r) => r.location_id === po.location_id)?.location_name ?? po.location_id;
+    for (const l of po.lines) {
+      const meta = a.atRisk.find((r) => r.product_id === l.product_id);
+      // Date | Run | PO | Vendor | SKU | Product | Qty | Unit cost | Location (the connector adds the Ref marker)
+      logRows.push([isoDay(a.now), a.runId, opRef(poIndex, 'purchase_number'), vendor.name, meta?.sku ?? l.product_id, meta?.name ?? '', l.quantity, l.unit_price, locationName]);
+    }
     if (emails) {
       if (!vendor.purchase_order_email) notes.push(`${vendor.name}: no purchase-order email on file, vendor email skipped`);
       else {
@@ -347,6 +363,14 @@ export async function assembleProposal(a: AssembleArgs): Promise<Assembled> {
       };
       await previewOp(a.registry, a.ctx, planner, { action: TASK_ACTION, input });
       out.push({ action: TASK_ACTION, input, forPo: poIndex, source: 'workflow' });
+    }
+  }
+  if (a.options.reorderLog && logRows.length) {
+    if (!hasAction(a.registry, SHEET_ACTION)) notes.push('Google Sheets (Composio) unavailable: the weekly reorder log was not updated');
+    else {
+      const input = { spreadsheet: a.options.reorderLog.spreadsheet, sheet: a.options.reorderLog.sheet, rows: logRows };
+      await previewOp(a.registry, a.ctx, planner, { action: SHEET_ACTION, input });
+      out.push({ action: SHEET_ACTION, input, forPo: null, source: 'workflow' });
     }
   }
   return { ops: out, notes, backfilledCaps };

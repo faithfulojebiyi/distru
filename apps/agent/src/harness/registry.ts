@@ -29,7 +29,7 @@ import { appTriggers } from './triggers';
  * | `headset`    | analytics | retail sell-through (read-only): `retail_trends`, `demand_signal`, …  |
  * | `email`      | email     | `send_vendor_po` (high risk, always a human); mock outbox or Resend   |
  * | `distru_mcp` | erp       | Distru's MCP server through the generic bridge (`mutate_product` = per-buyer menu cap, …) |
- * | `composio`   | other     | Gmail / Calendar via Composio (emulator locally): thread reads, `gmail_reply_to_thread`, … + the Gmail new-message trigger |
+ * | `composio`   | other     | Gmail / Calendar / Sheets via Composio (emulator locally): thread reads, `gmail_reply_to_thread`, `sheets.read_rows`, `sheets.append_rows` (allowlisted spreadsheets), … + the Gmail new-message trigger |
  * | `context`    | analytics | account profile, learned memories, unified query (read-only)          |
  * | `recall`     | other     | semantic search over vendor email, vendor replies and PO notes (`recall_search`; read-only; RECALL_ENABLED) |
  *
@@ -406,7 +406,7 @@ export const appConnectors = new AppConnectors({
   connectComposio: env.COMPOSIO_API_KEY
     ? () =>
         createComposioConnector({
-          ...composioConfigFromEnv({ ...process.env, COMPOSIO_API_KEY: env.COMPOSIO_API_KEY, COMPOSIO_BASE_URL: env.COMPOSIO_BASE_URL, COMPOSIO_USER_ID: env.COMPOSIO_USER_ID, COMPOSIO_TOOLKITS: env.COMPOSIO_TOOLKITS }),
+          ...composioConfigFromEnv({ ...process.env, COMPOSIO_API_KEY: env.COMPOSIO_API_KEY, COMPOSIO_BASE_URL: env.COMPOSIO_BASE_URL, COMPOSIO_USER_ID: env.COMPOSIO_USER_ID, COMPOSIO_TOOLKITS: env.COMPOSIO_TOOLKITS, COMPOSIO_GOOGLESHEETS_SPREADSHEETS: env.COMPOSIO_GOOGLESHEETS_SPREADSHEETS }),
           id: COMPOSIO_ID,
         })
     : null,
