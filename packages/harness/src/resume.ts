@@ -5,8 +5,9 @@ import { assertScope, type Principal } from './scopes';
 
 /**
  * A proposal can be resumed when its execution failed (`failed → executing` is a legal transition):
- * the executor skips executed ops and dedupes every write by its idempotency key, so a resume re-runs
- * only the failed op and what follows. Applies to undo proposals too (a failed undo resumes the same way).
+ * the executor skips executed ops and dedupes every write by its idempotency key (or, for an op that was
+ * written but failed its read-after-write check, by the record id it recorded), so a resume re-runs only
+ * the failed op and what follows. Applies to undo proposals too (a failed undo resumes the same way).
  */
 export function isResumable(p: Pick<Proposal, 'status'>): boolean {
   return p.status === 'failed';

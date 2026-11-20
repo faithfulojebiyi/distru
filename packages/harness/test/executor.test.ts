@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { z } from 'zod';
 import {
+  defineAction,
+  Registry,
   ForbiddenError,
   isResumable,
   NotResumableError,
@@ -11,7 +14,7 @@ import {
   stepIds,
   type Proposal,
 } from '../src';
-import { agent, approvedProposal, approver, HttpError, operator, poInput, setup } from './fixtures';
+import { agent, approvedProposal, approver, HttpError, operator, poInput, purchaseUpsertAction, setup, type Ctx } from './fixtures';
 
 /** A store that "crashes the process" the first time an op result is persisted. */
 class CrashOnOpSaveStore extends InMemoryProposalStore {
@@ -235,6 +238,84 @@ describe('audit trail', () => {
     expect(env.audit.ofType('proposal.decided')[0]?.data).toEqual({ decision: 'approve', reason: 'lgtm', edited: false });
     const executed = env.audit.ofType('op.executed')[0];
     expect(executed?.data).toMatchObject({ opIndex: 0, action: 'purchases.upsert', attempts: 1, idempotencyKey: p.ops[0]?.idempotencyKey ?? '' });
+  });
+});
+
+/**
+ * A delta write with no idempotency lookup (like Distru's inventory adjustment through the MCP bridge):
+ * the ERP saves it, then a downstream sync (Metrc) may fail, which only the read-after-write check sees.
+ */
+function adjustEnv() {
+  const adjustments: Array<{ id: string; delta: number; synced: boolean }> = [];
+  let syncFails = true;
+  const adjust = defineAction({
+    name: 'stock.adjust',
+    resource: 'stock',
+    description: 'Adjust stock by a signed delta (synced to the state system in the background).',
+    risk: 'low',
+    input: z.object({ delta: z.number() }),
+    loadBefore: async () => null,
+    plan: (_ctx: Ctx, input) => ({ delta: input.delta }),
+    execute: async (_ctx: Ctx, payload) => {
+      const record = { id: `adj-${adjustments.length + 1}`, delta: payload.delta, synced: !syncFails };
+      adjustments.push(record);
+      return { recordId: record.id, record };
+    },
+    findByIdempotencyKey: async () => null,
+    verify: async (_ctx: Ctx, recordId) => {
+      const a = adjustments.find((x) => x.id === recordId);
+      return a?.synced ? { ok: true, mismatches: [] } : { ok: false, mismatches: [{ path: ['sync', 'status'], expected: 'COMPLETED', actual: 'FAILED' }] };
+    },
+    valueOf: () => 0,
+  });
+  const env = setup({ config: { registry: new Registry<Ctx>({ actions: [purchaseUpsertAction(), adjust] }) } });
+  return {
+    env,
+    adjustments,
+    syncNow: () => {
+      syncFails = false;
+      for (const a of adjustments) a.synced = true;
+    },
+  };
+}
+
+describe('write saved, downstream sync failed', () => {
+  test('earlier ops stay executed; a resume re-verifies the saved record and never writes it again', async () => {
+    const { env, adjustments, syncNow } = adjustEnv();
+    const proposal = await env.harness.propose({
+      ctx: env.ctx,
+      principal: agent,
+      ops: [
+        { action: 'purchases.upsert', input: poInput() },
+        { action: 'stock.adjust', input: { delta: -2 } },
+        { action: 'purchases.upsert', input: poInput({ vendorId: 'v-2' }) },
+      ],
+    });
+    const p = await env.harness.decide({ ctx: env.ctx, principal: approver, proposalId: proposal.id, decision: 'approve' });
+
+    const failed = await env.harness.execute({ ctx: env.ctx, proposalId: p.id });
+    expect(failed.status).toBe('failed');
+    expect(failed.ops.map((o) => o.status)).toEqual(['executed', 'failed', 'pending']);
+    expect(failed.ops[1]?.result).toMatchObject({ recordId: 'adj-1', deduplicated: false, error: { name: 'VerificationFailed' } });
+    expect(failed.ops[1]?.result?.mismatches).toEqual([{ path: ['sync', 'status'], expected: 'COMPLETED', actual: 'FAILED' }]);
+    expect(adjustments).toHaveLength(1);
+    expect(env.audit.ofType('op.verify_failed').map((e) => e.data.recordId)).toEqual(['adj-1']);
+
+    // Resume while the sync is still failing: no second adjustment, still failed with the detail.
+    const stillFailed = await env.harness.execute({ ctx: env.ctx, proposalId: p.id });
+    expect(stillFailed.status).toBe('failed');
+    expect(adjustments).toHaveLength(1);
+    expect(stillFailed.ops[1]?.result).toMatchObject({ recordId: 'adj-1', deduplicated: true, error: { name: 'VerificationFailed' } });
+    expect(env.audit.ofType('op.deduplicated').map((e) => e.data)).toEqual([expect.objectContaining({ opIndex: 1, recordId: 'adj-1', dedupedBy: 'executor_record' })]);
+
+    // The sync is retried on the ERP side: the resume verifies the same record and finishes the rest.
+    syncNow();
+    const writesBefore = env.erp.writes;
+    const done = await env.harness.execute({ ctx: env.ctx, proposalId: p.id });
+    expect(done.status).toBe('executed');
+    expect(done.ops.map((o) => o.status)).toEqual(['executed', 'executed', 'executed']);
+    expect(adjustments).toHaveLength(1);
+    expect(env.erp.writes - writesBefore).toBe(1); // only op 2; op 0 was never rewritten
   });
 });
 

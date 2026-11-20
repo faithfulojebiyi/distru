@@ -37,8 +37,9 @@ const isEscaping = (err: unknown) => isStopError(err) || err instanceof Infrastr
 
 /**
  * Apply an approved proposal, op by op, in order. Safe to call again at any point (after a crash,
- * on a durable-runner replay, or to resume a failed proposal): executed ops are skipped and every
- * write first checks `findByIdempotencyKey`, so nothing is applied twice.
+ * on a durable-runner replay, or to resume a failed proposal): executed ops are skipped, every
+ * write first checks `findByIdempotencyKey`, and an op whose write landed but failed verification
+ * is re-verified from its recorded record id instead of written again, so nothing is applied twice.
  */
 export async function executeProposal<TCtx>(deps: HarnessDeps<TCtx>, args: ExecuteArgs<TCtx>): Promise<Proposal> {
   const { proposalId } = args;
@@ -101,6 +102,11 @@ async function runOp<TCtx>(deps: HarnessDeps<TCtx>, args: ExecuteArgs<TCtx>, ind
 
   const action = deps.registry.action(op.action);
   const ref = { opIndex: index, action: op.action };
+  // A failed op that carries a record id was written and failed only its read-after-write check (e.g.
+  // Distru saved the change but its Metrc sync failed). The executor record is proof the write landed,
+  // so a resume re-verifies that record and never writes again: for an action without a key lookup (a
+  // bridged MCP write, an inventory adjustment that is a delta) a second write would apply it twice.
+  const landed = op.status === 'failed' && op.result?.recordId ? { recordId: op.result.recordId, outputs: op.result.outputs } : null;
   const connectorId = deps.registry.connectorOf(op.action)?.id;
   let attempts = 0;
   // Audit failures inside the ERP block must not be mistaken for op failures.
@@ -141,17 +147,25 @@ async function runOp<TCtx>(deps: HarnessDeps<TCtx>, args: ExecuteArgs<TCtx>, ind
         budget?.charge({ steps: 1 });
         // Dedupe on every attempt: a timed-out write may have landed on the ERP side.
         const existing = await action.findByIdempotencyKey(ctx, op.idempotencyKey);
-        if (existing) return { recordId: existing.recordId, record: existing.record, deduplicated: true };
+        if (existing) return { recordId: existing.recordId, outputs: action.outputs?.(existing.record, existing.recordId), deduplicated: 'idempotency_key' as const };
+        if (landed) return { recordId: landed.recordId, outputs: landed.outputs, deduplicated: 'executor_record' as const };
         const written = await action.execute(ctx, payload, op.idempotencyKey);
-        return { recordId: written.recordId, record: written.record, deduplicated: false };
+        return { recordId: written.recordId, outputs: action.outputs?.(written.record, written.recordId), deduplicated: null };
       }, retry);
-      const { recordId, record, deduplicated } = write.value;
-      const outputs = action.outputs?.(record, recordId);
+      const { recordId, outputs, deduplicated: dedupedBy } = write.value;
+      const deduplicated = dedupedBy !== null;
       await audit({
         type: deduplicated ? 'op.deduplicated' : 'op.executed',
         actor: EXECUTOR_ACTOR,
         proposalId,
-        data: { ...ref, recordId, idempotencyKey: op.idempotencyKey, attempts, ...(Object.keys(resolved).length ? { resolved } : {}) },
+        data: {
+          ...ref,
+          recordId,
+          idempotencyKey: op.idempotencyKey,
+          attempts,
+          ...(dedupedBy ? { dedupedBy } : {}),
+          ...(Object.keys(resolved).length ? { resolved } : {}),
+        },
       });
 
       const verification = await withRetry(() => {
