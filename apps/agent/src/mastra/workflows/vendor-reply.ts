@@ -1,7 +1,7 @@
 import { createStep, createWorkflow as createDefaultWorkflow } from '@mastra/core/workflows';
 import { GmailNewMessageEventSchema, type GmailNewMessageEvent } from '@ops/connector-composio';
 import { normalizePurchase } from '@ops/connector-distru';
-import { ProposalStatusSchema, totalValue, type Harness, type OpRequest, type Proposal, type Registry } from '@ops/harness';
+import { isExecutable, ProposalStatusSchema, totalValue, type Harness, type OpRequest, type Proposal, type Registry } from '@ops/harness';
 import { z } from 'zod';
 import { previewOp } from '../../harness/dry-run';
 import type { AppCtx } from '../../harness/registry';
@@ -582,6 +582,9 @@ export function createVendorReplySteps(deps: VendorReplyDeps) {
     outputSchema: ExecutedSchema,
     execute: async ({ inputData }) => {
       if (inputData.decision !== 'approved' || !inputData.proposalId) return { ...inputData, executed: false };
+      // Re-read: only an approved / auto-approved proposal runs here (failed ones resume via the approver-gated route).
+      const current = await deps.harness.get(inputData.proposalId);
+      if (!isExecutable(current)) return { ...inputData, proposalStatus: current.status, executed: false };
       const p = await deps.harness.execute({ ctx: deps.contexts().execute, proposalId: inputData.proposalId });
       return { ...inputData, proposalStatus: p.status, executed: true };
     },

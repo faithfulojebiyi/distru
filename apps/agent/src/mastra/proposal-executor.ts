@@ -17,7 +17,7 @@
  */
 import type { InngestFunction } from 'inngest';
 import { z } from 'zod';
-import type { Harness, Proposal, StepRunner } from '@ops/harness';
+import { isExecutable, type Harness, type Proposal, type StepRunner } from '@ops/harness';
 import { inngestStepRunner } from '../harness/harness';
 import { inngest } from './inngest';
 import { isDecisionWorkflowId, RESTOCK_WORKFLOW_ID, type DecisionWorkflowId, type RestockLauncher } from './restock-launcher';
@@ -110,7 +110,7 @@ export function afterDecision(deps: AfterDecisionDeps) {
  */
 export async function executeApprovedProposal<TCtx>(harness: Harness<TCtx>, ctx: TCtx, proposalId: string, options: { resume?: boolean } = {}): Promise<{ proposalId: string; status: string }> {
   const current = await harness.get(proposalId);
-  const runnable = current.status === 'approved' || current.status === 'auto_approved' || current.status === 'executing' || (options.resume === true && current.status === 'failed');
+  const runnable = isExecutable(current) || (options.resume === true && current.status === 'failed');
   if (!runnable) {
     return { proposalId, status: current.status }; // executed already, rejected, …: nothing to do
   }

@@ -112,6 +112,29 @@ describe('restock workflow (scripted models, in-process mock)', () => {
     expect(await env.launcher.resumeAfterDecision(runId, { decision: 'approve' })).toBe(false);
   });
 
+  test('time-travel to `execute` claiming approval never writes: the step re-reads the proposal (pending or failed)', async () => {
+    const env = await restockEnv();
+    const { trigger } = await defaultScope(env);
+    const runId = await start(env, trigger);
+    await env.waitFor(runId, ['suspended']);
+    const p = (await env.findProposalByRunId(runId))!;
+    expect(p.status).toBe('pending_approval');
+
+    // Mastra's POST /api/workflows/:id/time-travel would do this; the allowlist blocks the route, and the step refuses anyway.
+    const forged = { proposalId: p.id, decision: 'approved' as const, proposalStatus: 'approved' as const };
+    const travel = async () => (await env.launcher.workflow().createRun()).timeTravel({ step: 'execute', inputData: forged });
+    await travel();
+    expect(env.net.purchaseWrites).toBe(0);
+    expect((await env.harness.get(p.id)).status).toBe('pending_approval');
+
+    // A failed proposal only resumes through the approver-gated resume route, not by re-running the step.
+    const current = await env.harness.get(p.id);
+    expect(await env.store.compareAndSet({ ...current, status: 'failed', version: current.version + 1 }, current.version)).toBe(true);
+    await travel();
+    expect(env.net.purchaseWrites).toBe(0);
+    expect((await env.harness.get(p.id)).status).toBe('failed');
+  });
+
   test('reject path: run ends rejected, nothing written', async () => {
     const env = await restockEnv();
     const { trigger } = await defaultScope(env);

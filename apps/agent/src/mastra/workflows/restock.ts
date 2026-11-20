@@ -2,6 +2,7 @@ import { createStep, createWorkflow as createDefaultWorkflow } from '@mastra/cor
 import { PurchaseUpsertInputSchema, type PurchaseUpsertInput } from '@ops/connector-distru';
 import {
   PolicyEvaluationSchema,
+  isExecutable,
   ProposalStatusSchema,
   totalValue,
   type Harness,
@@ -827,6 +828,11 @@ export function createRestockSteps(deps: RestockDeps) {
     outputSchema: ExecuteResultSchema,
     execute: async ({ inputData }) => {
       if (inputData.decision !== 'approved' || !inputData.proposalId) return { ...inputData, executed: false };
+      // The stored proposal, not this step's input, decides: a restarted / time-travelled step can claim
+      // `approved` for any id. A failed proposal resumes only through the approver-gated
+      // POST /api/proposals/:id/resume (`proposal-execute`), never by re-running this step.
+      const current = await deps.harness.get(inputData.proposalId);
+      if (!isExecutable(current)) return { ...inputData, proposalStatus: current.status, executed: false };
       // Inline step runner: this Mastra step is the durable boundary. Re-running is safe (executed ops
       // are skipped; each write first looks up its idempotency key in Distru).
       const p = await deps.harness.execute({ ctx: deps.contexts().execute, proposalId: inputData.proposalId });
