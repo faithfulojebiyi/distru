@@ -140,7 +140,7 @@ the proposal; and policy plus a human sit in front of every write.
 - **Code where the model is the wrong tool.** Reorder maths, demand blending with retail data, per-buyer
   caps, vendor-reply validation, title validation and a pre-check that ends no-op runs with zero model calls.
 - **Cost.** Prompt caching on system prompts and tools cut a default run by about 44%.
-- **Evals.** About 20 scenarios run the real agents against emulated services, with 25 typed assertions.
+- **Evals.** About 20 scenarios run the real agents against emulated services, with 35 typed assertions.
   Model calls go through an emulator that records once and replays, so CI runs them for free and a changed
   prompt shows up as a stale recording rather than a silent pass.
 - **Emulators.** Every outside service runs on an emulator built from scratch (danwo for Composio, Gmail,
