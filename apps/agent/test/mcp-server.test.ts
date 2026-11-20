@@ -4,9 +4,9 @@
  * separation of duties, undo over MCP.
  */
 import { afterEach, describe, expect, test } from 'bun:test';
-import { agentPrincipal, ForbiddenError } from '@ops/harness';
+import { agentPrincipal, ForbiddenError, userPrincipal } from '@ops/harness';
 import { z } from 'zod';
-import { errorTextOf, mcpEnv, resultOf, type McpEnv } from './fixtures/mcp-env';
+import { approverUser, errorTextOf, mcpEnv, otherApproverUser, resultOf, type McpEnv } from './fixtures/mcp-env';
 
 let env: McpEnv | null = null;
 afterEach(async () => {
@@ -98,7 +98,7 @@ describe('propose → decide', () => {
     expect(out.policy.outcome).toBe('needs_approval');
     expect(out.ops[0]!.diff).toContain('+ items');
     const stored = (await env.store.get(out.proposalId))!;
-    expect(stored.createdBy).toMatchObject({ kind: 'mcp-client', scopes: ['read', 'propose'] });
+    expect(stored.createdBy).toMatchObject({ kind: 'mcp-client', scopes: ['read', 'propose'], onBehalfOf: approverUser.id });
     expect(stored.meta).toMatchObject({ source: 'mcp', intent: 'Restock Blue Dream for Oakland' });
     expect(stored.ops[0]!.status).toBe('pending');
 
@@ -128,7 +128,15 @@ describe('propose → decide', () => {
     expect(selfDecide.isError).toBe(true);
     expect(errorTextOf(selfDecide)).toContain('Separation of duties');
 
-    const approver = await env.connect(await env.tokenWith('Approver bot', ['approve']));
+    // Another token minted by the same approver acts for the same human: refused too (no self-approval via a second token).
+    const sameHuman = await env.connect(await env.tokenWith('Same approver, second token', ['approve']));
+    const sameHumanDecide = await sameHuman.callTool({ name: 'decide_proposal', arguments: { intent: 'approve via my other token', id: out.proposalId, decision: 'approve' } });
+    expect(sameHumanDecide.isError).toBe(true);
+    expect(errorTextOf(sameHumanDecide)).toContain('Separation of duties');
+    // ...and so is the approver themself (dashboard decide = user principal).
+    await expect(env.decide(out.proposalId, userPrincipal(approverUser.id, 'approver', approverUser.name), { decision: 'approve' })).rejects.toThrow(/Separation of duties/);
+
+    const approver = await env.connect(await env.tokenWith('Approver bot', ['approve'], otherApproverUser));
     const decided = z.object({ status: z.string(), decision: z.object({ by: z.object({ kind: z.string() }) }) }).parse(
       resultOf(await approver.callTool({ name: 'decide_proposal', arguments: { intent: 'Matches the reorder plan', id: out.proposalId, decision: 'approve', reason: 'ok' } })),
     );

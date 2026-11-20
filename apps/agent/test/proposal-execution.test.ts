@@ -9,7 +9,7 @@ import { agentPrincipal, MemoStepRunner, createHarness, userPrincipal, DecisionC
 import { z } from 'zod';
 import { afterDecision, afterPropose, executeApprovedProposal, type DecisionRuns } from '../src/mastra/proposal-executor';
 import { createHarnessTools } from '../src/mastra/tools/harness-tools';
-import { mcpEnv, resultOf, type McpEnv } from './fixtures/mcp-env';
+import { mcpEnv, otherApproverUser, resultOf, type McpEnv } from './fixtures/mcp-env';
 
 let env: McpEnv | null = null;
 afterEach(async () => {
@@ -85,7 +85,8 @@ describe('run-less proposals are executed after approval', () => {
       resultOf(await writer.callTool({ name: 'propose_distru_purchases_upsert', arguments: { intent: 'Restock Blue Dream from Claude Code', ...(await poInput(env, 150)) } })),
     );
     expect(proposed.status).toBe('pending_approval');
-    const approverClient = await env.connect(await env.tokenWith('Approver bot', ['approve']));
+    // Minted by another approver: a token of the proposer's own approver would be refused (separation of duties).
+    const approverClient = await env.connect(await env.tokenWith('Approver bot', ['approve'], otherApproverUser));
     const decided = await approverClient.callTool({ name: 'decide_proposal', arguments: { intent: 'Matches plan', id: proposed.proposalId, decision: 'approve' } });
     expect(decided.isError).toBeFalsy();
     expect(env.queue.sent).toEqual([proposed.proposalId]);

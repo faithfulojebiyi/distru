@@ -7,13 +7,14 @@ import type { A2ATokenResolver } from './mastra-auth';
  * - the agent card needs any valid token;
  * - execution needs `propose` (the Ops Lead can start a restock run, which creates a proposal).
  * The caller becomes a pseudo-user `mcp-token:<id>` with the operator role (never approver: A2A
- * cannot decide anything), so memory threads / runs are owned by that token.
+ * cannot decide anything), so memory threads / runs are owned by that token. `onBehalfOf` is the
+ * token's creator: anything an agent proposes for this caller is that human's for separation of duties.
  */
 export function a2aTokenResolver(tokens: Pick<McpTokenService, 'authenticate'>): A2ATokenResolver {
   return async (token, { path }) => {
     const client = await tokens.authenticate(token);
     if (!client) return null;
     if (path.startsWith('/api/a2a/') && !client.principal.scopes.includes('propose')) return null;
-    return { id: `mcp-token:${client.token.id}`, email: `mcp-token-${client.token.id}@tokens.ops-agent.local`, name: client.token.name, role: 'operator' };
+    return { id: `mcp-token:${client.token.id}`, email: `mcp-token-${client.token.id}@tokens.ops-agent.local`, name: client.token.name, role: 'operator', onBehalfOf: client.token.createdBy };
   };
 }

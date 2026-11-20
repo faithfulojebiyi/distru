@@ -8,6 +8,8 @@ export type SessionUser = {
   email: string;
   name: string;
   role: UserRole;
+  /** Pseudo-users only (A2A token callers): the human user id the caller acts for (the token's creator). */
+  onBehalfOf?: string;
 };
 
 /** Resolves the caller from request headers (cookie or bearer). Injected so routes are testable. */

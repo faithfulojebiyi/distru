@@ -6,6 +6,7 @@ import {
   CancelledError,
   HarnessError,
   type Harness,
+  type Principal,
   type Proposal,
   type Registry,
   type ToolDescriptor,
@@ -75,6 +76,18 @@ async function traced<T>(run: AgentRun, tool: string, args: unknown, fn: () => P
   }
 }
 
+/**
+ * The agent's principal for one call: when the caller is a pseudo-user acting for a human (an A2A
+ * token, `SessionUser.onBehalfOf`), the principal carries that human, so separation of duties stops
+ * them approving what the agent proposed for them.
+ */
+export function principalForCall(agent: AgentKey, requestContext: Pick<RequestContext, 'get'> | undefined): Principal {
+  const base = principalFor(agent);
+  const user: unknown = requestContext?.get('user');
+  const onBehalfOf = typeof user === 'object' && user !== null && 'onBehalfOf' in user && typeof user.onBehalfOf === 'string' && user.onBehalfOf ? user.onBehalfOf : null;
+  return onBehalfOf ? { ...base, onBehalfOf } : base;
+}
+
 export function toolDescriptorsFor<TCtx>(registry: Registry<TCtx>, agent: AgentKey): ToolDescriptor[] {
   const allowed = new Set(AGENT_TOOLS[agent]);
   return registry.catalog(principalFor(agent)).filter((d) => allowed.has(d.name));
@@ -112,6 +125,7 @@ export function createHarnessTools<TCtx>(deps: HarnessToolDeps<TCtx>, agent: Age
       inputSchema: registry.action(d.name).input,
       execute: async (input, context): Promise<unknown> => {
         const run = agentRunFor(agent, context?.requestContext as RequestContext | undefined);
+        const principal = principalForCall(agent, context?.requestContext as RequestContext | undefined);
         try {
           return await traced(run, d.toolName, input, async () => {
             assertScope(principal, 'propose');

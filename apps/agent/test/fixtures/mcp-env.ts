@@ -25,6 +25,8 @@ export const RULES: PolicyRuleConfig[] = [
 ];
 
 export const approverUser = { id: 'u-approver', name: 'Ana Approver' };
+/** A second approver: tokens they mint act for a different human (separation of duties). */
+export const otherApproverUser = { id: 'u-approver-2', name: 'Ben Approver' };
 
 export async function mcpEnv() {
   const mock = createMockServer({ now: NOW });
@@ -113,7 +115,7 @@ export async function mcpEnv() {
     clients.push(client);
     return client;
   };
-  const tokenWith = async (name: string, scopes: Scope[]) => (await tokens.create(approverUser, { name, scopes })).token;
+  const tokenWith = async (name: string, scopes: Scope[], creator: { id: string; name: string } = approverUser) => (await tokens.create(creator, { name, scopes })).token;
 
   return { mock, distru, registry, store, audit, harness, tokens, servers, app, connect, tokenWith, executed, queue, send, decide, close: async () => Promise.all(clients.map((c) => c.close())) };
 }

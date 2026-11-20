@@ -6,7 +6,8 @@
  * - `scopes` ⊆ read / propose / approve (`read` is always included: a client that can propose but
  *   not read its own proposal is useless). Each MCP request authenticates to
  *   `mcpClientPrincipal(tokenId, scopes, name)`; the harness enforces the scopes on every call, and
- *   separation of duties applies (a token cannot approve a proposal it created).
+ *   separation of duties applies (a token cannot approve a proposal it created, nor one its creator
+ *   proposed; its creator cannot approve what the token proposed: the principal carries `onBehalfOf`).
  * - Revoking sets `revoked_at`; the token stops working on the next request.
  * - Creation and revocation are audited (`mcp_token.created` / `mcp_token.revoked`).
  */
@@ -125,7 +126,8 @@ export function createMcpTokenService(deps: McpTokenServiceDeps) {
       if (!record.lastUsedAt || at.getTime() - Date.parse(record.lastUsedAt) > touchEvery) {
         await deps.store.touch(record.id, at).catch(() => undefined);
       }
-      return { token: record, principal: mcpClientPrincipal(record.id, record.scopes, `MCP token: ${record.name}`) };
+      // `onBehalfOf`: the approver who minted it, so they cannot approve what their own token proposed (and vice versa).
+      return { token: record, principal: mcpClientPrincipal(record.id, record.scopes, `MCP token: ${record.name}`, record.createdBy) };
     },
   };
 }
