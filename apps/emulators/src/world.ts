@@ -1,5 +1,5 @@
 /**
- * The emulator world: Google (Gmail + Calendar), Composio (connected to Google and Slack), Slack
+ * The emulator world: Google (Gmail + Calendar + Sheets), Composio (connected to Google and Slack), Slack
  * and Resend (the agent's auth emails: sign-in / verification / reset codes), seeded for Golden Coast
  * Distribution, behind one fetch handler with `/__emu` control endpoints. `src/index.ts` serves it with Bun; tests use `createWorld` in-process.
  */
@@ -11,6 +11,7 @@ import {
   createEmulator,
   gmailMailbox,
   google,
+  googleSheets,
   grantGoogleAccess,
   pollGmailTriggers,
   resend,
@@ -25,8 +26,10 @@ import {
   type GmailMessage,
 } from '@ops/emulators';
 import { z } from 'zod';
-import { COMPANY, COMPOSIO_USER_ID, findVendor, PURCHASING, SLACK_CHANNELS, SLACK_USERS, VENDORS } from './domain';
+import { COMPANY, COMPOSIO_USER_ID, findVendor, PURCHASING, SHEETS, sheetsSeed, SLACK_CHANNELS, SLACK_USERS, VENDORS } from './domain';
 import { seedVendorHistory, VENDOR_THREADS } from './history';
+
+export { REORDER_LOG_HEADER, SHEETS } from './domain';
 import { composeReply, VendorReplyRequestSchema, type VendorReplyRequest } from './replies';
 
 export const WorldConfigSchema = z.object({
@@ -67,6 +70,8 @@ export const IDS = {
   calendarAuthConfig: 'ac_goldencoast_gcal',
   gmailAccount: 'ca_goldencoast_gmail',
   calendarAccount: 'ca_goldencoast_gcal',
+  sheetsAuthConfig: 'ac_goldencoast_gsheets',
+  sheetsAccount: 'ca_goldencoast_gsheets',
   gmailTrigger: 'ti_goldencoast_gmail_new_message',
   slackApp: 'A0OPSAGENT1',
 } as const;
@@ -123,7 +128,10 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
   connectComposioBackends(project, { google: gmail, slack: workspace });
 
   function seed(): void {
-    seedGoogle(gmail.store, { users: [{ ...PURCHASING, hd: COMPANY.domain }, ...VENDORS.map((v) => ({ email: v.email, name: v.contact }))] });
+    seedGoogle(gmail.store, {
+      users: [{ ...PURCHASING, hd: COMPANY.domain }, ...VENDORS.map((v) => ({ email: v.email, name: v.contact }))],
+      sheets: { [PURCHASING.email]: sheetsSeed() },
+    });
     vendorTokens.clear();
     for (const v of VENDORS) vendorTokens.set(v.email, grantGoogleAccess(gmail, v.email));
 
@@ -132,10 +140,12 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
       authConfigs: [
         { id: IDS.gmailAuthConfig, toolkit: 'gmail', name: 'Golden Coast Gmail' },
         { id: IDS.calendarAuthConfig, toolkit: 'googlecalendar', name: 'Golden Coast Calendar' },
+        { id: IDS.sheetsAuthConfig, toolkit: 'googlesheets', name: 'Golden Coast Sheets' },
       ],
       connectedAccounts: [
         { id: IDS.gmailAccount, userId: COMPOSIO_USER_ID, toolkit: 'gmail', authConfig: IDS.gmailAuthConfig, credentials: { access_token: grantGoogleAccess(gmail, PURCHASING.email) }, label: PURCHASING.email },
         { id: IDS.calendarAccount, userId: COMPOSIO_USER_ID, toolkit: 'googlecalendar', authConfig: IDS.calendarAuthConfig, credentials: { access_token: grantGoogleAccess(gmail, PURCHASING.email) }, label: PURCHASING.email },
+        { id: IDS.sheetsAccount, userId: COMPOSIO_USER_ID, toolkit: 'googlesheets', authConfig: IDS.sheetsAuthConfig, credentials: { access_token: grantGoogleAccess(gmail, PURCHASING.email) }, label: PURCHASING.email },
       ],
       triggers: [{ id: IDS.gmailTrigger, trigger: 'GMAIL_NEW_GMAIL_MESSAGE', connectedAccount: IDS.gmailAccount, config: { labelIds: 'INBOX', interval: 1 } }],
       webhook: { url: config.composioWebhookUrl, secret: config.composioWebhookSecret },
@@ -223,6 +233,7 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
         vendors: Object.fromEntries(VENDORS.map((v) => [v.key, { email: v.email, inbox: gmailMailbox(gmail, v.email).inbox().length, sent: gmailMailbox(gmail, v.email).sent().length }])),
         history: { threads: VENDOR_THREADS.map((t) => ({ key: t.key, vendor: t.vendor, kind: t.kind, subject: t.subject, messages: t.messages.length })), messages: historyIds.size },
       },
+      sheets: Object.fromEntries(Object.values(SHEETS).map((sheet) => [sheet.title, { id: sheet.id, rows: googleSheets(gmail, PURCHASING.email).values(sheet.id, sheet.tab).length }])),
       slack: {
         channels: Object.fromEntries(SLACK_CHANNELS.map((c) => [c, ws.messages(c).length])),
         deliveries: workspace.webhooks?.attempts().slice(-20) ?? [],
@@ -240,6 +251,11 @@ export function createWorld(input: Partial<WorldConfig> = {}, options: Pick<Emul
   });
   control.post('/__emu/poll', (c) => c.json({ fired: poll() }));
   control.post('/__emu/simulate/vendor-reply', async (c) => c.json(await simulateVendorReply(VendorReplyRequestSchema.parse(await c.req.json()))));
+  /** A spreadsheet tab's rows (`?sheet=vendorPrices`, default the weekly reorder log). */
+  control.get('/__emu/sheets/values', (c) => {
+    const sheet = SHEETS[c.req.query('sheet') === 'vendorPrices' ? 'vendorPrices' : 'reorderLog'];
+    return c.json({ spreadsheetId: sheet.id, title: sheet.title, tab: sheet.tab, values: googleSheets(gmail, PURCHASING.email).values(sheet.id, sheet.tab) });
+  });
   control.get('/__emu/slack/messages', (c) => {
     const channel = c.req.query('channel') ?? 'ops-approvals';
     return c.json({ channel, messages: slackWorkspace(workspace).messages(channel) });

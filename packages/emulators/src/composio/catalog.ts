@@ -1,6 +1,6 @@
 /**
  * The toolkits, tools and trigger types a Composio emulator knows out of the box: the common
- * Gmail, Calendar, Drive, Slack, GitHub and Outlook ones, named and shaped as Composio publishes
+ * Gmail, Calendar, Drive, Sheets, Slack, GitHub and Outlook ones, named and shaped as Composio publishes
  * them. Seeds add custom ones next to these.
  */
 import type {
@@ -78,6 +78,19 @@ export const TOOLKITS: readonly ToolkitDefinition[] = [
     currentUser: { method: "GET", url: "https://www.googleapis.com/drive/v3/about?fields=user" },
     oauth: GOOGLE_OAUTH,
     defaultScopes: [`${GOOGLE}drive`, `${GOOGLE}userinfo.email`],
+  },
+  {
+    slug: "googlesheets",
+    name: "Google Sheets",
+    description: "Read, append to and clear ranges of Google Sheets spreadsheets.",
+    categories: ["productivity"],
+    authSchemes: ["OAUTH2"],
+    managed: true,
+    appUrl: "https://sheets.google.com",
+    baseUrl: "https://sheets.googleapis.com/v4",
+    currentUser: { method: "GET", url: "https://www.googleapis.com/oauth2/v3/userinfo" },
+    oauth: GOOGLE_OAUTH,
+    defaultScopes: [`${GOOGLE}spreadsheets`, `${GOOGLE}userinfo.email`],
   },
   {
     slug: "slack",
@@ -357,6 +370,82 @@ const driveTools: ToolDefinition[] = [
   },
 ]
 
+const rows = (description: string): Property => ({
+  type: "array",
+  items: { type: "array", items: {} },
+  description,
+})
+
+const SHEETS_READ = [
+  [`${GOOGLE}spreadsheets`, `${GOOGLE}spreadsheets.readonly`, `${GOOGLE}drive`, `${GOOGLE}drive.readonly`, `${GOOGLE}drive.file`],
+]
+const SHEETS_WRITE = [[`${GOOGLE}spreadsheets`, `${GOOGLE}drive`, `${GOOGLE}drive.file`]]
+
+const sheetsTools: ToolDefinition[] = [
+  {
+    slug: "GOOGLESHEETS_BATCH_GET",
+    name: "Batch get spreadsheet",
+    description: "Retrieves data from one or more ranges of a Google Sheets spreadsheet.",
+    toolkit: "googlesheets",
+    input: schema(
+      {
+        spreadsheet_id: text("The spreadsheet's id, from its URL."),
+        ranges: texts("A1 ranges to read, such as `Sheet1!A1:D20`; the first tab when empty."),
+      },
+      ["spreadsheet_id"],
+    ),
+    scopes: [`${GOOGLE}spreadsheets.readonly`],
+    scopeRequirements: SHEETS_READ,
+    tags: ["important"],
+    sample: (args) => ({ spreadsheetId: args["spreadsheet_id"], valueRanges: [] }),
+  },
+  {
+    slug: "GOOGLESHEETS_GET_SPREADSHEET_INFO",
+    name: "Get spreadsheet info",
+    description: "Retrieves a spreadsheet's title and the properties of its sheets (tabs).",
+    toolkit: "googlesheets",
+    input: schema({ spreadsheet_id: text("The spreadsheet's id.") }, ["spreadsheet_id"]),
+    scopes: [`${GOOGLE}spreadsheets.readonly`],
+    scopeRequirements: SHEETS_READ,
+    sample: (args) => ({ spreadsheetId: args["spreadsheet_id"], sheets: [] }),
+  },
+  {
+    slug: "GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND",
+    name: "Append values to spreadsheet",
+    description:
+      "Appends rows after the last row of the table found in a range, like spreadsheets.values.append.",
+    toolkit: "googlesheets",
+    input: schema(
+      {
+        spreadsheetId: text("The spreadsheet's id."),
+        range: text("The A1 range whose table the rows are appended to, such as `Sheet1!A:D`."),
+        valueInputOption: text("`RAW` or `USER_ENTERED`."),
+        values: rows("The rows to append, each an array of cell values."),
+        insertDataOption: text("`OVERWRITE` or `INSERT_ROWS`."),
+        includeValuesInResponse: flag("Return the appended values."),
+      },
+      ["spreadsheetId", "range", "valueInputOption", "values"],
+    ),
+    scopes: [`${GOOGLE}spreadsheets`],
+    scopeRequirements: SHEETS_WRITE,
+    tags: ["important"],
+    sample: (args) => ({ spreadsheetId: args["spreadsheetId"], updates: { updatedRows: 0 } }),
+  },
+  {
+    slug: "GOOGLESHEETS_CLEAR_VALUES",
+    name: "Clear spreadsheet values",
+    description: "Clears the values of a range (formatting and the rows themselves stay).",
+    toolkit: "googlesheets",
+    input: schema(
+      { spreadsheet_id: text("The spreadsheet's id."), range: text("The A1 range to clear.") },
+      ["spreadsheet_id", "range"],
+    ),
+    scopes: [`${GOOGLE}spreadsheets`],
+    scopeRequirements: SHEETS_WRITE,
+    sample: (args) => ({ spreadsheetId: args["spreadsheet_id"], clearedRange: args["range"] }),
+  },
+]
+
 const slackTools: ToolDefinition[] = [
   {
     slug: "SLACK_SEND_MESSAGE",
@@ -476,6 +565,7 @@ export const TOOLS: readonly ToolDefinition[] = [
   ...gmailTools,
   ...calendarTools,
   ...driveTools,
+  ...sheetsTools,
   ...slackTools,
   ...githubTools,
   ...outlookTools,

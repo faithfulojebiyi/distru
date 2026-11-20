@@ -1,6 +1,6 @@
 import { seedGoogle } from "../../google/index.ts"
 import { googleStore } from "../../google/store.ts"
-/** Gmail, Google Calendar and Google Drive tools, run on the Google emulator. */
+/** Gmail, Google Calendar, Google Drive and Google Sheets tools, run on the Google emulator. */
 import { asRecord } from "../../json.ts"
 import { OAUTH_CALLBACK } from "../helpers.ts"
 import {
@@ -20,6 +20,7 @@ import {
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me"
 const CALENDAR = "https://www.googleapis.com/calendar/v3"
 const DRIVE = "https://www.googleapis.com/drive/v3"
+const SHEETS = "https://sheets.googleapis.com/v4/spreadsheets"
 const TOKEN = "https://oauth2.googleapis.com/token"
 
 /** An RFC 822 message for the Gmail API's `raw` field, base64url. */
@@ -216,6 +217,45 @@ function eventBody(args: Readonly<Record<string, unknown>>) {
 const calendarOf = (args: Readonly<Record<string, unknown>>): string =>
   encodeURIComponent(arg(args, "calendar_id") ?? "primary")
 
+/** The spreadsheet a Sheets tool names (`spreadsheet_id`, or `spreadsheetId` as the append tool spells it). */
+const spreadsheetOf = (args: Readonly<Record<string, unknown>>): string =>
+  encodeURIComponent(arg(args, "spreadsheet_id") ?? arg(args, "spreadsheetId") ?? "")
+
+/** Reads ranges with `values.batchGet`; no ranges = the first tab, named from `spreadsheets.get`. */
+const sheetsBatchGet: Executor = async ({ args, token, send }) => {
+  let ranges = argList(args, "ranges")
+
+  if (ranges.length === 0) {
+    const info = await apiCall(send, token, "GET", `${SHEETS}/${spreadsheetOf(args)}`)
+    const first = asRecord(asRecord((asRecord(info.data)?.["sheets"] as unknown[] | undefined)?.[0])?.["properties"])?.["title"]
+
+    if (info.error !== undefined) return info
+    ranges = [typeof first === "string" ? first : "Sheet1"]
+  }
+
+  const url = new URL(`${SHEETS}/${spreadsheetOf(args)}/values:batchGet`)
+
+  for (const range of ranges) url.searchParams.append("ranges", range)
+
+  return apiCall(send, token, "GET", url.toString())
+}
+
+const sheetsAppend: Executor = ({ args, token, send }) =>
+  apiCall(
+    send,
+    token,
+    "POST",
+    withQuery(
+      `${SHEETS}/${spreadsheetOf(args)}/values/${encodeURIComponent(arg(args, "range") ?? "")}:append`,
+      {
+        valueInputOption: arg(args, "valueInputOption") ?? "USER_ENTERED",
+        insertDataOption: arg(args, "insertDataOption"),
+        includeValuesInResponse: args["includeValuesInResponse"] === true ? "true" : undefined,
+      },
+    ),
+    { values: Array.isArray(args["values"]) ? args["values"] : [] },
+  )
+
 const tools: Record<string, Executor> = {
   GMAIL_SEND_EMAIL: ({ args, token, send }) =>
     apiCall(send, token, "POST", `${GMAIL}/messages/send`, { raw: rawMessage(args) }),
@@ -245,6 +285,18 @@ const tools: Record<string, Executor> = {
         q: arg(args, "q"),
       }),
     ),
+  GOOGLESHEETS_BATCH_GET: sheetsBatchGet,
+  GOOGLESHEETS_GET_SPREADSHEET_INFO: ({ args, token, send }) =>
+    apiCall(send, token, "GET", `${SHEETS}/${spreadsheetOf(args)}`),
+  GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND: sheetsAppend,
+  GOOGLESHEETS_CLEAR_VALUES: ({ args, token, send }) =>
+    apiCall(
+      send,
+      token,
+      "POST",
+      `${SHEETS}/${spreadsheetOf(args)}/values/${encodeURIComponent(arg(args, "range") ?? "")}:clear`,
+      {},
+    ),
   GOOGLEDRIVE_FIND_FILE: ({ args, token, send }) =>
     apiCall(
       send,
@@ -268,7 +320,7 @@ async function whoami(send: Send, token: string): Promise<string | null> {
 
 export const googleBackend: Backend = {
   name: "google",
-  toolkits: ["gmail", "googlecalendar", "googledrive"],
+  toolkits: ["gmail", "googlecalendar", "googledrive", "googlesheets"],
   managedClient: {
     client_id: "composio-managed.apps.googleusercontent.com",
     client_secret: "GOCSPX-composio-managed",
@@ -295,7 +347,12 @@ export const googleBackend: Backend = {
     })
   },
   apiBase: (toolkit) =>
-    ({ gmail: "https://gmail.googleapis.com", googlecalendar: CALENDAR, googledrive: DRIVE })[
+    ({
+      gmail: "https://gmail.googleapis.com",
+      googlecalendar: CALENDAR,
+      googledrive: DRIVE,
+      googlesheets: "https://sheets.googleapis.com/v4",
+    })[
       toolkit
     ] ?? "https://www.googleapis.com",
   tools,

@@ -15,9 +15,10 @@ import type {
   GoogleOAuthClient,
   GoogleUser,
   PushSubscriptionRecord,
+  SpreadsheetRecord,
 } from "./entities.ts"
 
-/** The Google state held in an emulator's store: sign-in, Gmail, Calendar and Drive. */
+/** The Google state held in an emulator's store: sign-in, Gmail, Calendar, Drive and Sheets. */
 export function googleStore(store: Store) {
   return {
     users: store.collection<GoogleUser>("google.users", ["uid", "email"]),
@@ -27,6 +28,7 @@ export function googleStore(store: Store) {
     ...pushTables(store),
     ...calendarTables(store),
     ...driveTables(store),
+    spreadsheets: store.collection<SpreadsheetRecord>("sheets.spreadsheets", ["spreadsheetId"]),
   }
 }
 

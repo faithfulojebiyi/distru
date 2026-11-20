@@ -77,7 +77,7 @@ export function badRequest(message: string, reason = "badRequest"): GoogleApiErr
   return new GoogleApiError(400, reason, message)
 }
 
-const API_PATH = /^\/(gmail|calendar|drive|upload)\//
+const API_PATH = /^\/(gmail|calendar|drive|upload|v4)\//
 
 /**
  * The emulator's error hook: API paths answer in the API error format, sign-in paths in the OAuth
@@ -119,6 +119,7 @@ const AUTHORIZATION_HEADER = { location: "Authorization", locationType: "header"
 function serviceOf(path: string): string {
   if (path.startsWith("/gmail/")) return "gmail.googleapis.com"
   if (path.startsWith("/calendar/")) return "calendar-json.googleapis.com"
+  if (path.startsWith("/v4/spreadsheets")) return "sheets.googleapis.com"
 
   return "drive.googleapis.com"
 }

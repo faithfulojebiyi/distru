@@ -38,6 +38,8 @@ export const SCOPES = {
   driveRead: drive("drive", "drive.readonly", "drive.file", "drive.metadata.readonly"),
   driveContent: drive("drive", "drive.readonly", "drive.file"),
   driveWrite: drive("drive", "drive.file"),
+  sheetsRead: drive("spreadsheets", "spreadsheets.readonly", "drive", "drive.readonly", "drive.file"),
+  sheetsWrite: drive("spreadsheets", "drive", "drive.file"),
 } as const
 
 const WHOLE_DRIVE = new Set(drive("drive", "drive.readonly", "drive.metadata.readonly"))

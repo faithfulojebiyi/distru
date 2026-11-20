@@ -25,6 +25,7 @@ export const GOOGLE_COMPOSIO_SCOPES: readonly string[] = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/spreadsheets",
   "openid",
   "email",
   "profile",

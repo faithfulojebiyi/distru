@@ -3,10 +3,10 @@
 One bun server hosting the provider emulators from `@ops/emulators`, seeded for the demo company
 **Golden Coast Distribution** (same company, vendors and SKUs as `apps/distru-mock`):
 
-- **Composio** at `/` (the SDK's `baseURL`), connected to the Google emulator (Gmail + Calendar)
+- **Composio** at `/` (the SDK's `baseURL`), connected to the Google emulator (Gmail + Calendar + Sheets)
   and the Slack emulator.
 - **Slack** at `/slack` (Web API at `/slack/api/…`).
-- **Google** at `/google` (raw Gmail/Calendar REST, for debugging).
+- **Google** at `/google` (raw Gmail/Calendar/Sheets REST, for debugging).
 - **Resend** at `/resend` (the agent's auth emails: sign-in, email-verification and password-reset codes). Any
   `re_` key is accepted; the agent uses it when `RESEND_API_KEY` is unset outside production.
 - **Control** endpoints at `/__emu`.
@@ -45,10 +45,16 @@ bun run --cwd apps/emulators dev     # http://localhost:4700
   In-Reply-To/References, so both mailboxes thread them. It is seeded before the Gmail trigger's
   baseline poll, so it never fires `GMAIL_NEW_GMAIL_MESSAGE`, and `simulate/vendor-reply` never replies
   into it (no PO emailed → a fresh PO-527 thread, as before). `GET /__emu/state` lists the threads.
+- Google Sheets owned by purchasing@ (`SHEETS` in `src/domain.ts`, fixed ids): **Vendor price sheet**
+  (`1GcVendorPriceSheet0goldencoast0000000000000`, tab `Prices`: vendor, SKU, product, unit cost, effective
+  date, notes; costs from distru-mock's catalogue, plus Sierra's announced Dec 15 increase on VAP-BD-1G) and
+  **Weekly reorder log** (`1GcWeeklyReorderLog0goldencoast0000000000000`, tab `Reorders`, columns
+  `Date | Run | PO | Vendor | SKU | Product | Qty | Unit cost | Location | Ref`, four past POs from the mail history).
 - Composio project: API key above; user id **`golden-coast`**; auth configs
-  `ac_goldencoast_gmail` / `ac_goldencoast_gcal`; ACTIVE connected accounts
-  **`ca_goldencoast_gmail`** (Gmail) and **`ca_goldencoast_gcal`** (Calendar), both the purchasing
-  mailbox; trigger instance **`ti_goldencoast_gmail_new_message`** = `GMAIL_NEW_GMAIL_MESSAGE` on
+  `ac_goldencoast_gmail` / `ac_goldencoast_gcal` / `ac_goldencoast_gsheets`; ACTIVE connected accounts
+  **`ca_goldencoast_gmail`** (Gmail), **`ca_goldencoast_gcal`** (Calendar) and **`ca_goldencoast_gsheets`**
+  (Google Sheets: `GOOGLESHEETS_BATCH_GET`, `_GET_SPREADSHEET_INFO`, `_SPREADSHEETS_VALUES_APPEND`,
+  `_CLEAR_VALUES`), all the purchasing mailbox; trigger instance **`ti_goldencoast_gmail_new_message`** = `GMAIL_NEW_GMAIL_MESSAGE` on
   INBOX; webhook subscription → `COMPOSIO_WEBHOOK_URL` signed with `COMPOSIO_WEBHOOK_SECRET`.
 - Slack workspace "Golden Coast Distribution": `#purchasing`, `#ops-approvals`, `#general`;
   members `olivia` (operator@demo.dev), `adam` (approver@demo.dev, admin), `sam`; app "Ops Agent"
@@ -61,10 +67,11 @@ bun run --cwd apps/emulators dev     # http://localhost:4700
 | | |
 |---|---|
 | `GET /__emu/health` | `{ ok: true }` |
-| `GET /__emu/state` | Composio accounts, last executions, last webhooks + delivery attempts; purchasing inbox/sent; vendor mailbox counts; Slack channel counts + deliveries |
+| `GET /__emu/state` | Composio accounts, last executions, last webhooks + delivery attempts; purchasing inbox/sent; vendor mailbox counts; sheet row counts; Slack channel counts + deliveries |
 | `POST /__emu/reset` | Clear everything and re-seed |
 | `POST /__emu/poll` | Run one Gmail-trigger poll now → `{ fired }` |
 | `POST /__emu/simulate/vendor-reply` | `{ vendor, kind, poNumber?, sku?, ordered?, shipped?, eta?, oldPrice?, newPrice?, subject?, body? }`, `kind` ∈ `partial \| delay \| confirm \| price_change \| injection`. The vendor's own Gmail account replies (via the Gmail API) to the latest PO email it got from purchasing (threaded, `Re:` subject), or sends a fresh one; the purchasing inbox receives it and the trigger fires → signed webhook. Returns the received message + `triggersFired`. |
+| `GET /__emu/sheets/values?sheet=reorderLog` | A seeded sheet's rows (`reorderLog`, default, or `vendorPrices`) |
 | `GET /__emu/slack/messages?channel=ops-approvals` | Messages in a channel (with `blocks`) |
 | `GET /__emu/resend/messages?to=` | The Resend mailbox, newest first: `{ id, from, to, subject, text, createdAt, code, links }` (`code` = the 6-digit code in the body) |
 | `POST /__emu/slack/click` | `{ user, channel, actionId, value?, blockId?, ts? }`: a member clicks a button on the app's message (default: the latest app message with blocks) → signed `block_actions` payload to the interactivity URL |

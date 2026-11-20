@@ -47,3 +47,79 @@ export const SLACK_USERS = [
 ] as const;
 
 export const SLACK_CHANNELS = ['purchasing', 'ops-approvals'] as const;
+
+/**
+ * The purchasing team's Google Sheets (Composio `googlesheets`), owned by the purchasing account.
+ * Fixed ids so the agent's env can name them (COMPOSIO_GOOGLESHEETS_SPREADSHEETS, RESTOCK_REORDER_LOG_*).
+ * Vendors, SKUs and unit costs match apps/distru-mock's catalogue.
+ */
+export const SHEETS = {
+  vendorPrices: { id: '1GcVendorPriceSheet0goldencoast0000000000000', title: 'Vendor price sheet', tab: 'Prices' },
+  reorderLog: { id: '1GcWeeklyReorderLog0goldencoast0000000000000', title: 'Weekly reorder log', tab: 'Reorders' },
+} as const;
+
+/** Columns of the weekly reorder log (A:J); `Ref` holds the Ops Agent's idempotency marker. */
+export const REORDER_LOG_HEADER = ['Date', 'Run', 'PO', 'Vendor', 'SKU', 'Product', 'Qty', 'Unit cost', 'Location', 'Ref'] as const;
+
+const vendorName = (key: string): string => VENDORS.find((v) => v.key === key)?.name ?? key;
+
+/** [vendor key, SKU, product, unit cost, effective date, notes] */
+const PRICES: readonly (readonly [string, string, string, number, string, string])[] = [
+  ['HHF', 'FLW-BD-35', 'Blue Dream 3.5g', 14, '2026-07-01', ''],
+  ['HHF', 'FLW-OGK-35', 'OG Kush 3.5g', 15, '2026-07-01', ''],
+  ['HHF', 'FLW-GSC-35', 'Girl Scout Cookies 3.5g', 15.5, '2026-07-01', ''],
+  ['HHF', 'FLW-GL-35', 'Gelato 3.5g', 16, '2026-07-01', ''],
+  ['ETG', 'FLW-WC-35', 'Wedding Cake 3.5g', 16, '2026-08-15', 'Indoor; case of 24'],
+  ['ETG', 'FLW-SD-35', 'Sour Diesel 3.5g', 14.5, '2026-08-15', ''],
+  ['ETG', 'FLW-GG4-35', 'Gorilla Glue #4 3.5g', 15, '2026-08-15', ''],
+  ['SEC', 'VAP-BD-1G', 'Blue Dream Live Resin Cart 1g', 18, '2026-09-01', ''],
+  ['SEC', 'VAP-BD-1G', 'Blue Dream Live Resin Cart 1g', 19.5, '2026-12-15', 'Announced increase (extraction costs)'],
+  ['SEC', 'CON-LR-BD', 'Blue Dream Live Resin 1g', 16, '2026-09-01', ''],
+  ['SEC', 'VAP-NL-1G', 'Northern Lights Cart 1g', 16, '2026-09-01', ''],
+  ['GSE', 'EDB-GUM-WM', 'Watermelon Gummies 100mg', 7, '2026-06-01', ''],
+  ['GSE', 'EDB-CHO-DK', 'Dark Chocolate Bar 100mg', 8, '2026-06-01', 'Cacao supply tight; confirm lead time'],
+  ['GSE', 'EDB-GUM-SB', 'Sour Blue Raspberry Gummies 100mg', 7, '2026-06-01', ''],
+  ['CCV', 'VAP-PE-1G', 'Pineapple Express Cart 1g', 15, '2026-10-01', ''],
+  ['CCV', 'VAP-GSC-05', 'GSC Cart 0.5g', 9, '2026-10-01', ''],
+  ['CCV', 'VAP-WM-1G', 'Watermelon Distillate Cart 1g', 14, '2026-10-01', ''],
+  ['MPR', 'PRE-BD-1G', 'Blue Dream Pre-Roll 1g', 4, '2026-05-01', 'Case of 50'],
+  ['MPR', 'PRE-OGK-1G', 'OG Kush Pre-Roll 1g', 4, '2026-05-01', 'Case of 50'],
+  ['MPR', 'PRE-INF-1G', 'Gelato Infused Pre-Roll 1g', 7, '2026-05-01', ''],
+];
+
+/** Past reorders, from the POs in the seeded vendor mail (src/history.ts): [date, PO, vendor key, SKU, product, qty, unit cost, location]. */
+const PAST_REORDERS: readonly (readonly [string, string, string, string, string, number, number, string])[] = [
+  ['2026-10-12', 'PO-515', 'CCV', 'VAP-PE-1G', 'Pineapple Express Cart 1g', 150, 15, 'Oakland Warehouse'],
+  ['2026-10-14', 'PO-509', 'SEC', 'VAP-BD-1G', 'Blue Dream Live Resin Cart 1g', 150, 18, 'Los Angeles Distribution Center'],
+  ['2026-10-23', 'PO-503', 'HHF', 'FLW-BD-35', 'Blue Dream 3.5g', 240, 14, 'Oakland Warehouse'],
+  ['2026-11-14', 'PO-519', 'GSE', 'EDB-CHO-DK', 'Dark Chocolate Bar 100mg', 48, 8, 'Oakland Warehouse'],
+];
+
+/** The spreadsheets the purchasing account owns, as `seedGoogle({ sheets })` takes them. */
+export function sheetsSeed() {
+  return [
+    {
+      spreadsheetId: SHEETS.vendorPrices.id,
+      title: SHEETS.vendorPrices.title,
+      tabs: [
+        {
+          title: SHEETS.vendorPrices.tab,
+          values: [['Vendor', 'SKU', 'Product', 'Unit cost', 'Effective date', 'Notes'], ...PRICES.map(([v, sku, name, cost, date, notes]) => [vendorName(v), sku, name, cost.toFixed(2), date, notes])],
+        },
+      ],
+    },
+    {
+      spreadsheetId: SHEETS.reorderLog.id,
+      title: SHEETS.reorderLog.title,
+      tabs: [
+        {
+          title: SHEETS.reorderLog.tab,
+          values: [
+            [...REORDER_LOG_HEADER],
+            ...PAST_REORDERS.map(([date, po, v, sku, name, qty, cost, location]) => [date, 'manual', po, vendorName(v), sku, name, String(qty), cost.toFixed(2), location, '']),
+          ],
+        },
+      ],
+    },
+  ];
+}

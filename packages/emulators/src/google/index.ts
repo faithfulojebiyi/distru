@@ -21,6 +21,7 @@ import { gmailLabelRoutes } from "./routes/gmail-labels.ts"
 import { gmailMessageRoutes } from "./routes/gmail-messages.ts"
 import { gmailThreadRoutes } from "./routes/gmail-threads.ts"
 import { revokeRoutes } from "./routes/revoke.ts"
+import { sheetsRoutes } from "./routes/sheets.ts"
 import { tokenRoutes } from "./routes/token.ts"
 import { userinfoRoutes } from "./routes/userinfo.ts"
 import {
@@ -33,9 +34,11 @@ import {
   seedGmail,
   seedPubSub,
 } from "./seed.ts"
+import { type SheetsSeedSpreadsheet, seedSheets } from "./sheets.ts"
 import { googleStore } from "./store.ts"
 
 export type { CalendarEvent, DriveFile } from "./views.ts"
+export { type GoogleSheets, googleSheets, type SheetsSeedSpreadsheet } from "./sheets.ts"
 export { googleOutboundFaults } from "./faults.ts"
 export { GOOGLE_ENDPOINTS, GOOGLE_HOSTS, GOOGLE_ISSUER } from "./helpers.ts"
 export type { SignIn, SignIns } from "../oauth/sign-ins.ts"
@@ -81,6 +84,8 @@ export type GoogleSeedConfig = Partial<{
   readonly calendar: Readonly<Record<string, readonly CalendarSeedEvent[]>>
   /** Drive files by account email. */
   readonly drive: Readonly<Record<string, readonly DriveSeedFile[]>>
+  /** Google Sheets spreadsheets by account email. */
+  readonly sheets: Readonly<Record<string, readonly SheetsSeedSpreadsheet[]>>
 }>
 
 function addUser(store: Store, seed: GoogleSeedUser): void {
@@ -106,6 +111,7 @@ export function seedGoogle(store: Store, config: GoogleSeedConfig): void {
   seedGmail(store, config.gmail ?? {})
   seedCalendar(store, config.calendar ?? {})
   seedDrive(store, config.drive ?? {})
+  seedSheets(store, config.sheets ?? {})
 }
 
 /** Who signed in to which client, for tests. */
@@ -133,6 +139,7 @@ function routes(context: GoogleRouteContext): void {
     driveFileRoutes,
     driveUploadRoutes,
     driveSharingRoutes,
+    sheetsRoutes,
   ])
     register(context)
 }
@@ -150,7 +157,7 @@ function keyOf(store: Store): SigningKey {
 
 /**
  * Google on its real hostnames: sign-in (the account chooser, OpenID Connect discovery, the token
- * endpoint with PKCE and refresh, userinfo, signing keys and revocation), Gmail, Calendar and Drive, each
+ * endpoint with PKCE and refresh, userinfo, signing keys and revocation), Gmail, Calendar, Drive and Sheets, each
  * call checked against the scopes the user granted. Gmail's Pub/Sub pushes and the
  * Calendar and Drive watch channels go through the webhook dispatcher.
  */

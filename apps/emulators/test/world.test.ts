@@ -2,7 +2,7 @@ import { Composio } from '@composio/core';
 import { WebClient } from '@slack/web-api';
 import { createHmac } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
-import { COMPOSIO_USER_ID, PURCHASING } from '../src/domain';
+import { COMPOSIO_USER_ID, PURCHASING, SHEETS } from '../src/domain';
 import { createWorld, IDS, type World } from '../src/world';
 
 /** Over real HTTP: the world on a free port, plus a receiver for its Composio and Slack webhooks. */
@@ -70,7 +70,7 @@ describe('Composio over HTTP with the real SDK (baseURL override)', () => {
     const bad = await fetch(`${base}/api/v3/connected_accounts`, { headers: { 'x-api-key': 'ak_wrong_key_123456' } });
     expect(bad.status).toBe(401);
     const accounts = await client.connectedAccounts.list({ userIds: [COMPOSIO_USER_ID] });
-    expect(accounts.items.map((a) => a.id).sort()).toEqual([IDS.calendarAccount, IDS.gmailAccount].sort());
+    expect(accounts.items.map((a) => a.id).sort()).toEqual([IDS.calendarAccount, IDS.gmailAccount, IDS.sheetsAccount].sort());
   });
 
   test('PO email → vendor reply → signed GMAIL_NEW_GMAIL_MESSAGE webhook, threaded under the PO', async () => {
@@ -103,6 +103,31 @@ describe('Composio over HTTP with the real SDK (baseURL override)', () => {
     expect(verified.payload.payload?.['sender']).toContain('orders@mojaveprerollco.com');
   });
 
+  test('Google Sheets: reads the vendor price sheet, appends to and clears the weekly reorder log', async () => {
+    const exec = (slug: string, args: Record<string, unknown>) => client.tools.execute(slug, { userId: COMPOSIO_USER_ID, dangerouslySkipVersionCheck: true, arguments: args });
+    const prices = await exec('GOOGLESHEETS_BATCH_GET', { spreadsheet_id: SHEETS.vendorPrices.id, ranges: [`${SHEETS.vendorPrices.tab}!A1:F`] });
+    expect(prices.successful).toBe(true);
+    const rows = (prices.data as { valueRanges: { values: string[][] }[] }).valueRanges[0]?.values ?? [];
+    expect(rows[0]).toEqual(['Vendor', 'SKU', 'Product', 'Unit cost', 'Effective date', 'Notes']);
+    expect(rows).toContainEqual(['Humboldt Heritage Farms', 'FLW-BD-35', 'Blue Dream 3.5g', '14.00', '2026-07-01']);
+
+    const appended = await exec('GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND', {
+      spreadsheetId: SHEETS.reorderLog.id,
+      range: `${SHEETS.reorderLog.tab}!A:J`,
+      valueInputOption: 'USER_ENTERED',
+      values: [['2026-11-20', 'run-1', 'PO-501', 'Mojave Pre-Roll Co.', 'PRE-BD-1G', 'Blue Dream Pre-Roll 1g', 500, 4, 'Oakland Warehouse', 'ref']],
+    });
+    expect(appended.successful).toBe(true);
+    const updatedRange = (appended.data as { updates: { updatedRange: string } }).updates.updatedRange;
+    expect(updatedRange).toBe('Reorders!A6:J6');
+    const log = (await (await fetch(`${base}/__emu/sheets/values`)).json()) as { values: string[][] };
+    expect(log.values.at(-1)?.[2]).toBe('PO-501');
+
+    expect((await exec('GOOGLESHEETS_CLEAR_VALUES', { spreadsheet_id: SHEETS.reorderLog.id, range: updatedRange })).successful).toBe(true);
+    const after = (await (await fetch(`${base}/__emu/sheets/values`)).json()) as { values: string[][] };
+    expect(after.values).toHaveLength(5);
+  });
+
   test('an injection reply is delivered verbatim (the connector flags it)', async () => {
     const res = await post('/__emu/simulate/vendor-reply', { vendor: 'orders@coastalcloudvapes.com', kind: 'injection', poNumber: 'PO-530' });
     const sim = (await res.json()) as { message: { text: string; to: string } };
@@ -113,7 +138,7 @@ describe('Composio over HTTP with the real SDK (baseURL override)', () => {
   test('unknown vendor → 404; state lists accounts and deliveries', async () => {
     expect((await post('/__emu/simulate/vendor-reply', { vendor: 'nope', kind: 'confirm' })).status).toBe(404);
     const state = (await (await fetch(`${base}/__emu/state`)).json()) as { composio: { accounts: unknown[] } };
-    expect(state.composio.accounts).toHaveLength(2);
+    expect(state.composio.accounts).toHaveLength(3);
   });
 });
 

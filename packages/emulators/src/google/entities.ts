@@ -160,3 +160,18 @@ export type DriveUploadRecord = Entity & {
   fileId: string | null
   received: string
 }
+
+/** One tab of a spreadsheet: its grid of cell values (formatted text), row by row. */
+export interface SpreadsheetTab {
+  sheetId: number
+  title: string
+  values: string[][]
+}
+
+/** A Google Sheets spreadsheet a user owns. */
+export type SpreadsheetRecord = Entity & {
+  spreadsheetId: string
+  owner: string
+  title: string
+  tabs: SpreadsheetTab[]
+}
