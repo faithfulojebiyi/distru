@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "bun run --cwd ../../packages/ui lib && panda codegen && vite dev --port 3050",
     "build": "bun run --cwd ../../packages/ui lib && panda codegen && vite build",
-    "start": "bun .output/server/index.mjs",
+    "start": "bun serve.ts",
     "typecheck": "tsc --noEmit",
     "prepare": "bun run --cwd ../../packages/ui lib && panda codegen",
     "api:generate": "orval --config ./orval.config.ts"

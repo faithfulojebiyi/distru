@@ -2,7 +2,7 @@
  * Seeds demo users (idempotent):
  *   operator@demo.dev / demo-password  → role operator
  *   approver@demo.dev / demo-password  → role approver
- * Users are created through Better Auth (so passwords are hashed the same way sign-in expects);
+ * Users are created through Better Auth's adapter (so passwords are hashed the same way sign-in expects);
  * the role is then set server-side because clients can never set it.
  * Also ensures the default policy rules (harness rule configs).
  */
@@ -21,7 +21,18 @@ const DEMO_USERS: Array<{ email: string; name: string; role: UserRole }> = [
 for (const demo of DEMO_USERS) {
   const [existing] = await db.select().from(user).where(eq(user.email, demo.email));
   if (!existing) {
-    await auth.api.signUpEmail({ body: { email: demo.email, password: PASSWORD, name: demo.name } });
+    // Through Better Auth's internals rather than the sign-up endpoint, which production disables.
+    const ctx = await auth.$context;
+    const created = await ctx.internalAdapter.createUser(
+      { email: demo.email, name: demo.name, emailVerified: true },
+      { method: 'admin' },
+    );
+    await ctx.internalAdapter.linkAccount({
+      userId: created.id,
+      providerId: 'credential',
+      accountId: created.id,
+      password: await ctx.password.hash(PASSWORD),
+    });
   }
   await db.update(user).set({ role: demo.role, emailVerified: true }).where(eq(user.email, demo.email));
   console.log(`${existing ? 'updated' : 'created'} ${demo.email} (${demo.role})`);

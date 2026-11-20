@@ -1,0 +1,16 @@
+**/node_modules
+**/.output
+**/dist
+**/.mastra
+**/.env
+**/.env.local
+**/styled-system
+apps/web/src/routeTree.gen.ts
+docs
+.github
+.git
+.claude
+.scratch
+packages/evals/reports
+**/*.log
+**/.DS_Store
