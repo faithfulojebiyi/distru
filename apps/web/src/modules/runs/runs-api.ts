@@ -5,8 +5,8 @@ import {
 } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useCallback, useMemo } from 'react';
-import { z } from 'zod';
 
+import { listLocations } from '../../api/generated/distru/distru';
 import { getRun, listRuns, startRun } from '../../api/generated/runs/runs';
 import type {
   RunDetail,
@@ -14,7 +14,6 @@ import type {
   StartRunRequest,
 } from '../../api/generated/opsAgentAPI.schemas';
 import { getQueryScope } from '../../lib/query';
-import { OPS_LEAD_AGENT_ID, mastraClient } from '../../lib/mastra-client';
 import { toast } from '@ops/ui/primitives/toast/toast';
 import { useLocationNames } from '../proposals/proposals-api';
 import { runLabel } from './run-label';
@@ -79,19 +78,9 @@ export const useStartRun = () => {
   });
 };
 
-const InventoryLocationsSchema = z.object({
-  rows: z.array(
-    z.object({ location: z.object({ id: z.string(), name: z.string() }) }),
-  ),
-});
-
 export type RunLocation = { id: string; name: string };
 
-/**
- * The locations a run can be scoped to. There is no locations route yet, so this reads them from the
- * Ops Lead's governed, read-only `distru_inventory` tool (Mastra's agent tool route) and keeps the
- * distinct locations. Replace with GET /api/locations when the server has one.
- */
+/** The locations a run can be scoped to: GET /api/locations (own Distru locations, cached on the server). */
 export const useRunLocations = (enabled: boolean) => {
   const client = useQueryClient();
   return useQuery({
@@ -99,14 +88,9 @@ export const useRunLocations = (enabled: boolean) => {
     enabled,
     staleTime: 10 * 60_000,
     meta: { suppressErrorToast: true },
-    queryFn: async (): Promise<RunLocation[]> => {
-      const result: unknown = await mastraClient
-        .getAgent(OPS_LEAD_AGENT_ID)
-        .executeTool('distru_inventory', { data: {} });
-      const { rows } = InventoryLocationsSchema.parse(result);
-      const seen = new Map<string, string>();
-      for (const row of rows) seen.set(row.location.id, row.location.name);
-      return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    queryFn: async ({ signal }): Promise<RunLocation[]> => {
+      const { items } = await listLocations({ signal });
+      return items.map((item) => ({ id: item.id, name: item.name })).sort((a, b) => a.name.localeCompare(b.name));
     },
   });
 };

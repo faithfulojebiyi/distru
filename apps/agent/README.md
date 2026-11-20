@@ -55,6 +55,11 @@ Open http://localhost:3000, click **Sign in**, and use a seeded user (`operator@
   our provider implements `authenticateToken` (checked: it still gets 401 without a session).
 - In production the credentials sign-in is not wired (and Mastra's Studio sign-in screen with a custom
   provider needs an EE license there anyway); built-in routes still require a Better Auth session.
+- Mastra's built-in routes are **deny-by-default** (`src/api/mastra-allowlist.ts`): outside Studio only the
+  Copilot's routes (`POST /api/agents/ops-lead/stream|generate`, memory threads + messages) and A2A are
+  reachable; workflow start / time-travel / restart / step execution, agent tool execution, stored agents,
+  logs, observability, ... are 404. Requests whose `Origin` is a `STUDIO_ORIGIN` skip the allowlist
+  **in development only**, so Studio keeps the full API locally and never in production.
 
 Expected noise in the browser console: a 404 on `/refresh-events` (that is `mastra dev`'s hot-reload
 channel) and `/connect/providers` (optional platform feature).
@@ -216,7 +221,9 @@ so a redelivery is a no-op) → function `vendor-reply-on-email` → Mastra work
   Sessions are not accepted on /mcp. Token create/revoke are audited.
 - **Tools are the principal's**: one @mastra/mcp `MCPServer` per scope set, generated from
   `registry.catalog(principal)`, so a read-only token never sees a `propose_*` tool; the harness
-  re-checks every scope anyway. Separation of duties: a token can't decide what it proposed.
+  re-checks every scope anyway. Separation of duties compares the humans behind principals: a token acts
+  on behalf of the approver who minted it (`onBehalfOf`), so neither the token, another token of the same
+  approver, nor the approver themself can decide what it proposed (and vice versa).
 - **Distru conventions**: every tool takes `intent` (audited as `mcp.tool_called` with the token id,
   and forwarded to Distru's MCP as its `intent` on bridged reads); `get_me` first; lists page with
   `limit` + `cursor` → `{ items, hasMore, nextCursor }`.
@@ -446,7 +453,7 @@ apps/agent/
 | `GET /api/openapi.json` | public | OpenAPI 3.1 for the routes above (Orval input) |
 | `/api/auth/*` | Better Auth | `sign-in/email`, `sign-up/email` (sign-up is disabled in production), `get-session`, ... |
 | `/api/inngest` | Inngest signing | serves Mastra workflows as Inngest functions |
-| `/api/agents`, `/api/workflows`, `/api/memory`, ... | session | Mastra built-ins, protected by `BetterAuthMastraProvider` |
+| `POST /api/agents/ops-lead/stream\|generate`, `/api/memory/threads…` | session | Mastra built-ins used by the Copilot, protected by `BetterAuthMastraProvider`; every other built-in is 404 (allowlist, see "Mastra Studio") |
 
 ### How auth works
 
@@ -457,8 +464,11 @@ apps/agent/
   (`SessionUser | null`, never throws). Each route declares `requireUser` or `requireRole('approver')`
   in its `createRoute({ middleware })`. Role checks run **before** body validation, so an operator always
   gets 403 and never a validation error.
-- **Mastra built-ins:** `BetterAuthMastraProvider.authenticateToken()` resolves the same session from the
-  request headers. Mastra's defaults apply: `/api/*` is protected and `/api/auth/*` is public.
+- **Mastra built-ins:** an allowlist in front of MastraServer lets through only what the dashboard and A2A
+  use (everything else 404s, so nobody can time-travel a workflow past its approval step or execute an
+  agent's `propose_*` tool directly); the workflow `execute` steps also re-read the proposal and run only an
+  approved one. `BetterAuthMastraProvider.authenticateToken()` resolves the same session from the request
+  headers. Mastra's defaults apply: `/api/*` is protected and `/api/auth/*` is public.
   `mapUserToResourceId` ties memory threads and workflow runs to the user id.
 - `role` is `input: false`. Clients can't set it on sign-up (checked: a sign-up body with `role: 'approver'`
   still creates an operator). Roles change only server-side (the seed script).

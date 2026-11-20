@@ -8,6 +8,7 @@ import { HTTPException } from 'hono/http-exception';
 import { agentStreamErrorCodes } from './api/agent-errors';
 import { A2A_CARD_PATH, publicAgentCard } from './api/a2a-card';
 import { createApiRoutes } from './api/routes';
+import { mastraRouteAllowlist, studioOriginBypass } from './api/mastra-allowlist';
 import type { ApiServices } from './api/services';
 import { auth } from './auth/auth';
 import { MASTRA_STUDIO_AUTH_PATHS } from './auth/mastra-auth';
@@ -94,7 +95,8 @@ export function createServices(): ApiServices & { mcpRoutes: ReturnType<typeof c
  *   /api/mcp-tokens, /api/proposals/:id/undo, /api/policy-rules, /api/locations   (src/api/ops-routes.ts)
  *   /mcp               our MCP server (Streamable HTTP, Bearer ops_mcp_… tokens)
  *   /api/openapi.json  OpenAPI 3.1 for the custom routes (Orval input)
- *   /api/agents, /api/workflows, /api/memory, ...   Mastra built-ins (Better Auth session required)
+ *   Mastra built-ins, allowlisted (src/api/mastra-allowlist.ts): /api/agents/ops-lead/stream|generate,
+ *   /api/memory/threads..., A2A (/api/.well-known/ops-lead/agent-card.json, /api/a2a/ops-lead); others 404
  */
 export async function createApp(services: ApiServices & { mcpRoutes?: Hono } = createServices()) {
   const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
@@ -165,6 +167,11 @@ export async function createApp(services: ApiServices & { mcpRoutes?: Hono } = c
   const streamErrors = agentStreamErrorCodes((code, error) => mastra.getLogger()?.warn('Agent stream failed', { code, error }));
   app.use('/api/agents/:agentId/stream', streamErrors);
   app.use('/api/agents/:agentId/stream/*', streamErrors);
+  // Deny by default: only the Mastra routes the dashboard and A2A use (src/api/mastra-allowlist.ts); every
+  // other built-in route (workflow time-travel/restart/start, tool execute, stored agents, logs, ...) is a 404.
+  // Registered after all custom routes, so it only sees requests headed for MastraServer. Standalone Studio
+  // (STUDIO_ORIGIN) keeps the full API in development only.
+  app.use('*', mastraRouteAllowlist(env.NODE_ENV === 'development' ? { bypass: studioOriginBypass(env.STUDIO_ORIGIN) } : {}));
   const mastraServer = new MastraServer({ app, mastra, taskStore: new InMemoryTaskStore() });
   await mastraServer.init();
 
