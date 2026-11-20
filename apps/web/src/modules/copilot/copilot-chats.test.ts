@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { foldRepeatedTools } from '../steps/step-activity-data';
 import type { AgentStep, StepRow } from '../steps/step-types';
-import { chatTitleOf, isChatId, runLabel } from './copilot-chats-data';
+import { chatTitleOf, isChatId } from './copilot-chats-data';
 import { argsSummary, copilotErrorOfChunk, copilotErrorOfThrown, turnsOfHistory } from './copilot-data';
 
 describe('chat titles', () => {
@@ -18,15 +18,6 @@ describe('chat titles', () => {
     expect(isChatId('copilot-0b4c7a52-8d0e-4c1a-9f5e-1a2b3c4d5e6f')).toBe(true);
     expect(isChatId('ops-lead-caed01cd-160f-4dd8-941a-0ef6513cd0bc')).toBe(true);
     expect(isChatId('someone-elses-thread')).toBe(false);
-  });
-});
-
-describe('run labels', () => {
-  const run = { runId: 'a1b2c3d4-0000', workflowId: 'restock' };
-  test('place from the proposal title, else vendor count, else id', () => {
-    expect(runLabel({ ...run, proposal: { title: 'Restock 5 vendors · Oakland Warehouse' } as never })).toBe('Restock · Oakland Warehouse');
-    expect(runLabel({ ...run, proposal: { title: 'Restock 4 vendors' } as never })).toBe('Restock · 4 vendors');
-    expect(runLabel({ ...run, proposal: null })).toBe('Restock · a1b2c3d4');
   });
 });
 

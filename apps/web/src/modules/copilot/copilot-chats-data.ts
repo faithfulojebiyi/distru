@@ -2,7 +2,6 @@
 // Memory threads of the Ops Lead (resource = the signed-in user; the server never lists another user's threads).
 import { z } from 'zod';
 
-import type { RunSummary } from '../../api/generated/opsAgentAPI.schemas';
 
 /** A Copilot chat as the sidebar and header show it. */
 export const CopilotChatSchema = z.object({
@@ -42,18 +41,3 @@ export const isChatId = (id: string) => /^(copilot|ops-lead)-[\w-]{1,120}$/.test
 /** Newest activity first. */
 export const sortChats = (chats: readonly CopilotChat[]) =>
   [...chats].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
-
-const WORKFLOW_LABELS: Record<string, string> = { restock: 'Restock', 'vendor-reply': 'Vendor reply' };
-
-/**
- * A run's short sidebar label: "Restock · Oakland Warehouse". The place comes from the proposal title ("Restock 5
- * vendors · Oakland Warehouse"); without one, the vendor count, else the run id.
- */
-export const runLabel = (run: Pick<RunSummary, 'runId' | 'workflowId' | 'proposal'>): string => {
-  const kind = WORKFLOW_LABELS[run.workflowId] ?? run.workflowId;
-  const title = run.proposal?.title ?? '';
-  const place = title.includes(' · ') ? title.split(' · ').at(-1) : null;
-  if (place) return `${kind} · ${place}`;
-  const vendors = /(\d+ vendors?)/.exec(title)?.[1];
-  return vendors ? `${kind} · ${vendors}` : `${kind} · ${run.runId.slice(0, 8)}`;
-};
