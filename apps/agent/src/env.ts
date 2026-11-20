@@ -135,9 +135,32 @@ const EnvSchema = z.object({
   INNGEST_DEV: z.string().optional(),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
+  // --- Hardening ---
+  /**
+   * Header Better Auth reads the client IP from (rate limiting, session IP), e.g. `fly-client-ip`, or
+   * `x-forwarded-for` behind our own proxy. Default: x-forwarded-for / x-real-ip outside production; none in
+   * production (a spoofable header is never trusted unless named here). `none` disables it explicitly.
+   */
+  TRUSTED_IP_HEADER: z.string().trim().toLowerCase().optional(),
+  /** Max age (seconds) of a Distru webhook delivery's timestamp. Default 300 in production, 0 (off) elsewhere. */
+  DISTRU_WEBHOOK_TOLERANCE_SECONDS: z.coerce.number().int().nonnegative().optional(),
 });
 
-export type Env = Omit<z.infer<typeof EnvSchema>, 'DISTRU_WEBHOOK_SECRET'> & { DISTRU_WEBHOOK_SECRET: string };
+type ParsedEnv = z.infer<typeof EnvSchema>;
+export type Env = Omit<ParsedEnv, 'DISTRU_WEBHOOK_SECRET' | 'TRUSTED_IP_HEADER' | 'DISTRU_WEBHOOK_TOLERANCE_SECONDS'> & {
+  DISTRU_WEBHOOK_SECRET: string;
+  /** Lowercase header names; empty = none trusted. */
+  TRUSTED_IP_HEADERS: string[];
+  /** 0 = off. */
+  DISTRU_WEBHOOK_TOLERANCE_SECONDS: number;
+};
+
+/** The client-IP header(s) Better Auth may trust (see TRUSTED_IP_HEADER). */
+export function trustedIpHeaders(nodeEnv: ParsedEnv['NODE_ENV'], configured: string | undefined): string[] {
+  if (configured === 'none' || configured === '') return [];
+  if (configured) return [configured];
+  return nodeEnv === 'production' ? [] : ['x-forwarded-for', 'x-real-ip'];
+}
 
 function loadEnv(): Env {
   const parsed = EnvSchema.safeParse(process.env);
@@ -166,7 +189,13 @@ function loadEnv(): Env {
     console.error('DISTRU_WEBHOOK_SECRET is required in production.');
     process.exit(1);
   }
-  return { ...env, DISTRU_WEBHOOK_SECRET: env.DISTRU_WEBHOOK_SECRET ?? 'mock-webhook-secret' };
+  const { TRUSTED_IP_HEADER, DISTRU_WEBHOOK_TOLERANCE_SECONDS, ...rest } = env;
+  return {
+    ...rest,
+    DISTRU_WEBHOOK_SECRET: env.DISTRU_WEBHOOK_SECRET ?? 'mock-webhook-secret',
+    TRUSTED_IP_HEADERS: trustedIpHeaders(env.NODE_ENV, TRUSTED_IP_HEADER),
+    DISTRU_WEBHOOK_TOLERANCE_SECONDS: DISTRU_WEBHOOK_TOLERANCE_SECONDS ?? (env.NODE_ENV === 'production' ? 300 : 0),
+  };
 }
 
 export const env = loadEnv();

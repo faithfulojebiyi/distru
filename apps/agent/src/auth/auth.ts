@@ -5,6 +5,10 @@ import { db, schema } from '../db/client';
 import { env } from '../env';
 import { OTP_TTL_SECONDS, deliverAuthOtp, deliverResetLink } from './auth-mail';
 
+if (env.NODE_ENV === 'production' && env.TRUSTED_IP_HEADERS.length === 0) {
+  console.warn('[auth] TRUSTED_IP_HEADER is not set: client IPs are unknown, so auth rate limits share one bucket. Set it to the header your platform / proxy sets (e.g. fly-client-ip or x-forwarded-for).');
+}
+
 /**
  * Better Auth instance, mounted on the Hono app at /api/auth/*.
  *
@@ -54,8 +58,10 @@ export const auth = betterAuth({
   },
   advanced: {
     database: { generateId: () => crypto.randomUUID() },
-    // Bun.serve doesn't expose the peer IP to Better Auth; read it from the reverse proxy instead.
-    ipAddress: { ipAddressHeaders: ['x-forwarded-for', 'x-real-ip'] },
+    // Bun.serve doesn't expose the peer IP to Better Auth, so it comes from a header, but only one we trust:
+    // TRUSTED_IP_HEADER (e.g. fly-client-ip, or x-forwarded-for set by our own proxy). Outside production the
+    // default is x-forwarded-for / x-real-ip; in production none unless configured (a client could forge it).
+    ipAddress: { ipAddressHeaders: env.TRUSTED_IP_HEADERS },
   },
   plugins: [
     bearer(),

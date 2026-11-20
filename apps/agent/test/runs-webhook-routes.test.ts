@@ -11,7 +11,7 @@ const users: Record<string, SessionUser> = {
 };
 const SECRET = 'test-secret';
 
-function setup() {
+function setup(webhookOptions: { distruToleranceSeconds?: number } = {}) {
   const base = stubServices();
   const start = mock(async () => ({ runId: 'run-1', workflowId: 'restock' }));
   const emitted: Array<Parameters<ApiServices['webhooks']['emit']>[0]> = [];
@@ -34,7 +34,7 @@ function setup() {
         { id: 'distru', system: 'erp', description: 'Distru', health: { ok: true, detail: '3 locations reachable' }, readTools: 8, actions: 1, tools: [] },
       ],
     },
-    webhooks: { distruSecret: SECRET, emit },
+    webhooks: { distruSecret: SECRET, emit, ...webhookOptions },
   };
   return { api: createApiRoutes(services), start, emit, emitted };
 }
@@ -110,6 +110,18 @@ describe('POST /api/webhooks/distru', () => {
     const later = JSON.stringify({ ...order, occurred_datetime: '2026-11-19T12:05:00Z' });
     await post(api, later, signDistruBody(later, SECRET));
     expect(emitted.length).toBe(4);
+  });
+
+  test('with a tolerance (production default 300 s), a replayed old delivery is 401 stale_delivery and nothing is queued', async () => {
+    const { api, emitted } = setup({ distruToleranceSeconds: 300 });
+    const stale = JSON.stringify(order); // occurred 2026-11-19T12:00:00Z: long past by wall clock
+    const res = await post(api, stale, signDistruBody(stale, SECRET));
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error: string }).error).toBe('stale_delivery');
+    expect(emitted).toHaveLength(0);
+    const fresh = JSON.stringify({ ...order, occurred_datetime: new Date().toISOString() });
+    expect((await post(api, fresh, signDistruBody(fresh, SECRET))).status).toBe(200);
+    expect(emitted.length).toBe(2);
   });
 
   test('PRODUCT / PURCHASE changes go to the context sync only; other types are ignored entirely', async () => {

@@ -75,6 +75,7 @@ export function createServices(): ApiServices & { mcpRoutes: ReturnType<typeof c
     copilot: { opsLeadTools: () => toolDescriptorsFor(appConnectors.registry, 'opsLead').map((tool) => tool.name) },
     webhooks: {
       distruSecret: env.DISTRU_WEBHOOK_SECRET,
+      distruToleranceSeconds: env.DISTRU_WEBHOOK_TOLERANCE_SECONDS,
       audit: appAuditSink,
       emit: async (event) => {
         await inngest.send({ name: event.name, id: event.id, data: event.data });

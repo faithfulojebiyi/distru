@@ -97,6 +97,8 @@ export type ApiServices = {
   webhooks: {
     /** HMAC secret for `x-distru-signature`. */
     distruSecret: string;
+    /** Reject deliveries whose signed `occurred_datetime` is older than this (seconds). 0 / unset = no check. */
+    distruToleranceSeconds?: number;
     /** Where `trigger.received` / `trigger.rejected` go (optional: route tests run without it). */
     audit?: AuditSink;
     /**

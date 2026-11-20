@@ -24,7 +24,7 @@ import {
   RunListSchema,
 } from './schemas';
 import { ingestWebhook, triggerSource } from '@ops/harness';
-import { DISTRU_SYNC_RECORD_TYPES, distruOrderCreatedTrigger, DistruOrderCreatedEventSchema, DistruWebhookSchema, distruWebhookKey, DISTRU_ORDER_TRIGGER_ID } from '@ops/connector-distru';
+import { createDistruOrderCreatedTrigger, DISTRU_SYNC_RECORD_TYPES, DistruOrderCreatedEventSchema, DistruWebhookSchema, distruWebhookKey, DISTRU_ORDER_TRIGGER_ID } from '@ops/connector-distru';
 import { DISTRU_RECORD_CHANGED_EVENT } from './distru-webhook';
 import { discardAudit } from './webhook-support';
 import { toHttpError } from './harness-errors';
@@ -312,10 +312,12 @@ export function createApiRoutes(services: ApiServices) {
     return c.json({ items }, 200);
   });
 
+  // Replay protection: deliveries whose signed occurred_datetime is outside the tolerance are rejected (401 stale_delivery).
+  const distruTriggers = triggerSource([createDistruOrderCreatedTrigger({ toleranceSeconds: services.webhooks.distruToleranceSeconds ?? 0 })]);
   api.openapi(distruWebhookRoute, async (c) => {
     const raw = await c.req.raw.clone().text();
     // Verify + normalize + audit through the Distru connector's trigger (`distru.order_created`).
-    const result = await ingestWebhook(triggerSource([distruOrderCreatedTrigger]), DISTRU_ORDER_TRIGGER_ID, raw, c.req.raw.headers, { DISTRU_WEBHOOK_SECRET: services.webhooks.distruSecret }, {
+    const result = await ingestWebhook(distruTriggers, DISTRU_ORDER_TRIGGER_ID, raw, c.req.raw.headers, { DISTRU_WEBHOOK_SECRET: services.webhooks.distruSecret }, {
       audit: services.webhooks.audit ?? discardAudit,
     });
     if (result.status === 'rejected') return c.json({ error: result.reason, message: result.message }, result.httpStatus);
