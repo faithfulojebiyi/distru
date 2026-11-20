@@ -50,11 +50,28 @@ const rootKey = process.env.ANTHROPIC_API_KEY;
 if (!rootKey) delete process.env.ANTHROPIC_API_KEY;
 const hasKey = Boolean(rootKey) || /^ANTHROPIC_API_KEY=\S+/m.test(await Bun.file(agentEnv).text());
 
-// 4. Every app's `dev` script: agent, web, Distru mock, Headset mock, emulators.
-const apps = Bun.spawn(['bun', 'run', '--filter', './apps/*', 'dev'], { cwd: ROOT, stdout: 'inherit', stderr: 'inherit' });
+// 4. Every app's `dev` script, side by side. Not `bun --filter`: it starts a package only after the packages it
+// depends on have finished, and the agent depends on the mocks, whose dev servers never finish.
+const APPS = ['distru-mock', 'headset-mock', 'emulators', 'agent', 'web'];
+const prefix = async (name: string, stream: ReadableStream<Uint8Array>, out: NodeJS.WriteStream) => {
+  const label = `\x1b[2m${name.padEnd(12)}\x1b[0m │ `;
+  let buffered = '';
+  for await (const chunk of stream.pipeThrough(new TextDecoderStream())) {
+    const lines = (buffered + chunk).split('\n');
+    buffered = lines.pop() ?? '';
+    for (const line of lines) out.write(label + line + '\n');
+  }
+  if (buffered) out.write(label + buffered + '\n');
+};
+const procs = APPS.map((name) => {
+  const p = Bun.spawn(['bun', 'run', 'dev'], { cwd: `${ROOT}/apps/${name}`, stdout: 'pipe', stderr: 'pipe' });
+  void prefix(name, p.stdout, process.stdout);
+  void prefix(name, p.stderr, process.stderr);
+  return p;
+});
 
 const stop = () => {
-  apps.kill();
+  for (const p of procs) p.kill();
   process.exit(0);
 };
 process.on('SIGINT', stop);
@@ -75,4 +92,4 @@ ${keyNote}
   Postgres and Inngest keep running in Docker after Ctrl+C; \`docker compose --profile dev down\` stops them.
 `);
 
-await apps.exited;
+await Promise.all(procs.map((p) => p.exited));
