@@ -1,3 +1,4 @@
+import { DEFAULT_ALLOWED_ACTIONS } from '../../../../apps/agent/src/harness/policy';
 import { defineScenario, type Scenario } from '../scenario';
 
 /**
@@ -254,16 +255,55 @@ export const SCENARIOS: Scenario[] = [
   }),
   defineScenario({
     id: 'metrc-write-failure-after-save',
-    title: 'Metrc write fails after Distru saved',
+    title: 'Metrc rejects an adjustment Distru already saved: partial failure, resumed without a second write',
     description:
-      'Distru writes that reach Metrc (inventory adjustments) can fail in Metrc after Distru saved the record. The harness should record a partial failure and resume without duplicating the Distru side.',
-    status: 'pending',
-    pendingReason:
-      "Not reachable: the mock's metrc_fail_next only affects distru-adjust-inventory (MCP), and no agent or registry action proposes inventory adjustments; restock POs do not reach Metrc.",
-    tags: ['executor', 'compliance'],
-    mockScenario: 'default',
-    trigger: { kind: 'restock', approve: true },
-    expectations: [{ kind: 'audit_event', type: 'op.failed' }],
+      'Two cases of FLW-BD-35 arrived crushed. One approved proposal reorders them (PO), writes the 2 units off the Metrc package (Distru saves the adjustment, then syncs it to Metrc) and opens a follow-up task. Metrc rejects the adjustment after Distru saved it. The PO must stay done; the adjustment op fails on the read-after-write Metrc check with the Metrc error and the Distru record id kept; the task never runs; the proposal is failed and resumable. A resume while Metrc still rejects it must not adjust again (a second write-off would take 4 units); once the activity is retried in Distru, the resume verifies the same adjustment and finishes the task. No model calls.',
+    tags: ['executor', 'compliance', 'idempotency', 'resume'],
+    llm: false,
+    mockScenario: 'clean',
+    emulatorSetup: {
+      // The write-off is a Distru MCP action (high risk: reaches Metrc); allow it next to the defaults.
+      policyRules: [{ key: 'allowed_actions', params: { actions: [...DEFAULT_ALLOWED_ACTIONS, 'distru_mcp.adjust_inventory'] } }],
+      distruMockConfig: [{ phase: 'before_execute', body: { metrc_fail_next: 1 } }],
+    },
+    trigger: {
+      kind: 'proposal',
+      location: 'Oakland',
+      ops: [
+        { op: 'purchase', sku: 'FLW-BD-35', quantity: 2 },
+        { op: 'adjust_package', sku: 'FLW-BD-35', quantity: -2, complianceReason: 'Damage', description: 'Two units crushed in transit' },
+        { op: 'task', name: 'Confirm the FLW-BD-35 write-off in Metrc', due: '2026-11-20', purchaseOp: 0 },
+      ],
+      resumes: [{}, { distruMockConfig: { metrc_retry_failed: true } }],
+    },
+    expectations: [
+      { kind: 'op_count_by_action', action: 'distru_mcp.adjust_inventory', count: 1 },
+      { kind: 'policy_outcome', outcome: 'needs_approval' },
+      // First execution: the PO is written and verified, the adjustment saved in Distru but rejected by Metrc.
+      {
+        kind: 'execution_step',
+        step: 0,
+        proposalStatus: 'failed',
+        opStatuses: ['executed', 'failed', 'pending'],
+        failure: 'status.*FAILED.*Metrc rejected the adjustment',
+        recordKept: true,
+        writes: { purchases: 1, tasks: 0, adjustments: 1 },
+      },
+      // Resume while Metrc still rejects it: nothing is written again (no second write-off, no second PO).
+      { kind: 'execution_step', step: 1, proposalStatus: 'failed', opStatuses: ['executed', 'failed', 'pending'], failure: 'Metrc rejected', recordKept: true, writes: { purchases: 0, tasks: 0, adjustments: 0 } },
+      // The activity was retried in Distru: the resume verifies the same adjustment and runs the task.
+      { kind: 'execution_step', step: 2, proposalStatus: 'executed', opStatuses: ['executed', 'executed', 'executed'], writes: { purchases: 0, tasks: 1, adjustments: 0 } },
+      { kind: 'policy_outcome', proposalStatus: 'executed' },
+      { kind: 'verify_all_ok' },
+      { kind: 'writes', resource: 'purchases', count: 1 },
+      { kind: 'writes', resource: 'adjustments', count: 1 },
+      { kind: 'writes', resource: 'tasks', count: 1 },
+      { kind: 'audit_event', type: 'op.verify_failed', min: 2 },
+      { kind: 'audit_event', type: 'proposal.failed', min: 2 },
+      { kind: 'audit_event', type: 'proposal.resume_requested', min: 2 },
+      { kind: 'audit_event', type: 'op.deduplicated', min: 2 },
+      { kind: 'audit_event', type: 'proposal.executed' },
+    ],
   }),
   defineScenario({
     id: 'webhook-replay-dedupe',

@@ -242,7 +242,12 @@ export async function createWorld({ scenario, models, pricing, emulators, distru
     if (!res.ok) throw new Error(`mock config failed: ${res.status} ${await res.text()}`);
   };
 
-  const world = { mock, headset, net, outbox, connectors, contexts, store, audit, rules, harness, deps, agents, mastra, launcher, approver, productId, skuById, locations, waitFor, findProposalByRunId, configureMock, distruHook, emu, recall };
+  // Inventory adjustments saved by the mock (MCP or REST) since the world was built.
+  const adjustmentsAtStart = mock.store.adjustments.size;
+  /** Distru writes so far: REST purchase / task POSTs and inventory adjustments. */
+  const writes = () => ({ purchases: net.purchaseWrites, tasks: net.taskWrites, adjustments: mock.store.adjustments.size - adjustmentsAtStart });
+
+  const world = { mock, headset, net, writes, outbox, connectors, contexts, store, audit, rules, harness, deps, agents, mastra, launcher, approver, productId, skuById, locations, waitFor, findProposalByRunId, configureMock, distruHook, emu, recall };
   if (emu) await emu.attach(world);
   const close = async () => {
     await emu?.close();

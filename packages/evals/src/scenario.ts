@@ -11,6 +11,8 @@ export const DISTRU_MOCK_SCENARIOS = ['default', 'clean', 'failed-lab-test', 'pr
 export const HEADSET_MOCK_SCENARIOS = ['default', 'clean', 'failed-lab-test', 'prompt-injection', 'no-reorder-needed', 'no-retail-signal'] as const;
 
 const Pattern = z.string().min(1).describe('Case-insensitive regular expression');
+/** Distru writes the world counts: REST purchase / task POSTs and inventory adjustments (MCP). */
+const WriteResourceSchema = z.enum(['purchases', 'tasks', 'adjustments']);
 
 // ── assertions ──────────────────────────────────────────────────────────────────────────────────
 
@@ -46,7 +48,7 @@ export const AssertionSchema = z
     z.object({ kind: z.literal('idempotent_reexecute') }),
     z.object({ kind: z.literal('verify_all_ok') }),
     z.object({ kind: z.literal('audit_event'), type: z.string(), min: z.number().int().positive().default(1) }),
-    z.object({ kind: z.literal('writes'), resource: z.enum(['purchases', 'tasks']), count: z.number().int().nonnegative() }),
+    z.object({ kind: z.literal('writes'), resource: WriteResourceSchema, count: z.number().int().nonnegative() }),
     z.object({ kind: z.literal('cost_below_usd'), usd: z.number().positive() }),
     z.object({ kind: z.literal('tokens_below'), tokens: z.number().int().positive() }),
     z.object({ kind: z.literal('latency_below_ms'), ms: z.number().int().positive() }),
@@ -91,6 +93,20 @@ export const AssertionSchema = z
     }),
     z.object({ kind: z.literal('undo_applied').describe('After the approved undo executed: POs deleted, tasks deleted, caps restored, emails still delivered') }),
     z.object({ kind: z.literal('restock_runs_started'), count: z.number().int().nonnegative() }),
+    z.object({
+      kind: z.literal('execution_step'),
+      /** 0 = the first execution after approval, 1 = the first resume, … (trigger `proposal`). */
+      step: z.number().int().nonnegative(),
+      proposalStatus: z.string().optional(),
+      /** Every op's status after the step, in op order (executed / failed / pending). */
+      opStatuses: z.array(z.string()).optional(),
+      /** Tested against the failed op's error and read-after-write mismatches (as JSON). */
+      failure: Pattern.optional(),
+      /** The failed op kept the record id of its write (the write landed; only a later check failed). */
+      recordKept: z.boolean().optional(),
+      /** Distru writes made during this step, by resource. */
+      writes: z.object({ purchases: z.number().int().nonnegative().optional(), tasks: z.number().int().nonnegative().optional(), adjustments: z.number().int().nonnegative().optional() }).optional(),
+    }),
     z.object({ kind: z.literal('mcp_call_refused'), tool: z.string(), reason: Pattern.optional() }),
     z.object({
       kind: z.literal('recall_returned'),
@@ -150,6 +166,29 @@ export const TriggerSchema = z
       items: z.array(z.object({ sku: z.string(), quantity: z.number().int().positive() })).min(1),
       /** How many times Distru delivers the same webhook (its retries / redeliveries). */
       deliveries: z.number().int().min(1).default(2),
+    }),
+    z.object({
+      kind: z.literal('proposal'),
+      /**
+       * A cross-tool proposal made without a model (what an agent or operator proposes through the
+       * propose_* tools), approved by a human and executed; faults come from `emulatorSetup`
+       * (`before_execute`). No model calls, so no recording.
+       */
+      location: z.string().default('Oakland'),
+      ops: z
+        .array(
+          z.discriminatedUnion('op', [
+            /** A PENDING PO from the SKU's vendor at its unit cost (distru.purchases.upsert). */
+            z.object({ op: z.literal('purchase'), sku: z.string(), quantity: z.number().int().positive() }),
+            /** A signed adjustment of one Metrc package of the SKU at the location (distru_mcp.adjust_inventory; Distru → Metrc). */
+            z.object({ op: z.literal('adjust_package'), sku: z.string(), quantity: z.number().int(), complianceReason: z.string(), description: z.string() }),
+            /** A Distru task (distru.tasks.create), optionally linked to an earlier purchase op's PO. */
+            z.object({ op: z.literal('task'), name: z.string(), due: z.iso.date(), purchaseOp: z.number().int().nonnegative().optional() }),
+          ]),
+        )
+        .min(1),
+      /** After a failed execution, an approver resumes it, in order; `distruMockConfig` is POSTed to the mock first. */
+      resumes: z.array(z.object({ distruMockConfig: z.record(z.string(), z.unknown()).optional() })).default([]),
     }),
     z.object({
       kind: z.literal('mcp_call'),
@@ -267,6 +306,19 @@ export const ScenarioSchema = z
       const needsUndo = s.expectations.some((a) => a.kind === 'undo_proposal' || a.kind === 'undo_applied');
       if (needsUndo && !s.trigger.undo) ctx.addIssue({ code: 'custom', message: 'undo assertions need trigger.undo', path: ['trigger', 'undo'] });
       if (s.expectations.some((a) => a.kind === 'slack_click') && !s.trigger.slackClicks.length) ctx.addIssue({ code: 'custom', message: 'slack_click needs trigger.slackClicks', path: ['trigger', 'slackClicks'] });
+    }
+    for (const [i, a] of s.expectations.entries()) {
+      if (a.kind !== 'execution_step') continue;
+      if (s.trigger.kind !== 'proposal') ctx.addIssue({ code: 'custom', message: 'execution_step needs a proposal trigger', path: ['expectations', i] });
+      else if (a.step > s.trigger.resumes.length) ctx.addIssue({ code: 'custom', message: `execution_step ${a.step} needs ${a.step} resume(s) in trigger.resumes`, path: ['expectations', i] });
+    }
+    if (s.trigger.kind === 'proposal') {
+      const t = s.trigger;
+      for (const [i, op] of t.ops.entries()) {
+        if (op.op === 'task' && op.purchaseOp !== undefined && (op.purchaseOp >= i || t.ops[op.purchaseOp]?.op !== 'purchase')) {
+          ctx.addIssue({ code: 'custom', message: 'purchaseOp must point at an earlier purchase op', path: ['trigger', 'ops', i, 'purchaseOp'] });
+        }
+      }
     }
   })
   .meta({ id: 'EvalScenario' });

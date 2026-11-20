@@ -95,6 +95,16 @@ export function labelOf(a: Assertion): string {
       return 'undo applied (POs + tasks deleted, caps restored, emails stay sent)';
     case 'restock_runs_started':
       return `restock runs started = ${a.count}`;
+    case 'execution_step': {
+      const parts = [
+        a.proposalStatus && `proposal=${a.proposalStatus}`,
+        a.opStatuses && `ops=[${a.opStatuses.join(', ')}]`,
+        a.failure && `failure /${a.failure}/`,
+        a.recordKept !== undefined && (a.recordKept ? 'record kept' : 'no record'),
+        a.writes && `writes ${Object.entries(a.writes).map(([k, n]) => `${k}=${n}`).join(' ')}`,
+      ].filter(Boolean);
+      return `${a.step === 0 ? 'execution' : `resume #${a.step}`}: ${parts.join(', ')}`;
+    }
     case 'mcp_call_refused':
       return `MCP ${a.tool} refused${a.reason ? ` (/${a.reason}/)` : ''}`;
     case 'recall_returned':
@@ -254,6 +264,24 @@ export function evaluateAssertion(a: Assertion, o: Observation, judge?: JudgeVer
       if (!after) return result(a, false, o.undo ? `undo not executed (${o.undo.finalStatus ?? o.undo.status})` : 'no undo');
       const ok = o.undo?.finalStatus === 'executed' && after.undoOpsExecuted === after.undoOps && after.purchasesStillThere === 0 && after.tasksStillThere === 0 && after.capsNotRestored === 0 && after.emailsAfter === after.emailsBefore;
       return result(a, ok, `status ${o.undo?.finalStatus}; ${after.undoOpsExecuted}/${after.undoOps} undo ops executed; POs left ${after.purchasesStillThere}, tasks left ${after.tasksStillThere}, caps not restored ${after.capsNotRestored}, emails ${after.emailsBefore}→${after.emailsAfter}`);
+    }
+    case 'execution_step': {
+      const step = o.executions[a.step];
+      if (!step) return result(a, false, `${o.executions.length} execution step(s) observed`);
+      const failed = step.ops.find((op) => op.status === 'failed');
+      const failureText = failed ? `${failed.error ?? ''} ${failed.mismatches}` : '';
+      const problems: string[] = [];
+      if (a.proposalStatus && step.proposalStatus !== a.proposalStatus) problems.push(`proposal ${step.proposalStatus}`);
+      const statuses = step.ops.map((op) => op.status);
+      if (a.opStatuses && JSON.stringify(statuses) !== JSON.stringify(a.opStatuses)) problems.push(`ops [${statuses.join(', ')}]`);
+      if (a.failure && !(failed && re(a.failure).test(failureText))) problems.push(failed ? `failure did not match: ${excerpt(failureText)}` : 'no failed op');
+      if (a.recordKept !== undefined && (failed?.recordId != null) !== a.recordKept) problems.push(failed ? `record id ${failed.recordId ?? 'none'}` : 'no failed op');
+      for (const [k, n] of Object.entries(a.writes ?? {})) {
+        const got = step.writes[k as keyof typeof step.writes];
+        if (n !== undefined && got !== n) problems.push(`${k} writes ${got}`);
+      }
+      const seen = `proposal=${step.proposalStatus} ops=[${statuses.join(', ')}] writes ${Object.entries(step.writes).map(([k, n]) => `${k}=${n}`).join(' ')}${failed ? ` | ${failed.action}: ${excerpt(failureText)}` : ''}`;
+      return result(a, problems.length === 0, problems.length ? `${problems.join('; ')} (${seen})` : seen);
     }
     case 'restock_runs_started':
       return result(a, o.runsStarted === a.count, `${o.runsStarted} run(s) from ${o.webhookDeliveries.length} deliveries (${o.webhookDeliveries.map((d) => d.status).join(', ') || 'none'})`);

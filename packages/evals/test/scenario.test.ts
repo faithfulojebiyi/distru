@@ -51,6 +51,17 @@ describe('scenario schema', () => {
     expect(ScenarioSchema.safeParse({ ...base, expectations: [{ kind: 'slack_click', as: 'operator', outcome: 'refused' }] }).success).toBe(false);
   });
 
+  test('proposal trigger: execution_step needs it and enough resumes; a task links only to an earlier purchase op', () => {
+    const proposal = { kind: 'proposal', ops: [{ op: 'purchase', sku: 'FLW-BD-35', quantity: 2 }, { op: 'task', name: 'Follow up', due: '2026-11-20', purchaseOp: 0 }], resumes: [{}] };
+    const step = (n: number) => ({ kind: 'execution_step', step: n, proposalStatus: 'executed' });
+    expect(ScenarioSchema.safeParse({ ...base, expectations: [step(0)] }).success).toBe(false);
+    expect(ScenarioSchema.safeParse({ ...base, trigger: proposal, expectations: [step(1)] }).success).toBe(true);
+    expect(ScenarioSchema.safeParse({ ...base, trigger: proposal, expectations: [step(2)] }).success).toBe(false);
+    const badLink = { ...proposal, ops: [{ op: 'task', name: 'Follow up', due: '2026-11-20', purchaseOp: 0 }] };
+    expect(ScenarioSchema.safeParse({ ...base, trigger: badLink, expectations: [step(0)] }).success).toBe(false);
+    expect(ScenarioSchema.parse({ ...base, trigger: { kind: 'proposal', ops: proposal.ops } }).trigger).toMatchObject({ location: 'Oakland', resumes: [] });
+  });
+
   test('awaiting_recording parses without a reason', () => {
     expect(ScenarioSchema.parse({ ...base, status: 'awaiting_recording' }).status).toBe('awaiting_recording');
   });

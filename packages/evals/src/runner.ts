@@ -14,7 +14,7 @@ import { createWorld, DISTRU_WEBHOOK_SECRET, type World } from './world';
 import { SLACK_MEMBERS } from './emulators';
 import { writeVectorSnapshot } from './recall';
 import { buildPurchaseOrder, DistruApiError } from '@ops/distru-client';
-import { ingestWebhook, triggerSource, userPrincipal } from '@ops/harness';
+import { agentPrincipal, ingestWebhook, triggerSource, userPrincipal } from '@ops/harness';
 import { distruOrderCreatedTrigger, DistruOrderCreatedEventSchema, DISTRU_ORDER_TRIGGER_ID } from '../../../apps/agent/src/api/distru-webhook';
 import type { AppCtx } from '../../../apps/agent/src/harness/registry';
 import { createOpsMcpTools, type OpsMcpDeps } from '../../../apps/agent/src/mastra/mcp/ops-mcp';
@@ -215,7 +215,7 @@ export async function runRestock(world: World, scenario: Scenario, observation: 
     observation.proposal = proposalFacts(latest);
     observation.auditTypes = [...world.audit.types(proposal.id)];
   }
-  observation.writes = { purchases: world.net.purchaseWrites, tasks: world.net.taskWrites };
+  observation.writes = world.writes();
 }
 
 type RunState = Awaited<ReturnType<World['waitFor']>>;
@@ -249,7 +249,7 @@ async function observeRestockRun(world: World, runId: string, state: RunState, o
     observation.proposal = proposalFacts(proposal);
     observation.auditTypes = [...world.audit.types(proposal.id)];
   }
-  observation.writes = { purchases: world.net.purchaseWrites, tasks: world.net.taskWrites };
+  observation.writes = world.writes();
 }
 
 // ── undo ────────────────────────────────────────────────────────────────────────────────────────
@@ -369,7 +369,7 @@ export async function runVendorReply(world: World, scenario: Scenario, observati
   const meta = z.object({ injectionDetected: z.boolean().default(false), suspiciousText: z.array(z.string()).default([]) }).safeParse(proposal?.meta ?? {});
   if ((result.success && result.data.suspicious) || (meta.success && meta.data.injectionDetected)) observation.suspicious.push({ sku: t.po.sku, source: 'vendor email' });
   // writes made by the workflow itself (the PO above was the scenario's setup)
-  observation.writes = { purchases: world.net.purchaseWrites - writesBefore.purchases, tasks: world.net.taskWrites - writesBefore.tasks };
+  observation.writes = { ...world.writes(), purchases: world.net.purchaseWrites - writesBefore.purchases, tasks: world.net.taskWrites - writesBefore.tasks };
 }
 
 // ── Distru webhook redelivery ───────────────────────────────────────────────────────────────────
@@ -509,7 +509,80 @@ export async function runMcpCall(world: World, scenario: Scenario, observation: 
     }
   }
   observation.mcp = { tools: Object.keys(listed), refused, error, proposalsAfter: (await world.store.list()).length };
-  observation.writes = { purchases: world.net.purchaseWrites, tasks: world.net.taskWrites };
+  observation.writes = world.writes();
+}
+
+// ── direct proposal (no model) ──────────────────────────────────────────────────────────────────
+
+/** Who proposes a `proposal` trigger: the Ops Lead, as it does from the Copilot through its propose_* tools. */
+const opsLeadPrincipal = agentPrincipal('ops-lead', 'Ops Lead');
+
+/** The op requests a `proposal` trigger describes, resolved against the seeded mock (ids, vendors, a Metrc package). */
+async function proposalOps(world: World, t: Extract<Scenario['trigger'], { kind: 'proposal' }>) {
+  const location = (await world.locations()).find((l) => l.name.startsWith(t.location));
+  if (!location) throw new Error(`proposal: no location starting with "${t.location}"`);
+  const Product = z.object({ id: z.string(), vendor: z.object({ id: z.string() }), unit_cost: z.number() });
+  const product = async (sku: string) => Product.parse(await world.connectors.registry.runReadTool(world.contexts.read, world.approver, 'distru.products_get', { sku }));
+  const ops: Array<{ action: string; input: Record<string, unknown> }> = [];
+  for (const spec of t.ops) {
+    if (spec.op === 'purchase') {
+      const p = await product(spec.sku);
+      ops.push({ action: 'distru.purchases.upsert', input: { vendor_id: p.vendor.id, location_id: location.id, lines: [{ product_id: p.id, quantity: spec.quantity, unit_price: p.unit_cost }] } });
+    } else if (spec.op === 'adjust_package') {
+      const p = await product(spec.sku);
+      // a Metrc-tracked package of the SKU at the location with enough stock for the change
+      const lot = [...world.mock.store.lots.values()].find((l) => l.product_id === p.id && l.location_id === location.id && l.compliance_label && l.metrc_id && l.quantity >= Math.abs(spec.quantity));
+      if (!lot) throw new Error(`proposal: no Metrc package of ${spec.sku} at ${location.name} with ≥ ${Math.abs(spec.quantity)} units`);
+      ops.push({ action: 'distru_mcp.adjust_inventory', input: { packageId: `pkg_${lot.id}`, quantity: spec.quantity, complianceReason: spec.complianceReason, description: spec.description } });
+    } else {
+      ops.push({ action: 'distru.tasks.create', input: { name: spec.name, due: spec.due, ...(spec.purchaseOp !== undefined ? { purchase_id: `{{op:${spec.purchaseOp}.recordId}}` } : {}) } });
+    }
+  }
+  return ops;
+}
+
+/**
+ * A cross-tool proposal without a model: the Ops Lead proposes the ops, an approver approves, the
+ * executor runs it (faults from `emulatorSetup` before execution); then, while it is failed, an
+ * approver resumes it once per `resumes` entry. Each execution is observed separately.
+ */
+export async function runProposal(world: World, scenario: Scenario, observation: Observation): Promise<void> {
+  if (scenario.trigger.kind !== 'proposal') return;
+  const t = scenario.trigger;
+  for (const c of scenario.emulatorSetup.distruMockConfig) if (c.phase === 'before_run') await world.configureMock(c.body);
+  const proposed = await world.harness.propose({ ctx: world.contexts.read, principal: opsLeadPrincipal, ops: await proposalOps(world, t), meta: { triggeredBy: `evals:${scenario.id}` } });
+  observation.proposal = proposalFacts(proposed);
+  if (proposed.status !== 'pending_approval') {
+    observation.auditTypes = [...world.audit.types(proposed.id)];
+    observation.writes = world.writes();
+    return;
+  }
+  await world.harness.decide({ ctx: world.contexts.read, principal: world.approver, proposalId: proposed.id, decision: 'approve', reason: 'eval: approve' });
+  const step = async (run: () => Promise<unknown>) => {
+    const before = world.writes();
+    await run();
+    const p = await world.harness.get(proposed.id);
+    const after = world.writes();
+    observation.executions.push({
+      proposalStatus: p.status,
+      error: p.execution?.error?.message ?? null,
+      ops: p.ops.map((op) => ({ action: op.action, status: op.status, recordId: op.result?.recordId ?? null, error: op.result?.error?.message ?? null, mismatches: JSON.stringify(op.result?.mismatches ?? []) })),
+      writes: { purchases: after.purchases - before.purchases, tasks: after.tasks - before.tasks, adjustments: after.adjustments - before.adjustments },
+    });
+  };
+  for (const c of scenario.emulatorSetup.distruMockConfig) if (c.phase === 'before_execute') await world.configureMock(c.body);
+  await step(() => world.harness.execute({ ctx: world.contexts.execute, proposalId: proposed.id }));
+  for (const resume of t.resumes) {
+    if (resume.distruMockConfig) await world.configureMock(resume.distruMockConfig);
+    await step(async () => {
+      await world.harness.requestResume({ principal: world.approver, proposalId: proposed.id, reason: 'eval: resume' });
+      await world.harness.execute({ ctx: world.contexts.execute, proposalId: proposed.id });
+    });
+  }
+  const latest = await world.harness.get(proposed.id);
+  observation.proposal = proposalFacts(latest);
+  observation.auditTypes = [...world.audit.types(proposed.id)];
+  observation.writes = world.writes();
 }
 
 export async function runCopilot(world: World, scenario: Scenario, observation: Observation): Promise<void> {
@@ -523,7 +596,7 @@ export async function runCopilot(world: World, scenario: Scenario, observation: 
   observation.toolCalls = toolNamesIn(result);
   const delegated = observation.toolCalls.map(agentOfTool).filter((a): a is string => a !== null);
   observation.agents = [...new Set([AGENTS.opsLead.id, ...delegated])];
-  observation.writes = { purchases: world.net.purchaseWrites, tasks: world.net.taskWrites };
+  observation.writes = world.writes();
   const proposals = await world.store.list();
   if (proposals[0]) observation.proposal = proposalFacts(proposals[0]);
 }
@@ -592,6 +665,7 @@ export async function runScenario(scenario: Scenario, options: RunnerOptions): P
     else if (t.kind === 'copilot') await runCopilot(world, scenario, observation);
     else if (t.kind === 'vendor_reply') await runVendorReply(world, scenario, observation);
     else if (t.kind === 'distru_webhook') await runDistruWebhook(world, scenario, observation);
+    else if (t.kind === 'proposal') await runProposal(world, scenario, observation);
     else await runMcpCall(world, scenario, observation);
     observation.latencyMs = performance.now() - started;
 

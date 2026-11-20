@@ -15,6 +15,10 @@ export const ObservedLineSchema = z.object({
 });
 export type ObservedLine = z.infer<typeof ObservedLineSchema>;
 
+/** Distru writes: REST purchase / task POSTs, and inventory adjustments saved (any surface). */
+export const WritesSchema = z.object({ purchases: z.number().int().nonnegative(), tasks: z.number().int().nonnegative(), adjustments: z.number().int().nonnegative().default(0) });
+export type Writes = z.infer<typeof WritesSchema>;
+
 export const UsageSchema = z
   .object({
     llmCalls: z.number().int().nonnegative(),
@@ -27,7 +31,7 @@ export type Usage = z.infer<typeof UsageSchema>;
 
 export const ObservationSchema = z
   .object({
-    kind: z.enum(['restock', 'copilot', 'vendor_reply', 'distru_webhook', 'mcp_call']),
+    kind: z.enum(['restock', 'copilot', 'vendor_reply', 'distru_webhook', 'mcp_call', 'proposal']),
     /** Workflow run state: suspended / success / failed (null for copilot). */
     runState: z.string().nullable(),
     /** RestockResult.status when the run finished (executed, nothing_to_order, rejected, denied, failed). */
@@ -62,7 +66,7 @@ export const ObservationSchema = z
     suspicious: z.array(z.object({ sku: z.string().nullable(), source: z.string() })),
     revisions: z.number().int().nonnegative(),
     auditTypes: z.array(z.string()),
-    writes: z.object({ purchases: z.number().int().nonnegative(), tasks: z.number().int().nonnegative() }),
+    writes: WritesSchema,
     /** Purchase + task writes made by a second harness.execute (null when not re-executed). */
     reexecuteWrites: z.number().int().nonnegative().nullable(),
     toolCalls: z.array(z.string()),
@@ -97,6 +101,20 @@ export const ObservationSchema = z
       })
       .nullable()
       .default(null),
+    /**
+     * Executions of the proposal (trigger `proposal`): the first after approval, then each resume, with
+     * every op's outcome and the Distru writes made during that step.
+     */
+    executions: z
+      .array(
+        z.object({
+          proposalStatus: z.string(),
+          error: z.string().nullable(),
+          ops: z.array(z.object({ action: z.string(), status: z.string(), recordId: z.string().nullable(), error: z.string().nullable(), mismatches: z.string() })),
+          writes: WritesSchema,
+        }),
+      )
+      .default([]),
     /** Restock runs started by webhook deliveries (distru_webhook). */
     runsStarted: z.number().int().nonnegative().default(0),
     webhookDeliveries: z.array(z.object({ status: z.string(), eventId: z.string().nullable() })).default([]),
@@ -134,13 +152,14 @@ export function emptyObservation(kind: Observation['kind']): Observation {
     suspicious: [],
     revisions: 0,
     auditTypes: [],
-    writes: { purchases: 0, tasks: 0 },
+    writes: { purchases: 0, tasks: 0, adjustments: 0 },
     reexecuteWrites: null,
     toolCalls: [],
     agents: [],
     answer: null,
     slackClicks: [],
     undo: null,
+    executions: [],
     runsStarted: 0,
     webhookDeliveries: [],
     mcp: null,

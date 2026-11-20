@@ -89,7 +89,7 @@ describe('assertion engine', () => {
     const executed = restock({
       proposal: { id: 'p1', status: 'executed', policyOutcome: 'needs_approval', totalValue: 10, title: null, summary: null, titleSource: null, ops: [{ action: 'distru.purchases.upsert', status: 'executed', verified: true, diff: [], input: '{}' }] },
       reexecuteWrites: 0,
-      writes: { purchases: 1, tasks: 0 },
+      writes: { purchases: 1, tasks: 0, adjustments: 0 },
     });
     expect(status({ kind: 'verify_all_ok' }, executed)).toBe('pass');
     expect(status({ kind: 'verify_all_ok' }, restock())).toBe('fail');
@@ -173,6 +173,35 @@ describe('assertion engine', () => {
     expect(status({ kind: 'restock_runs_started', count: 2 }, o)).toBe('fail');
     expect(status({ kind: 'mcp_call_refused', tool: 'propose_x', reason: "lacks the 'propose' scope" }, o)).toBe('pass');
     expect(status({ kind: 'mcp_call_refused', tool: 'propose_x' }, restock({ mcp: { tools: [], refused: false, error: null, proposalsAfter: 1 } }))).toBe('fail');
+  });
+
+  test('execution steps: partial failure, then a resume that writes nothing again', () => {
+    const op = (action: string, status: string, extra: Partial<Observation['executions'][number]['ops'][number]> = {}) => ({ action, status, recordId: null, error: null, mismatches: '[]', ...extra });
+    const o = restock({
+      executions: [
+        {
+          proposalStatus: 'failed',
+          error: 'Read-after-write check found 2 mismatch(es)',
+          ops: [
+            op('distru.purchases.upsert', 'executed', { recordId: 'po-1' }),
+            op('distru_mcp.adjust_inventory', 'failed', { recordId: 'adj-1', error: 'Read-after-write check found 2 mismatch(es)', mismatches: '[{"path":["metrc","status"],"actual":"FAILED"},{"path":["metrc","lastError"],"actual":"Metrc rejected the adjustment"}]' }),
+            op('distru.tasks.create', 'pending'),
+          ],
+          writes: { purchases: 1, tasks: 0, adjustments: 1 },
+        },
+        { proposalStatus: 'executed', error: null, ops: [op('distru.purchases.upsert', 'executed'), op('distru_mcp.adjust_inventory', 'executed'), op('distru.tasks.create', 'executed')], writes: { purchases: 0, tasks: 1, adjustments: 0 } },
+      ],
+    });
+    const first = { kind: 'execution_step', step: 0, proposalStatus: 'failed', opStatuses: ['executed', 'failed', 'pending'], failure: 'status.*FAILED.*Metrc rejected', recordKept: true, writes: { purchases: 1, adjustments: 1 } };
+    expect(status(first, o)).toBe('pass');
+    expect(status({ ...first, recordKept: false }, o)).toBe('fail');
+    expect(status({ ...first, failure: 'timeout' }, o)).toBe('fail');
+    expect(status({ ...first, writes: { adjustments: 0 } }, o)).toBe('fail');
+    expect(status({ ...first, opStatuses: ['executed', 'executed', 'pending'] }, o)).toBe('fail');
+    expect(status({ kind: 'execution_step', step: 1, proposalStatus: 'executed', writes: { adjustments: 0, tasks: 1 } }, o)).toBe('pass');
+    expect(status({ kind: 'execution_step', step: 1, failure: 'Metrc' }, o)).toBe('fail'); // no failed op
+    expect(status({ kind: 'execution_step', step: 2 }, o)).toBe('fail'); // not observed
+    expect(status({ kind: 'writes', resource: 'adjustments', count: 0 }, o)).toBe('pass');
   });
 
   test('undo: proposal shape and applied effects', () => {
