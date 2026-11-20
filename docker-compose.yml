@@ -18,6 +18,34 @@ services:
       timeout: 5s
       retries: 10
 
+  # Inngest dev server for `bun run dev` (which starts it): runs the durable workflows and calls the agent on
+  # the host. UI on http://localhost:8288.
+  inngest:
+    image: inngest/inngest:latest
+    profiles: [dev]
+    command: inngest dev -u http://host.docker.internal:4111/api/inngest --no-discovery
+    ports:
+      - '127.0.0.1:8288:8288'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+  # The whole app in one container, for trying it with nothing but Docker:
+  #   docker compose --profile app up --build      → http://localhost:8080
+  # Reads ANTHROPIC_API_KEY from the root .env.
+  app:
+    build: .
+    profiles: [app]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:8080:8080'
+    environment:
+      DATABASE_URL: postgres://ops:ops@postgres:5432/ops
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-local-only-secret-not-for-production-0000}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      PUBLIC_URL: http://localhost:8080
+
   # Optional trace viewer: `docker compose --profile observability up -d`, then set
   # OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 for the agent. UI on http://localhost:16686.
   # Traces live in memory and are gone when the container stops.

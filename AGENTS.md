@@ -34,6 +34,9 @@ retries, read-after-write verification and an append-only audit trail.
 
 ## Run locally
 
+`bun run dev` does all of this on its own (env files, Docker, schema, seed, every app). Only
+`ANTHROPIC_API_KEY` in the root `.env` is needed. The pieces:
+
 ```bash
 bun install
 docker compose up -d                       # Postgres on 127.0.0.1:5482
@@ -42,7 +45,7 @@ bun run dev:mock                           # Distru mock on :4500 (REST /public/
 bun run dev:headset                        # Headset retail mock on :4600
 bun run dev:emulators                      # Composio, Gmail, Slack, Resend emulators on :4700
 bun run dev:agent                          # agent server on :4111
-bun run inngest:dev                        # Inngest dev server on :8288
+bun run inngest:dev                        # Inngest dev server on :8288 (Docker)
 bun run dev:web                            # dashboard on :3050
 bun run studio                             # Mastra Studio on :3000 (optional)
 ```

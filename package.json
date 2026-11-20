@@ -14,7 +14,7 @@
     "dev:web": "bun run --cwd apps/web dev",
     "dev:agent": "bun run --cwd apps/agent dev",
     "dev:mock": "bun run --cwd apps/distru-mock dev",
-    "inngest:dev": "bun run --cwd apps/agent inngest:dev",
+    "inngest:dev": "docker compose --profile dev up inngest",
     "studio": "bun run --cwd apps/agent studio",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",

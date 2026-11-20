@@ -267,26 +267,31 @@ Building it this way paid off in four ways:
 
 ## Try it
 
-You'll need [bun](https://bun.sh) 1.4 or newer, Docker, and an Anthropic API key if you want the agents to run
-live. Everything else runs locally.
+You'll need [bun](https://bun.sh) 1.4 or newer and Docker. The only thing you add is an Anthropic API key:
 
 ```bash
-bun install
-docker compose up -d                                  # Postgres
-cp apps/agent/.env.example apps/agent/.env            # then add your ANTHROPIC_API_KEY
-bun run --cwd apps/agent db:push && bun run --cwd apps/agent db:seed
-bun run --cwd apps/agent db:seed:history              # optional: past decisions, so memories show up
-bun run --cwd apps/agent recall:index                 # optional: index vendor emails (needs dev:emulators)
-```
-
-Then start everything with one command:
-
-```bash
+git clone https://github.com/faithfulojebiyi/distru.git && cd distru
+cp .env.example .env          # put your ANTHROPIC_API_KEY in it
 bun run dev
 ```
 
-That runs every app and the Inngest dev server together, and prints where each one is. Ctrl+C stops them all.
-If you'd rather run the pieces in separate terminals, these are the individual commands:
+The first run sets everything up: it installs dependencies, writes the env files (with a generated auth
+secret), starts Postgres and the Inngest dev server in Docker, creates the schema and seeds the demo data,
+including a few weeks of past decisions so memories have something to show. Then it starts every app and
+prints where each one is. Later runs skip what's already done. Ctrl+C stops the apps; Postgres and Inngest
+keep running in Docker until `docker compose --profile dev down`.
+
+Without a key everything still starts and you can click around; only agent runs and the Copilot need it.
+
+**Only have Docker?** This builds and runs the whole thing in one container, reading the key from the same
+`.env`:
+
+```bash
+docker compose --profile app up --build      # then open http://localhost:8080
+```
+
+If you'd rather run the pieces in separate terminals (after `docker compose --profile dev up -d` and the
+`db:push` and `db:seed` scripts in `apps/agent`), these are the individual commands:
 
 | Command | What it runs | Port |
 |---|---|---|
@@ -294,7 +299,7 @@ If you'd rather run the pieces in separate terminals, these are the individual c
 | `bun run dev:headset` | Emulated Headset retail analytics | 4600 |
 | `bun run dev:emulators` | Emulated Composio, Gmail, Slack and Resend | 4700 |
 | `bun run dev:agent` | The agents, the API and the MCP server | 4111 |
-| `bun run inngest:dev` | Inngest, which runs the durable workflows | 8288 |
+| `docker compose --profile dev up inngest` | Inngest, which runs the durable workflows | 8288 |
 | `bun run dev:web` | The dashboard | 3050 |
 
 Open http://localhost:3050 and click **Operator** or **Approver** to sign in as a demo user (password

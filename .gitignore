@@ -14,3 +14,4 @@ apps/web/src/routeTree.gen.ts
 docs/
 .scratch
 packages/evals/reports/
+.claude/worktrees/

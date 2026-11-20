@@ -30,7 +30,7 @@ const base = { ...env, NODE_ENV: 'production' } as Record<string, string>;
 delete base.PORT;
 delete base.INNGEST_DEV;
 // What the agent (and the seed script, which loads the agent's env) needs.
-const agentEnv = { ...shared, BETTER_AUTH_URL: PUBLIC_URL, WEB_ORIGIN: PUBLIC_URL, WEB_BASE_URL: PUBLIC_URL, PUBLIC_URL, INNGEST_BASE_URL: INNGEST };
+const agentEnv = { ...shared, TRUSTED_IP_HEADER: 'x-forwarded-for', BETTER_AUTH_URL: PUBLIC_URL, WEB_ORIGIN: PUBLIC_URL, WEB_BASE_URL: PUBLIC_URL, PUBLIC_URL, INNGEST_BASE_URL: INNGEST };
 
 async function run(cmd: string[], cwd: string, extra: Record<string, string> = {}) {
   const p = Bun.spawn(cmd, { cwd, env: { ...base, ...extra }, stdout: 'inherit', stderr: 'inherit' });
