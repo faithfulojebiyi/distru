@@ -135,7 +135,16 @@ const EnvSchema = z.object({
   INNGEST_DEV: z.string().optional(),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
-  // --- Hardening ---
+  // --- Public demo hardening ---
+  /**
+   * `1` = public demo: the seeded demo accounts cannot change password / email / profile, policy rules are
+   * read-only, MCP tokens cannot get `approve` (and are deleted on reseed), and RESEND_API_KEY is refused
+   * (no real mail from a public demo).
+   */
+  DEMO_MODE: z
+    .string()
+    .optional()
+    .transform((v) => v === '1' || v === 'true'),
   /**
    * Header Better Auth reads the client IP from (rate limiting, session IP), e.g. `fly-client-ip`, or
    * `x-forwarded-for` behind our own proxy. Default: x-forwarded-for / x-real-ip outside production; none in
@@ -187,6 +196,10 @@ function loadEnv(): Env {
   }
   if (env.NODE_ENV === 'production' && !env.DISTRU_WEBHOOK_SECRET) {
     console.error('DISTRU_WEBHOOK_SECRET is required in production.');
+    process.exit(1);
+  }
+  if (env.DEMO_MODE && env.RESEND_API_KEY) {
+    console.error('DEMO_MODE must not run with RESEND_API_KEY set: a public demo never sends real email.');
     process.exit(1);
   }
   const { TRUSTED_IP_HEADER, DISTRU_WEBHOOK_TOLERANCE_SECONDS, ...rest } = env;

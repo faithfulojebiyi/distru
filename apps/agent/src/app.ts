@@ -54,6 +54,7 @@ export function createServices(): ApiServices & { mcpRoutes: ReturnType<typeof c
   const ops = createOpsServices({ proposals, audit, runs, connectors });
   return {
     resolveSession: betterAuthResolver(auth),
+    demoMode: env.DEMO_MODE,
     checkDatabase: async () => {
       await db.execute(dsql`select 1`);
       return true;

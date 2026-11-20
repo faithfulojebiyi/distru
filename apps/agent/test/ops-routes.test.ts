@@ -163,6 +163,35 @@ describe('policy rules', () => {
   });
 });
 
+describe('DEMO_MODE restrictions', () => {
+  test('policy rules are read-only: GET works, PUT is 403 demo_read_only, nothing audited', async () => {
+    const { call, audit } = setup({ demoMode: true });
+    expect((await call('GET', '/api/policy-rules', 'approver')).status).toBe(200);
+    const res = await call('PUT', '/api/policy-rules', 'approver', { rules: [{ key: 'max_total_value', params: { max: 1_000_000 } }] });
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe('demo_read_only');
+    expect(body.message).toContain('read-only');
+    expect(audit.ofType('policy.changed')).toHaveLength(0);
+    // Still approver-only first: an operator gets the role error.
+    expect((await call('PUT', '/api/policy-rules', 'operator', { rules: [] })).status).toBe(403);
+  });
+
+  test('MCP tokens: read / propose only; approve is 403 demo_restricted and no token is created', async () => {
+    const { call, tokens } = setup({ demoMode: true });
+    const refused = await call('POST', '/api/mcp-tokens', 'approver', { name: 'self-approver', scopes: ['propose', 'approve'] });
+    expect(refused.status).toBe(403);
+    expect(((await refused.json()) as { error: string }).error).toBe('demo_restricted');
+    expect(await tokens.list()).toHaveLength(0);
+    expect((await call('POST', '/api/mcp-tokens', 'approver', { name: 'Claude Code', scopes: ['propose'] })).status).toBe(201);
+  });
+
+  test('outside demo mode an approve token can still be created', async () => {
+    const { call } = setup();
+    expect((await call('POST', '/api/mcp-tokens', 'approver', { name: 'ops bot', scopes: ['approve'] })).status).toBe(201);
+  });
+});
+
 describe('locations', () => {
   test('lists own locations from Distru, cached', async () => {
     const env = setup();

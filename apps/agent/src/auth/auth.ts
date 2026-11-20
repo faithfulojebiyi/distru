@@ -2,8 +2,10 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { bearer, emailOTP } from 'better-auth/plugins';
 import { db, schema } from '../db/client';
+import { isDemoEmail } from '../db/demo-users';
 import { env } from '../env';
 import { OTP_TTL_SECONDS, deliverAuthOtp, deliverResetLink } from './auth-mail';
+import { demoAccountGuard } from './demo-guard';
 
 if (env.NODE_ENV === 'production' && env.TRUSTED_IP_HEADERS.length === 0) {
   console.warn('[auth] TRUSTED_IP_HEADER is not set: client IPs are unknown, so auth rate limits share one bucket. Set it to the header your platform / proxy sets (e.g. fly-client-ip or x-forwarded-for).');
@@ -17,6 +19,7 @@ if (env.NODE_ENV === 'production' && env.TRUSTED_IP_HEADERS.length === 0) {
  *   Resend, or the Resend emulator in dev (see auth-mail.ts). Demo users are seeded verified.
  * - `role` is a server-owned user field: `input: false` means clients can never set it on sign-up
  * - `bearer()` lets non-browser clients (scripts, MCP) send `Authorization: Bearer <session token>`
+ * - DEMO_MODE: the seeded demo accounts cannot change password / email / profile (src/auth/demo-guard.ts)
  */
 export const auth = betterAuth({
   appName: 'Ops Agent',
@@ -56,6 +59,7 @@ export const auth = betterAuth({
       },
     },
   },
+  ...(env.DEMO_MODE ? { hooks: { before: demoAccountGuard(isDemoEmail) } } : {}),
   advanced: {
     database: { generateId: () => crypto.randomUUID() },
     // Bun.serve doesn't expose the peer IP to Better Auth, so it comes from a header, but only one we trust:

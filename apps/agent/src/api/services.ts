@@ -21,6 +21,11 @@ import type { CreateMcpTokenRequest, LocationList, McpToken, PolicyRule, PolicyR
 /** Everything the custom routes depend on. Injected so routes can be tested without a database. */
 export type ApiServices = {
   resolveSession: SessionResolver;
+  /**
+   * DEMO_MODE (public demo): policy rules are read-only (PUT /api/policy-rules → 403) and MCP tokens can
+   * only get read / propose (an `approve` scope → 403). Optional: off when absent.
+   */
+  demoMode?: boolean;
   checkDatabase: () => Promise<boolean>;
   proposals: {
     list: (q: z.infer<typeof ListProposalsQuerySchema>) => Promise<ProposalSummary[]>;

@@ -36,13 +36,17 @@ const authed: Array<Record<string, string[]>> = [{ cookieAuth: [] }, { bearerAut
 const e401 = json(ErrorResponseSchema, 'Not signed in');
 const e403 = json(ErrorResponseSchema, 'Signed in but not allowed');
 
+const DEMO_POLICY_READ_ONLY = 'Policy rules are read-only in this public demo. Run the Ops Agent locally to edit them.';
+const DEMO_NO_APPROVE_TOKENS = 'MCP tokens in this public demo can read and propose only; the approve scope is disabled.';
+
 const createTokenRoute = createRoute({
   method: 'post',
   path: '/api/mcp-tokens',
   operationId: 'createMcpToken',
   tags: ['mcp'],
   summary: 'Create a per-client MCP token (approver only). The token is returned once',
-  description: 'Scopes ⊆ read / propose / approve (read implied). The client sends `Authorization: Bearer <token>` to /mcp and acts as `mcp-client:<id>` with exactly these scopes.',
+  description:
+    'Scopes ⊆ read / propose / approve (read implied). The client sends `Authorization: Bearer <token>` to /mcp and acts as `mcp-client:<id>` with exactly these scopes, on behalf of the approver who created it (separation of duties: neither can approve what the other proposed). In demo mode (DEMO_MODE=1) `approve` is refused with 403 `demo_restricted`.',
   security: authed,
   middleware: [requireRole('approver')] as const,
   request: { body: { required: true, content: { 'application/json': { schema: CreateMcpTokenRequestSchema } } } },
@@ -130,6 +134,7 @@ const putPolicyRoute = createRoute({
   operationId: 'updatePolicyRules',
   tags: ['policy'],
   summary: 'Replace the policy rule set (approver only). Params are validated against each rule; changes are audited (policy.changed)',
+  description: 'In demo mode (DEMO_MODE=1) the rules are read-only: 403 `demo_read_only`.',
   security: authed,
   middleware: [requireRole('approver')] as const,
   request: { body: { required: true, content: { 'application/json': { schema: UpdatePolicyRulesRequestSchema } } } },
@@ -152,7 +157,9 @@ export function registerOpsRoutes(api: OpenAPIHono<{ Variables: AuthVariables }>
   // /api/proposals/* already resolves the session (covers /undo).
 
   api.openapi(createTokenRoute, async (c) => {
-    const { token, record } = await services.mcpTokens.create(c.get('user')!, c.req.valid('json'));
+    const input = c.req.valid('json');
+    if (services.demoMode && input.scopes.includes('approve')) return c.json({ error: 'demo_restricted', message: DEMO_NO_APPROVE_TOKENS }, 403);
+    const { token, record } = await services.mcpTokens.create(c.get('user')!, input);
     return c.json({ token, record, mcpUrl: services.mcpTokens.mcpUrl }, 201);
   });
 
@@ -201,6 +208,7 @@ export function registerOpsRoutes(api: OpenAPIHono<{ Variables: AuthVariables }>
   api.openapi(listPolicyRoute, async (c) => c.json({ items: await services.policyRules.list(), available: services.policyRules.available() }, 200));
 
   api.openapi(putPolicyRoute, async (c) => {
+    if (services.demoMode) return c.json({ error: 'demo_read_only', message: DEMO_POLICY_READ_ONLY }, 403);
     const user = c.get('user')!;
     try {
       const items = await services.policyRules.replace(userPrincipal(user.id, user.role, user.name), c.req.valid('json').rules);

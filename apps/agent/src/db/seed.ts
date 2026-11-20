@@ -4,19 +4,16 @@
  *   approver@demo.dev / demo-password  → role approver
  * Users are created through Better Auth's adapter (so passwords are hashed the same way sign-in expects);
  * the role is then set server-side because clients can never set it.
- * Also ensures the default policy rules (harness rule configs).
+ * Also ensures the default policy rules (harness rule configs). With DEMO_MODE=1 every MCP token is
+ * deleted, so a reseed of a public demo leaves no visitor's token working.
  */
 import { eq } from 'drizzle-orm';
 import { auth } from '../auth/auth';
+import { env } from '../env';
 import { db, sql } from './client';
-import { user, type UserRole } from './schema';
+import { DEMO_PASSWORD, DEMO_USERS } from './demo-users';
+import { mcpToken, user } from './schema';
 import { DEFAULT_POLICY, ensureDefaultPolicy } from './seed-policy';
-
-const PASSWORD = 'demo-password';
-const DEMO_USERS: Array<{ email: string; name: string; role: UserRole }> = [
-  { email: 'operator@demo.dev', name: 'Olivia Operator', role: 'operator' },
-  { email: 'approver@demo.dev', name: 'Adam Approver', role: 'approver' },
-];
 
 for (const demo of DEMO_USERS) {
   const [existing] = await db.select().from(user).where(eq(user.email, demo.email));
@@ -31,7 +28,7 @@ for (const demo of DEMO_USERS) {
       userId: created.id,
       providerId: 'credential',
       accountId: created.id,
-      password: await ctx.password.hash(PASSWORD),
+      password: await ctx.password.hash(DEMO_PASSWORD),
     });
   }
   await db.update(user).set({ role: demo.role, emailVerified: true }).where(eq(user.email, demo.email));
@@ -40,5 +37,10 @@ for (const demo of DEMO_USERS) {
 
 for (const line of await ensureDefaultPolicy(db)) console.log(line);
 console.log(`policy rules ensured: ${DEFAULT_POLICY.map((r) => r.key).join(', ')}`);
+
+if (env.DEMO_MODE) {
+  const removed = await db.delete(mcpToken).returning({ id: mcpToken.id });
+  console.log(`demo mode: deleted ${removed.length} MCP token(s)`);
+}
 
 await sql.end();
