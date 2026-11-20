@@ -13,6 +13,11 @@ export const PrincipalSchema = z
     id: z.string().min(1),
     scopes: z.array(ScopeSchema),
     label: z.string().optional(),
+    /**
+     * The human user id this non-human principal acts for (an MCP token → the approver who minted it;
+     * an A2A caller → the token's creator). Separation of duties compares the humans behind principals.
+     */
+    onBehalfOf: z.string().min(1).optional(),
   })
   .refine((p) => !(p.kind === 'agent' && p.scopes.includes('approve')), {
     message: 'Agents can never hold the approve scope',
@@ -59,8 +64,24 @@ export function agentPrincipal(id: string, label?: string): Principal {
   return PrincipalSchema.parse({ kind: 'agent', id, scopes: [...AGENT_SCOPES], label });
 }
 
-export function mcpClientPrincipal(id: string, scopes: readonly Scope[], label?: string): Principal {
-  return PrincipalSchema.parse({ kind: 'mcp-client', id, scopes: [...scopes], label });
+export function mcpClientPrincipal(id: string, scopes: readonly Scope[], label?: string, onBehalfOf?: string): Principal {
+  return PrincipalSchema.parse({ kind: 'mcp-client', id, scopes: [...scopes], label, ...(onBehalfOf ? { onBehalfOf } : {}) });
+}
+
+/** The human user behind a principal: a user is themself; others only when they carry `onBehalfOf`. */
+export function humanOf(principal: Pick<Principal, 'kind' | 'id' | 'onBehalfOf'>): string | null {
+  if (principal.kind === 'user') return principal.id;
+  return principal.onBehalfOf ?? null;
+}
+
+/**
+ * Same actor for separation of duties: the same principal, or two principals backed by the same human
+ * (e.g. an approver deciding a proposal their own MCP token created).
+ */
+export function sameActor(a: Principal, b: Principal): boolean {
+  if (a.kind === b.kind && a.id === b.id) return true;
+  const human = humanOf(a);
+  return human !== null && human === humanOf(b);
 }
 
 /** Non-human actor used in audit events for work the harness does itself (e.g. the executor). */

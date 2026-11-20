@@ -13,6 +13,15 @@ export function isResumable(p: Pick<Proposal, 'status'>): boolean {
   return p.status === 'failed';
 }
 
+/**
+ * A proposal the executor may run without an approver's resume: approved, auto-approved, or `executing`
+ * (a crashed execution being retried). Workflow `execute` steps re-check this from the store, never
+ * trusting their input (a time-travelled / restarted step could claim `approved` for any proposal).
+ */
+export function isExecutable(p: Pick<Proposal, 'status'>): boolean {
+  return p.status === 'approved' || p.status === 'auto_approved' || p.status === 'executing';
+}
+
 export interface RequestResumeArgs {
   principal: Principal;
   proposalId: string;

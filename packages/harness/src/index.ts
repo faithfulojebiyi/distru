@@ -21,5 +21,5 @@ export { Harness, createHarness, type HarnessConfig } from './harness';
 export * from './compensation';
 export { undoTitle, UndoUnavailableError, UndoInfoSchema, UndoOpInfoSchema, UndoOfMetaSchema, compensableOp, type UndoArgs, type UndoInfo, type UndoOpInfo } from './undo';
 export * from './memory';
-export { isResumable, type RequestResumeArgs } from './resume';
+export { isExecutable, isResumable, type RequestResumeArgs } from './resume';
 export { deepEqual, isPlainObject } from './json';

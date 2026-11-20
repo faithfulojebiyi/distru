@@ -7,7 +7,7 @@ import { assertTransition, SUMMARY_MAX_CHARS, TITLE_MAX_CHARS, totalValue, type 
 import { assertBackwardRefs } from './refs';
 import { parseWith } from './registry';
 import { idempotencyKeyFor } from './runtime';
-import { assertScope, type Principal } from './scopes';
+import { assertScope, sameActor, type Principal } from './scopes';
 
 export interface OpRequest {
   action: string;
@@ -163,8 +163,6 @@ export async function propose<TCtx>(deps: HarnessDeps<TCtx>, args: ProposeArgs<T
   return proposal;
 }
 
-const samePrincipal = (a: Principal, b: Principal) => a.kind === b.kind && a.id === b.id;
-
 /**
  * Record exactly one decision. Concurrent deciders race on the store's compare-and-set; losers get
  * `DecisionConflictError`. Edits (approve only) re-plan the edited ops and re-run policy; a `deny`
@@ -175,8 +173,9 @@ export async function decide<TCtx>(deps: HarnessDeps<TCtx>, args: DecideArgs<TCt
   assertScope(principal, 'approve');
   const current = await loadProposal(deps, proposalId);
   if (current.status !== 'pending_approval') throw new DecisionConflictError(proposalId, current.status);
-  if (deps.separationOfDuties && samePrincipal(current.createdBy, principal)) {
-    throw new ForbiddenError('Separation of duties: the proposer cannot decide their own proposal');
+  if (deps.separationOfDuties && sameActor(current.createdBy, principal)) {
+    // Also when the proposer was a token / agent acting for the deciding human (`onBehalfOf`).
+    throw new ForbiddenError('Separation of duties: the proposer (or a token acting for them) cannot decide their own proposal');
   }
   const edits = args.edits ?? [];
   if (edits.length && decision !== 'approve') throw new InputValidationError('Edits are only allowed when approving');
