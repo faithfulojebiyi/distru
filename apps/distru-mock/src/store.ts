@@ -115,6 +115,18 @@ export class Store {
     return new Date().toISOString();
   }
 
+  /** Real time the store was created, so business time can advance from the seed's anchor. */
+  readonly createdAt = Date.now();
+
+  /**
+   * "Now" in the seeded business world: the anchor plus the time elapsed since seeding. Without a fixed
+   * anchor (MOCK_NOW) it's the wall clock; with one (evals), business dates like a new order's date stay
+   * on the anchored day instead of drifting with the real calendar.
+   */
+  businessNow(): Date {
+    return new Date(this.now.getTime() + (Date.now() - this.createdAt));
+  }
+
   lotsForProduct(productId: string): LotRec[] {
     return [...this.lots.values()].filter((l) => l.product_id === productId);
   }
