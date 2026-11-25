@@ -11,6 +11,7 @@
   },
   "scripts": {
     "dev": "bun scripts/dev.ts",
+    "demo:reset": "bun scripts/demo-reset.ts",
     "dev:web": "bun run --cwd apps/web dev",
     "dev:agent": "bun run --cwd apps/agent dev",
     "dev:mock": "bun run --cwd apps/distru-mock dev",
