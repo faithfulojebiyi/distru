@@ -46,8 +46,10 @@ await run(['bun', 'run', 'db:seed'], `${ROOT}/apps/agent`);
 await run(['bun', 'run', 'db:seed:history'], `${ROOT}/apps/agent`);
 
 // An empty key in the root .env mustn't mask one set in apps/agent/.env (a set variable wins over .env files).
+// Bun.spawn doesn't see `delete process.env.X`, so the apps get an explicit environment.
 const rootKey = process.env.ANTHROPIC_API_KEY;
-if (!rootKey) delete process.env.ANTHROPIC_API_KEY;
+const appEnv: Record<string, string | undefined> = { ...process.env };
+if (!rootKey) delete appEnv.ANTHROPIC_API_KEY;
 const hasKey = Boolean(rootKey) || /^ANTHROPIC_API_KEY=\S+/m.test(await Bun.file(agentEnv).text());
 
 // 4. Every app's `dev` script, side by side. Not `bun --filter`: it starts a package only after the packages it
@@ -64,7 +66,7 @@ const prefix = async (name: string, stream: ReadableStream<Uint8Array>, out: Nod
   if (buffered) out.write(label + buffered + '\n');
 };
 const procs = APPS.map((name) => {
-  const p = Bun.spawn(['bun', 'run', 'dev'], { cwd: `${ROOT}/apps/${name}`, stdout: 'pipe', stderr: 'pipe' });
+  const p = Bun.spawn(['bun', 'run', 'dev'], { cwd: `${ROOT}/apps/${name}`, env: appEnv, stdout: 'pipe', stderr: 'pipe' });
   void prefix(name, p.stdout, process.stdout);
   void prefix(name, p.stderr, process.stderr);
   return p;
