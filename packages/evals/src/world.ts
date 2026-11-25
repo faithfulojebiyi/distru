@@ -147,6 +147,7 @@ export async function createWorld({ scenario, models, pricing, emulators, distru
     ? await createEvalRecall(scenario.recallSetup, { now: new Date(NOW), contextStore: context.store, embedder: await snapshotEmbedder(recallVectors) })
     : null;
   const contexts = buildAppContexts({
+    now: () => new Date(NOW),
     baseUrl: 'http://mock.test',
     token: 'mock-token',
     fetch,
