@@ -113,7 +113,8 @@ export async function callAgent<T>(args: AgentCallArgs<T>): Promise<AgentCallRes
   try {
     const agent = args.mastra.getAgentById(meta.id);
     const result = await agent.generate(args.prompt, {
-      structuredOutput: { schema: args.schema },
+      // 'warn' hands back the raw object instead of throwing, so parseAgentOutput can repair what's repairable.
+      structuredOutput: { schema: args.schema, errorStrategy: 'warn' },
       // Prompt caching: system prompt + tools (agent instructions) and the growing loop (request level).
       ...PROMPT_CACHE_OPTIONS,
       requestContext,
@@ -132,7 +133,7 @@ export async function callAgent<T>(args: AgentCallArgs<T>): Promise<AgentCallRes
       },
     });
     budget.check();
-    const object = args.schema.parse(result.object);
+    const object = parseAgentOutput(args.schema, result.object);
     return { object, trace: entry('success', summaryOf(object), null) };
   } catch (err) {
     const reason = budget.signal.aborted && budget.signal.reason instanceof Error ? budget.signal.reason : err;
@@ -141,4 +142,33 @@ export async function callAgent<T>(args: AgentCallArgs<T>): Promise<AgentCallRes
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/**
+ * Validates an agent's structured output. The one thing repaired is a string over its length limit (models
+ * routinely write a longer "reason" than asked): it's shortened to fit with an ellipsis. Anything else that
+ * doesn't match the schema still throws, so the workflow only ever sees valid objects.
+ */
+export function parseAgentOutput<T>(schema: z.ZodType<T>, value: unknown): T {
+  let current = value;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const parsed = schema.safeParse(current);
+    if (parsed.success) return parsed.data;
+    const overlong = parsed.error.issues.filter(
+      (i): i is z.core.$ZodIssueTooBig => i.code === 'too_big' && i.origin === 'string' && typeof i.maximum === 'number',
+    );
+    if (overlong.length === 0) throw parsed.error;
+    current = structuredClone(current);
+    for (const issue of overlong) {
+      const max = Number(issue.maximum);
+      let parent: unknown = current;
+      for (const key of issue.path.slice(0, -1)) parent = (parent as Record<PropertyKey, unknown> | null)?.[key];
+      const key = issue.path.at(-1);
+      const node = parent as Record<PropertyKey, unknown> | null;
+      const text = key === undefined ? undefined : node?.[key];
+      if (!node || key === undefined || typeof text !== 'string') throw parsed.error;
+      node[key] = `${text.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
+    }
+  }
+  return schema.parse(current);
 }
