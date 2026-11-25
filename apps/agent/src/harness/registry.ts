@@ -345,6 +345,8 @@ export interface AppContextConfig {
   context?: ContextService;
   /** Semantic recall (default: an empty in-memory index; only reachable when the connector is registered). */
   recall?: RecallService;
+  /** Business clock for tools' "today" defaults (evals pin it). Default: the wall clock. */
+  now?: () => Date;
 }
 
 /** An empty, dependency-free recall service (lexical embedder, in-memory index). */
@@ -379,6 +381,7 @@ export function buildAppContexts(config: AppContextConfig): AppContexts {
       recall,
     },
     tenantId,
+    ...(config.now ? { now: config.now } : {}),
     run: { intent: 'Ops Agent restock: governed write approved by a human' },
   });
   return {

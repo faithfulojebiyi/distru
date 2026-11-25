@@ -3,7 +3,8 @@ import type { ConnectorContext } from '@ops/harness';
 import { z } from 'zod';
 
 /** The context slice this connector needs: a Distru client at `ctx.connectors.distru`. */
-export type DistruCtx = ConnectorContext<'distru', DistruClient>;
+/** `now` (optional) is the business clock for "today" defaults; tests and evals pin it. Default: the wall clock. */
+export type DistruCtx = ConnectorContext<'distru', DistruClient> & { now?: () => Date };
 
 /**
  * Builds the connector context from Distru credentials. Spread it into the app context:

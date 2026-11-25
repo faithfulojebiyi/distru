@@ -78,7 +78,7 @@ export function summarizeInvoice(inv: Invoice, asOf: Date): InvoiceSummary {
   };
 }
 
-const asOfOf = (v: string | undefined) => (v ? new Date(`${v}T23:59:59.999Z`) : new Date());
+const asOfOf = (v: string | undefined, ctx: DistruCtx) => (v ? new Date(`${v}T23:59:59.999Z`) : (ctx.now?.() ?? new Date()));
 
 // ── invoices_overdue ─────────────────────────────────────────────────────────────────────────
 
@@ -119,7 +119,7 @@ export const invoicesOverdueTool = defineReadTool({
   output: InvoicesOverdueOutput,
   run: async (ctx: DistruCtx, input) => {
     const client = ctx.connectors.distru;
-    const asOf = asOfOf(input.as_of);
+    const asOf = asOfOf(input.as_of, ctx);
     // due at least `min_days_overdue` days before as_of
     const dueBy = new Date(startOfDay(asOf.getTime()) - (input.min_days_overdue - 1) * DAY - 1).toISOString();
     const params: ListInvoicesParams = {
@@ -207,7 +207,7 @@ export const invoicesSearchTool = defineReadTool({
   output: InvoicesSearchOutput,
   run: async (ctx: DistruCtx, input) => {
     const client = ctx.connectors.distru;
-    const asOf = asOfOf(input.as_of);
+    const asOf = asOfOf(input.as_of, ctx);
     const range = (from?: string, to?: string) => (from || to ? `${from ? `${from}T00:00:00Z` : ''},${to ? `${to}T23:59:59Z` : ''}` : undefined);
     const invoiceRange = range(input.invoice_date_from, input.invoice_date_to);
     let dueRange = range(input.due_date_from, input.due_date_to);
