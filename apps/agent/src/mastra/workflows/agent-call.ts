@@ -133,7 +133,8 @@ export async function callAgent<T>(args: AgentCallArgs<T>): Promise<AgentCallRes
       },
     });
     budget.check();
-    const object = parseAgentOutput(args.schema, result.object);
+    // Under 'warn' an output that failed validation comes back as `object: undefined`; its JSON is still in the text.
+    const object = parseAgentOutput(args.schema, result.object ?? jsonOf(result.text));
     return { object, trace: entry('success', summaryOf(object), null) };
   } catch (err) {
     const reason = budget.signal.aborted && budget.signal.reason instanceof Error ? budget.signal.reason : err;
@@ -141,6 +142,19 @@ export async function callAgent<T>(args: AgentCallArgs<T>): Promise<AgentCallRes
     throw new AgentCallError(`${meta.name} (${args.label}) failed: ${message}`, entry('failed', null, message), { cause: reason });
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+/** The JSON value in a model's text answer (optionally fenced), or undefined. */
+export function jsonOf(text: string | undefined): unknown {
+  if (!text) return undefined;
+  const body = /```(?:json)?\s*([\s\S]*?)```/.exec(text)?.[1] ?? text;
+  const start = body.search(/[[{]/);
+  if (start < 0) return undefined;
+  try {
+    return JSON.parse(body.slice(start, Math.max(body.lastIndexOf('}'), body.lastIndexOf(']')) + 1));
+  } catch {
+    return undefined;
   }
 }
 

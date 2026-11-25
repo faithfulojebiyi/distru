@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { parseAgentOutput } from '../src/mastra/workflows/agent-call';
+import { jsonOf, parseAgentOutput } from '../src/mastra/workflows/agent-call';
 
 const Schema = z.object({
   lines: z.array(z.object({ sku: z.string(), quantity: z.number().int(), reason: z.string().max(40) })),
@@ -31,5 +31,18 @@ describe('parseAgentOutput', () => {
   test('anything else that does not match still throws', () => {
     expect(() => parseAgentOutput(Schema, { lines: [{ sku: 'A', quantity: 2.5, reason: 'r' }] })).toThrow();
     expect(() => parseAgentOutput(Schema, { lines: [{ sku: 'A', reason: 'z'.repeat(60) }] })).toThrow();
+  });
+});
+
+describe('jsonOf', () => {
+  test('plain, fenced and surrounded JSON', () => {
+    expect(jsonOf('{"a":1}')).toEqual({ a: 1 });
+    expect(jsonOf('Here you go:\n```json\n{"a":[1,2]}\n```')).toEqual({ a: [1, 2] });
+    expect(jsonOf('result: {"b":"x"} done')).toEqual({ b: 'x' });
+  });
+  test('nothing parseable → undefined', () => {
+    expect(jsonOf(undefined)).toBeUndefined();
+    expect(jsonOf('no json here')).toBeUndefined();
+    expect(jsonOf('{broken')).toBeUndefined();
   });
 });
